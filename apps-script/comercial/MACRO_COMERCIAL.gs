@@ -1,4 +1,42 @@
 // ============================================================
+//  MACRO_COMERCIAL — v9.5
+//  v9.5: ya no se atrapa la petición de permisos: Google muestra su
+//        ventana 'Se requiere autorización' (desde la hoja o el editor).
+//
+//  v9.3: quitado un texto de ayuda que Google interpretaba como
+//        'solo este documento' y bloqueaba el acceso a las áreas.
+//
+//  v9.2: función autorizarAreas (menú 🔐) para dar el permiso de
+//        Google y probar el acceso a cada archivo de área.
+//
+//  v9.1: si falta el permiso para abrir los archivos de las áreas,
+//        se pide la autorización (o se explica cómo darla) en vez
+//        de mostrar el error técnico de SpreadsheetApp.openById.
+//
+//  CAMBIOS v9 — EDITAR OP (solo comercial) + REGISTRO DE CAMBIOS:
+//  - ✏️ Cargar OP para editar: llena BASE_CREADOR con los datos de
+//    una OP existente. En modo edición el botón "Crear Nueva OP"
+//    GUARDA los cambios (aviso amarillo en E6).
+//  - Guardar cambios: si solo cambian datos generales se actualiza la
+//    hoja OP; si cambian áreas o # de subestructuras, la hoja OP se
+//    reconstruye CONSERVANDO nombres/KG de subestructura, fechas,
+//    duraciones y observaciones ya digitadas.
+//  - 📤 Enviar / Actualizar OP en Áreas: ya NO borra y recrea la OP
+//    en el área. Si existe, la ACTUALIZA en su sitio sin tocar lo que
+//    llena el área (ESTADO, KG avance, fechas/duración reales,
+//    OBSERVACIONES). Subestructuras nuevas se agregan al final; las
+//    que sobran se borran (avisando si tienen avance). Si se quitó un
+//    área, pregunta antes de borrar la OP de su cronograma.
+//  - Corregido: al reenviar, antes se borraba un número de filas
+//    calculado con la configuración NUEVA (podía borrar filas de otra
+//    OP). Ahora se borra/ubica el bloque real de la OP.
+//  - Hoja REGISTRO_CAMBIOS: fecha, usuario, OP, origen, área,
+//    subestructura, tarea, campo, valor anterior y nuevo.
+//  - Ya no se puede "reemplazar" una OP existente desde el botón
+//    (se perdían datos): se ofrece cargarla para editar.
+//  - Las fórmulas de las áreas son exactamente las mismas de v8.
+//
+//  (historial anterior)
 //  MACRO_COMERCIAL — v8
 //
 //  CAMBIOS v8:
@@ -222,268 +260,628 @@ const AREAS_FILAS = {
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🚀 Torre de Control')
-    .addItem('➕ Crear Nueva OP',           'crearNuevaOP')
+    .addItem('➕ Crear Nueva OP  /  💾 Guardar cambios', 'crearNuevaOP')
+    .addItem('✏️ Cargar OP para editar',              'cargarOPParaEditar')
+    .addItem('✖️ Cancelar edición',                    'cancelarEdicion')
     .addSeparator()
-    .addItem('📤 Enviar OP Activa a Áreas', 'enviarOPActivaAAreas')
+    .addItem('📤 Enviar / Actualizar OP en Áreas',     'enviarOPActivaAAreas')
     .addSeparator()
-    .addItem('🔄 Extraer Datos al Gantt',   'actualizarGanttEnComercial')
+    .addItem('🔄 Extraer Datos al Gantt',              'actualizarGanttEnComercial')
+    .addItem('📋 Ver registro de cambios',             'verRegistroCambios')
     .addSeparator()
     .addItem('📅 Agregar campo Fecha de entrega (una sola vez)', 'agregarCampoFechaEntrega')
+    .addItem('🔐 Autorizar / probar acceso a las áreas', 'autorizarAreas')
     .addToUi();
 }
 
 // ============================================================
-//  CREAR NUEVA OP
+//  v9 — CONSTANTES DE EDICIÓN Y REGISTRO
+// ============================================================
+var COL_META_ENVIADAS   = 38;                 // hoja OP: col AL = áreas a las que ya se envió
+var HOJA_REGISTRO       = 'REGISTRO_CAMBIOS';
+var CELDA_AVISO_EDICION = 'E6';               // aviso "EDITANDO OP" en BASE_CREADOR
+var FILA_INICIO_CRONO   = 6;                  // primera fila de datos en Cronograma de áreas
+var PROP_EDICION        = 'OP_EDICION';
+
+// ============================================================
+//  LEER FORMULARIO (BASE_CREADOR)
+// ============================================================
+function _leerFormularioOP(form) {
+  var d = {
+    op:        form.getRange('C3').getValue().toString().trim(),
+    nombreOp:  form.getRange('C4').getValue().toString().trim(),
+    cliente:   form.getRange('C5').getValue().toString().trim(),
+    comercial: form.getRange('C6').getValue().toString().trim(),
+    sede:      form.getRange('C7').getValue().toString().trim(),
+    numSubs:   parseInt(form.getRange('C8').getValue()) || 1,
+    tieneFecha: _tieneCampoFecha(form),
+    areas: []
+  };
+  d.fechaEntrega = d.tieneFecha ? form.getRange(FILA_FECHA_ENTREGA, 3).getValue() : '';
+
+  var areaNames = Object.keys(AREAS_FILAS);
+  for (var a = 0; a < areaNames.length; a++) {
+    if (form.getRange(_filaArea(form, areaNames[a]), 3).getValue() === true) d.areas.push(areaNames[a]);
+  }
+  _ordenarAreas(d.areas);
+
+  var f = [];
+  if (!d.op)                        f.push('C3 – Número de OP');
+  if (!d.nombreOp)                  f.push('C4 – Nombre del Proyecto');
+  if (!d.cliente)                   f.push('C5 – Cliente');
+  if (!d.comercial)                 f.push('C6 – Comercial');
+  if (!d.sede)                      f.push('C7 – Sede / Ciudad');
+  if (!d.tieneFecha)                f.push('Falta el campo Fecha de entrega: usa el menú Torre de Control > 📅 Agregar campo Fecha de entrega');
+  else if (!_esFecha(d.fechaEntrega)) f.push('C9 – Fecha de entrega al cliente');
+  if (d.areas.length === 0)         f.push('Marca al menos un área');
+  d.faltantes = f;
+  return d;
+}
+
+function _ordenarAreas(arr) {
+  arr.sort(function(a, b) {
+    var ia = ORDEN_AREAS.indexOf(a), ib = ORDEN_AREAS.indexOf(b);
+    if (ia === -1) ia = 99; if (ib === -1) ib = 99;
+    return ia - ib;
+  });
+  return arr;
+}
+
+// ============================================================
+//  CREAR NUEVA OP  (en modo edición, el mismo botón guarda cambios)
 // ============================================================
 function crearNuevaOP() {
   var ss   = SpreadsheetApp.getActiveSpreadsheet();
   var form = ss.getSheetByName('BASE_CREADOR');
-  if (!form) {
-    SpreadsheetApp.getUi().alert('❌ No se encontró la hoja "BASE_CREADOR".');
+  var ui   = SpreadsheetApp.getUi();
+  if (!form) { ui.alert('❌ No se encontró la hoja "BASE_CREADOR".'); return; }
+
+  // v9: si hay una OP cargada para editar, el botón guarda los cambios
+  var opEdicion = _opEnEdicion();
+  if (opEdicion) { guardarCambiosOP(); return; }
+
+  var d = _leerFormularioOP(form);
+
+  // v9: ya no se reemplaza la hoja (se perdían fechas y KG). Se ofrece editarla.
+  // (se revisa ANTES de validar: basta escribir el # de OP y pulsar el botón)
+  if (d.op && ss.getSheetByName(d.op)) {
+    var resp = ui.alert('⚠️ La OP ya existe',
+      'Ya existe la hoja "' + d.op + '".\n\n¿Quieres cargarla en el formulario para EDITARLA?\n' +
+      '(Se conservan las fechas, KG y observaciones que ya tiene)',
+      ui.ButtonSet.YES_NO);
+    if (resp === ui.Button.YES) cargarOPParaEditar(d.op);
     return;
   }
 
-  var op        = form.getRange('C3').getValue().toString().trim();
-  var nombreOp  = form.getRange('C4').getValue().toString().trim();
-  var cliente   = form.getRange('C5').getValue().toString().trim();
-  var comercial = form.getRange('C6').getValue().toString().trim();
-  var sede      = form.getRange('C7').getValue().toString().trim();
-  var numSubs   = parseInt(form.getRange('C8').getValue())  || 1;
-  var kgTotal   = 0;  // El usuario lo ingresa en col F de la hoja OP (suma al enviar)
-  var tieneFecha   = _tieneCampoFecha(form);
-  var fechaEntrega = tieneFecha ? form.getRange(FILA_FECHA_ENTREGA, 3).getValue() : '';
-
-  var areasSeleccionadas = [];
-  var areaNames = Object.keys(AREAS_FILAS);
-  for (var a = 0; a < areaNames.length; a++) {
-    var areaName = areaNames[a];
-    if (form.getRange(_filaArea(form, areaName), 3).getValue() === true) {
-      areasSeleccionadas.push(areaName);
-    }
-  }
-
-  var faltantes = [];
-  if (!op)                             faltantes.push('C3 – Número de OP');
-  if (!nombreOp)                       faltantes.push('C4 – Nombre del Proyecto');
-  if (!cliente)                        faltantes.push('C5 – Cliente');
-  if (!comercial)                      faltantes.push('C6 – Comercial');
-  if (!sede)                           faltantes.push('C7 – Sede / Ciudad');
-  if (!tieneFecha)                     faltantes.push('Falta el campo Fecha de entrega: usa el menú Torre de Control > 📅 Agregar campo Fecha de entrega');
-  else if (!_esFecha(fechaEntrega))    faltantes.push('C9 – Fecha de entrega al cliente');
-  if (areasSeleccionadas.length === 0) faltantes.push('Marca al menos un área');
-
-  if (faltantes.length > 0) {
-    SpreadsheetApp.getUi().alert('❌ Faltan datos:\n\n• ' + faltantes.join('\n• '));
+  if (d.faltantes.length > 0) {
+    ui.alert('❌ Faltan datos:\n\n• ' + d.faltantes.join('\n• '));
     return;
   }
 
-  if (ss.getSheetByName(op)) {
-    var resp = SpreadsheetApp.getUi().alert(
-      '⚠️ Ya existe',
-      'Ya existe una hoja llamada "' + op + '".\n¿Deseas reemplazarla?',
-      SpreadsheetApp.getUi().ButtonSet.YES_NO
-    );
-    if (resp !== SpreadsheetApp.getUi().Button.YES) return;
-    ss.deleteSheet(ss.getSheetByName(op));
-  }
-
-  areasSeleccionadas.sort(function(a, b) {
-    var ia = ORDEN_AREAS.indexOf(a), ib = ORDEN_AREAS.indexOf(b);
-    if (ia===-1) ia=99; if (ib===-1) ib=99;
-    return ia - ib;
-  });
-
-  var numAreas = areasSeleccionadas.length;
-  var ui = SpreadsheetApp.getUi();
+  var numAreas = d.areas.length;
   var confirm = ui.alert(
     '¿Crear OP?',
-    'OP: ' + op + ' – "' + nombreOp + '"' +
-    '\nCliente: ' + cliente + '\nSede: ' + sede +
-    '\nÁreas (' + numAreas + '): ' + areasSeleccionadas.join(', ') +
-    '\nSubestructuras por área: ' + numSubs +
-    '\nFecha de entrega al cliente: ' + _fmtFecha(fechaEntrega) +
+    'OP: ' + d.op + ' – "' + d.nombreOp + '"' +
+    '\nCliente: ' + d.cliente + '\nSede: ' + d.sede +
+    '\nÁreas (' + numAreas + '): ' + d.areas.join(', ') +
+    '\nSubestructuras por área: ' + d.numSubs +
+    '\nFecha de entrega al cliente: ' + _fmtFecha(d.fechaEntrega) +
     '\n\n⚠️ Solo se creará la hoja interna.' +
     '\nDespués llena los datos manuales y usa' +
-    '\n"📤 Enviar OP Activa a Áreas" para distribuir.' +
+    '\n"📤 Enviar / Actualizar OP en Áreas" para distribuir.' +
     '\n\n¿Continuar?',
     ui.ButtonSet.YES_NO
   );
   if (confirm !== ui.Button.YES) return;
 
-  _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTotal, areasSeleccionadas, numAreas, fechaEntrega);
+  _crearHojaOP(ss, d.op, d.nombreOp, d.cliente, d.comercial, d.sede, d.numSubs, 0, d.areas, numAreas, d.fechaEntrega);
   _limpiarFormulario(form);
 
+  var reg = _nuevoRegistro(d.op);
+  reg.add('Formulario BASE_CREADOR', '', '', '', 'OP', '', 'creada (' + numAreas + ' áreas, ' + d.numSubs + ' subestructuras)');
+  reg.guardar(ss);
+
   ui.alert(
-    '✅ OP ' + op + ' creada.\n\n' +
-    'Áreas: ' + areasSeleccionadas.join(', ') + '\n\n' +
-    '1. Ve a la hoja "' + op + '"\n' +
+    '✅ OP ' + d.op + ' creada.\n\n' +
+    'Áreas: ' + d.areas.join(', ') + '\n\n' +
+    '1. Ve a la hoja "' + d.op + '"\n' +
     '2. Completa fechas, duraciones, nombres de subestructura y KG por subestructura (col F)\n' +
-    '3. Usa  📤 Enviar OP Activa a Áreas  para enviarla'
+    '3. Usa  📤 Enviar / Actualizar OP en Áreas  para enviarla'
   );
 }
 
 // ============================================================
-//  ENVIAR OP ACTIVA A ÁREAS
+//  v9 — EDITAR OP
+// ============================================================
+/** Carga una OP existente en BASE_CREADOR para editarla. */
+function cargarOPParaEditar(opParam) {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var form = ss.getSheetByName('BASE_CREADOR');
+  var ui   = SpreadsheetApp.getUi();
+  if (!form) { ui.alert('❌ No se encontró la hoja "BASE_CREADOR".'); return; }
+
+  var op = (typeof opParam === 'string') ? opParam : form.getRange('C3').getValue().toString().trim();
+  if (!op || !_esHojaOP(ss.getSheetByName(op))) {
+    var lista = _listarOPs(ss);
+    if (!lista.length) { ui.alert('No hay OPs creadas todavía.'); return; }
+    var pr = ui.prompt('✏️ Cargar OP para editar',
+      'Escribe el número de la OP que quieres editar.\n\nOPs disponibles:\n' + lista.join(', '),
+      ui.ButtonSet.OK_CANCEL);
+    if (pr.getSelectedButton() !== ui.Button.OK) return;
+    op = pr.getResponseText().trim();
+  }
+  var ws = ss.getSheetByName(op);
+  if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la OP "' + op + '" (o es de una versión anterior sin datos guardados).'); return; }
+
+  var m = _leerMetaOP(ws);
+  _limpiarFormulario(form);
+  form.getRange('C3').setValue(m.op);
+  form.getRange('C4').setValue(m.nombreOp);
+  form.getRange('C5').setValue(m.cliente);
+  form.getRange('C6').setValue(m.comercial);
+  form.getRange('C7').setValue(m.sede);
+  form.getRange('C8').setValue(m.numSubs);
+  if (_tieneCampoFecha(form) && _esFecha(m.fecha)) form.getRange(FILA_FECHA_ENTREGA, 3).setValue(m.fecha);
+  for (var i = 0; i < m.areas.length; i++) {
+    if (AREAS_FILAS[m.areas[i]]) form.getRange(_filaArea(form, m.areas[i]), 3).setValue(true);
+  }
+
+  PropertiesService.getUserProperties().setProperty(PROP_EDICION, m.op);
+  _avisoEdicion(form, m.op);
+  ss.setActiveSheet(form);
+
+  ui.alert('✏️ OP ' + m.op + ' cargada para editar',
+    'Corrige lo que necesites y pulsa el botón "Crear Nueva OP" (en modo edición guarda los cambios).\n\n' +
+    '• No cambies el número de OP.\n' +
+    '• Puedes cambiar nombre, cliente, comercial, sede, subestructuras, fecha de entrega y áreas.\n' +
+    '• Para salir sin guardar: Torre de Control > ✖️ Cancelar edición.',
+    ui.ButtonSet.OK);
+}
+
+/** Guarda los cambios de la OP cargada (hoja interna) y ofrece actualizar las áreas. */
+function guardarCambiosOP() {
+  var ss   = SpreadsheetApp.getActiveSpreadsheet();
+  var form = ss.getSheetByName('BASE_CREADOR');
+  var ui   = SpreadsheetApp.getUi();
+  var opEd = _opEnEdicion();
+  if (!opEd) { ui.alert('Primero carga una OP con  Torre de Control > ✏️ Cargar OP para editar.'); return; }
+
+  var d = _leerFormularioOP(form);
+  if (d.faltantes.length) { ui.alert('❌ Faltan datos:\n\n• ' + d.faltantes.join('\n• ')); return; }
+  if (d.op !== opEd) {
+    ui.alert('❌ Estabas editando la OP ' + opEd + ' y el número cambió a "' + d.op + '".\n\n' +
+      'El número de OP no se puede cambiar. Vuelve a poner ' + opEd + ', o cancela la edición y crea la OP nueva.');
+    return;
+  }
+  var ws = ss.getSheetByName(opEd);
+  if (!_esHojaOP(ws)) { ui.alert('❌ La hoja de la OP ' + opEd + ' ya no existe.'); _salirEdicion(form); return; }
+
+  var m = _leerMetaOP(ws);
+  var cambios = [];
+  var cmp = function(campo, antes, despues) { if (!_mismoValor(antes, despues)) cambios.push([campo, antes, despues]); };
+  cmp('Nombre del Proyecto', m.nombreOp, d.nombreOp);
+  cmp('Cliente', m.cliente, d.cliente);
+  cmp('Comercial', m.comercial, d.comercial);
+  cmp('Sede', m.sede, d.sede);
+  cmp('Subestructuras', m.numSubs, d.numSubs);
+  cmp('Fecha de entrega al cliente', m.fecha, d.fechaEntrega);
+  var agregadas = d.areas.filter(function(a) { return m.areas.indexOf(a) === -1; });
+  var quitadas  = m.areas.filter(function(a) { return d.areas.indexOf(a) === -1; });
+  if (agregadas.length) cambios.push(['Áreas agregadas', '', agregadas.join(', ')]);
+  if (quitadas.length)  cambios.push(['Áreas quitadas', quitadas.join(', '), '']);
+
+  if (!cambios.length) {
+    var r0 = ui.alert('Sin cambios', 'No hay cambios en el formulario.\n¿Salir del modo edición?', ui.ButtonSet.YES_NO);
+    if (r0 === ui.Button.YES) { _limpiarFormulario(form); _salirEdicion(form); }
+    return;
+  }
+
+  var estructural = (m.numSubs !== d.numSubs) || agregadas.length || quitadas.length;
+  var txt = 'Cambios en la OP ' + d.op + ':\n\n' + cambios.map(function(c) {
+    return '• ' + c[0] + ': ' + (_fmtLog(c[1]) || '—') + '  →  ' + (_fmtLog(c[2]) || '—');
+  }).join('\n');
+  if (quitadas.length)
+    txt += '\n\n⚠️ En la hoja interna se borrarán las filas de: ' + quitadas.join(', ') + ' (fechas y KG de esas áreas).';
+  if (d.numSubs < m.numSubs)
+    txt += '\n\n⚠️ Bajan las subestructuras de ' + m.numSubs + ' a ' + d.numSubs +
+           ': en la hoja interna se borran las subestructuras ' + (d.numSubs + 1) + ' a ' + m.numSubs + ' de cada área.';
+  if (estructural) txt += '\n\nLas fechas, KG, nombres de subestructura y observaciones que ya tiene la hoja se conservan.';
+  txt += '\n\n¿Guardar cambios?';
+  if (ui.alert('💾 Guardar cambios', txt, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+  if (estructural) ws = _reconstruirHojaOP(ss, ws, d, m);
+  else             _actualizarMetaOP(ws, d);
+
+  var reg = _nuevoRegistro(d.op);
+  cambios.forEach(function(c) { reg.add('Formulario BASE_CREADOR', '', '', '', c[0], c[1], c[2]); });
+  reg.guardar(ss);
+
+  _limpiarFormulario(form);
+  _salirEdicion(form);
+
+  var r = ui.alert('✅ Cambios guardados en la hoja ' + d.op,
+    '¿Quieres actualizar ahora la OP en los cronogramas de las áreas?\n\n' +
+    '(Se conserva lo que cada área ya llenó: estado, KG avance, fechas reales y observaciones)',
+    ui.ButtonSet.YES_NO);
+  if (r === ui.Button.YES) _sincronizarOPConAreas(ss, ws);
+  else ui.alert('Recuerda: cuando quieras que las áreas vean los cambios, ve a la hoja ' + d.op +
+                ' y usa  📤 Enviar / Actualizar OP en Áreas.');
+}
+
+function cancelarEdicion() {
+  var form = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('BASE_CREADOR');
+  if (form) { _limpiarFormulario(form); _salirEdicion(form); }
+  SpreadsheetApp.getActiveSpreadsheet().toast('Edición cancelada, no se guardó nada.', '✖️ Torre de Control', 4);
+}
+
+function _opEnEdicion() { return PropertiesService.getUserProperties().getProperty(PROP_EDICION) || ''; }
+
+function _salirEdicion(form) {
+  PropertiesService.getUserProperties().deleteProperty(PROP_EDICION);
+  _avisoEdicion(form, null);
+}
+
+function _avisoEdicion(form, op) {
+  var c = form.getRange(CELDA_AVISO_EDICION);
+  if (op) {
+    c.setValue('✏️ EDITANDO OP ' + op + '\nEl botón guarda los cambios')
+     .setBackground('#fce8b2').setFontColor('#b45f06').setFontWeight('bold')
+     .setWrap(true).setHorizontalAlignment('center').setVerticalAlignment('middle');
+  } else {
+    c.clearContent().setBackground(null).setFontColor(null).setFontWeight('normal');
+  }
+}
+
+// ============================================================
+//  v9 — HOJA OP: METADATOS, RECONSTRUCCIÓN CONSERVANDO DATOS
+// ============================================================
+function _esHojaOP(ws) {
+  if (!ws || ws.getMaxColumns() < 36) return false;
+  return String(ws.getRange(1, 36).getValue()).trim() !== '';
+}
+
+function _listarOPs(ss) {
+  return ss.getSheets().filter(_esHojaOP).map(function(h) { return h.getName(); });
+}
+
+function _asegurarColumnas(ws, n) {
+  if (ws.getMaxColumns() < n) ws.insertColumnsAfter(ws.getMaxColumns(), n - ws.getMaxColumns());
+}
+
+function _leerMetaOP(ws) {
+  _asegurarColumnas(ws, COL_META_ENVIADAS);
+  var v = ws.getRange(1, 28, 1, 11).getValues()[0];   // AB..AL
+  var lista = function(x) {
+    return String(x || '').split(',').map(function(a) { return a.trim(); }).filter(String);
+  };
+  return {
+    op:        String(v[0] || ws.getName()).trim(),
+    nombreOp:  String(v[1]).trim(),
+    cliente:   String(v[2]).trim(),
+    comercial: String(v[3]).trim(),
+    sede:      String(v[4]).trim(),
+    numSubs:   parseInt(v[5]) || 1,
+    numAreas:  parseInt(v[7]) || 1,
+    areas:     lista(v[8]),
+    fecha:     v[9],
+    enviadas:  lista(v[10])
+  };
+}
+
+/** Solo cambian datos generales (sin tocar estructura): META + sede en col G. */
+function _actualizarMetaOP(ws, d) {
+  ws.getRange(1, 29, 1, 5).setValues([[d.nombreOp, d.cliente, d.comercial, d.sede, d.numSubs]]);
+  ws.getRange(1, COL_META_FECHA).setValue(d.fechaEntrega).setNumberFormat('dd/mm/yyyy');
+  var last = ws.getLastRow();
+  if (last < 2) return;
+  var colD = ws.getRange(2, 4, last - 1, 1).getValues();
+  for (var i = 0; i < colD.length; i++) {
+    if (String(colD[i][0]).trim()) ws.getRange(i + 2, 7).setValue(d.sede);
+  }
+}
+
+/** Recorre la hoja OP: cb(fila, area, sub, tarea, esInicioSub, valoresFila) */
+function _recorrerHojaOP(ws, cb) {
+  var last = ws.getLastRow();
+  if (last < 2) return;
+  var v = ws.getRange(2, 1, last - 1, 27).getValues();
+  var area = '', s = -1;
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][0]).trim()) { area = _areaDesdeEtiqueta(v[i][0]); s = -1; }
+    var inicioSub = String(v[i][3]).trim() !== '';
+    if (inicioSub) s++;
+    var tarea = String(v[i][7]).trim();
+    if (!area || !tarea || s < 0) continue;
+    cb(i + 2, area, s, tarea, inicioSub, v[i]);
+  }
+}
+
+function _areaDesdeEtiqueta(et) {
+  var u = _norm(et), nombres = Object.keys(TAREAS_AREA);
+  for (var i = 0; i < nombres.length; i++) if (_norm(nombres[i]) === u) return nombres[i];
+  return String(et).trim();
+}
+
+/** Guarda lo que el comercial llenó a mano en la hoja OP. */
+function _leerManualesOP(ws) {
+  var filas = {}, subs = {};
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub, v) {
+    filas[area + '|' + s + '|' + tarea] = { I: v[8], J: v[9], Q: v[16], R: v[17], Z: v[25] };
+    if (inicioSub) subs[area + '|' + s] = { E: v[4], F: v[5] };
+  });
+  return { filas: filas, subs: subs };
+}
+
+function _restaurarManualesOP(ws, datos) {
+  var last = ws.getLastRow();
+  if (last < 2) return;
+  var n = last - 1;
+  var IJ = ws.getRange(2, 9, n, 2).getValues();
+  var QR = ws.getRange(2, 17, n, 2).getValues();
+  var Z  = ws.getRange(2, 26, n, 1).getValues();
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub) {
+    var i = fila - 2, g = datos.filas[area + '|' + s + '|' + tarea];
+    if (g) { IJ[i] = [g.I, g.J]; QR[i] = [g.Q, g.R]; Z[i] = [g.Z]; }
+    if (inicioSub) {
+      var sg = datos.subs[area + '|' + s];
+      if (sg) ws.getRange(fila, 5, 1, 2).setValues([[sg.E, sg.F]]);
+    }
+  });
+  ws.getRange(2, 9, n, 2).setValues(IJ);
+  ws.getRange(2, 17, n, 2).setValues(QR);
+  ws.getRange(2, 26, n, 1).setValues(Z);
+}
+
+/**
+ * Cambió la estructura (áreas o subestructuras): se crea la hoja de nuevo
+ * con _crearHojaOP y se le devuelven los datos manuales. Si algo falla, la
+ * hoja original vuelve a quedar como estaba.
+ */
+function _reconstruirHojaOP(ss, viejo, d, m) {
+  var datos = _leerManualesOP(viejo);
+  var idx   = viejo.getIndex();
+  viejo.setName(d.op + '_respaldo_' + new Date().getTime());
+  var nuevo = null;
+  try {
+    nuevo = _crearHojaOP(ss, d.op, d.nombreOp, d.cliente, d.comercial, d.sede, d.numSubs, 0,
+                         d.areas, d.areas.length, d.fechaEntrega);
+    _restaurarManualesOP(nuevo, datos);
+    nuevo.getRange(1, COL_META_ENVIADAS).setValue(m.enviadas.join(','));
+    ss.setActiveSheet(nuevo);
+    ss.moveActiveSheet(idx);
+    ss.deleteSheet(viejo);
+  } catch (e) {
+    if (nuevo) { try { ss.deleteSheet(nuevo); } catch (_) {} }
+    viejo.setName(d.op);
+    throw new Error('No se pudo guardar la OP (la hoja quedó como estaba): ' + e.message);
+  }
+  return nuevo;
+}
+
+// ============================================================
+//  ENVIAR / ACTUALIZAR OP ACTIVA EN ÁREAS
 // ============================================================
 function enviarOPActivaAAreas() {
-  var ss     = SpreadsheetApp.getActiveSpreadsheet();
-  var ws     = ss.getActiveSheet();
-  var opName = ws.getName();
-
-  if (opName === 'BASE_CREADOR' || opName === 'Cronograma Comercial') {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var ws = ss.getActiveSheet();
+  var nombre = ws.getName();
+  if (nombre === 'BASE_CREADOR' || nombre === 'Cronograma Comercial' || nombre === HOJA_REGISTRO) {
     SpreadsheetApp.getUi().alert('❌ Debes estar en la hoja de la OP.\nVe a la pestaña de la OP y vuelve a ejecutar.');
     return;
   }
-
-  var op        = ws.getRange('AB1').getValue().toString().trim();
-  var nombreOp  = ws.getRange('AC1').getValue().toString().trim();
-  var cliente   = ws.getRange('AD1').getValue().toString().trim();
-  var comercial = ws.getRange('AE1').getValue().toString().trim();
-  var sede      = ws.getRange('AF1').getValue().toString().trim();
-  var numSubs   = parseInt(ws.getRange('AG1').getValue())   || 1;
-  // KG_TOTAL = suma de todos los KG_SUBESTRUCTURA (col F) ingresados manualmente
-  var kgTotal = 0;
-  if (ws.getLastRow() >= 2) {
-    var colF = ws.getRange(2, 6, ws.getLastRow() - 1, 1).getValues();
-    for (var ki = 0; ki < colF.length; ki++) {
-      var kgVal = parseFloat(colF[ki][0]);
-      if (!isNaN(kgVal) && kgVal > 0) kgTotal += kgVal;
-    }
-  }
-  var numAreas  = parseInt(ws.getRange('AI1').getValue())   || 1;
-  var areasStr  = ws.getRange('AJ1').getValue().toString().trim();
-  var fechaEntrega = ws.getRange(1, COL_META_FECHA).getValue();   // v8: col AK
-
-  if (!op) op = opName;
-  if (!areasStr) {
+  if (!_esHojaOP(ws)) {
     SpreadsheetApp.getUi().alert('❌ No se encontraron las áreas guardadas.\nEsta hoja puede ser de una versión anterior.');
     return;
   }
+  _sincronizarOPConAreas(ss, ws);
+}
 
-  var areasSeleccionadas = areasStr.split(',');
-  var ui = SpreadsheetApp.getUi();
-
-  // v8: OP creadas antes de este cambio no tienen fecha → se pide aquí
-  if (!_esFecha(fechaEntrega)) {
-    var pr = ui.prompt('📅 Fecha de entrega al cliente',
-      'La OP "' + op + '" no tiene fecha de entrega al cliente.\n' +
-      'Escríbela en formato dd/mm/aaaa (o deja vacío para enviar sin fecha):',
-      ui.ButtonSet.OK_CANCEL);
-    if (pr.getSelectedButton() !== ui.Button.OK) return;
-    var txt = pr.getResponseText().trim();
-    if (txt) {
-      fechaEntrega = _parseFecha(txt);
-      if (!fechaEntrega) { ui.alert('❌ Fecha no válida: "' + txt + '". Usa dd/mm/aaaa.'); return; }
-      ws.getRange(1, COL_META_FECHA).setValue(fechaEntrega).setNumberFormat('dd/mm/yyyy');
-      ws.getRange(1, COL_META_FECHA).setNote('META_FECHA_ENTREGA');
-    } else {
-      fechaEntrega = '';
-    }
+function _leerDatosHojaOP(ws) {
+  var lastRow = ws.getLastRow(), datos = [];
+  if (lastRow < 2) return datos;
+  var rango = ws.getRange(2, 1, lastRow - 1, 28).getValues();
+  for (var i = 0; i < rango.length; i++) {
+    datos.push({
+      nombreSub:    rango[i][4],   // col E = Nombre SubEstructura
+      kgSub:        rango[i][5],   // col F = KG_SUBESTRUCTURA
+      fechaIniPlan: rango[i][8],   // col I = FECHA_INICIO_TAREA_PLANEADO
+      durPlan:      rango[i][9],   // col J = DURACION_DIAS_TAREAS_PLANEADO
+      fechaIniReal: rango[i][16],  // col Q = FECHA_INICIO_TAREA_REAL
+      durReal:      rango[i][17]   // col R = DURACION_DIAS_TAREAS_REAL
+    });
   }
+  return datos;
+}
 
-  var confirm = ui.alert(
-    '📤 Enviar OP a Áreas',
-    'Se enviarán los datos de OP "' + op + '" (KG Total: ' + kgTotal.toLocaleString('es-CO') + ' kg calculado)' +
-    '\nFecha de entrega al cliente: ' + _fmtFecha(fechaEntrega) + '\n\na:\n\n' +
-    areasSeleccionadas.join('\n') +
-    '\n\n¿Continuar?',
-    ui.ButtonSet.YES_NO
-  );
-  if (confirm !== ui.Button.YES) return;
+/**
+ * Motor único de envío:
+ *  - Área donde la OP NO existe  → se crea completa (como antes).
+ *  - Área donde la OP YA existe  → se ACTUALIZA en su sitio, sin tocar lo que
+ *    llena el área (ESTADO, KG avance, fechas/duración reales, OBSERVACIONES).
+ *    Si cambiaron las subestructuras, se agregan o quitan solo las del final.
+ *  - Área que se quitó de la OP  → se pregunta antes de borrarla.
+ *  Todo queda en REGISTRO_CAMBIOS.
+ */
+function _sincronizarOPConAreas(ss, ws) {
+  var ui = SpreadsheetApp.getUi();
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('⏳ Otra persona está enviando una OP en este momento. Intenta de nuevo en un minuto.'); return; }
+  try {
+    if (!_verificarPermisoAreas()) return;     // v9.1
+    var m  = _leerMetaOP(ws);
+    var op = m.op;
+    if (!m.areas.length) { ui.alert('❌ La OP no tiene áreas guardadas.'); return; }
 
-  var htmlProgress = HtmlService.createHtmlOutput(
-    '<html><head><style>' +
-    'body{font-family:Arial,sans-serif;padding:20px;text-align:center;background:#f8f9fa;}' +
-    'h3{color:#2F75B5;margin-bottom:16px;}' +
-    '.bar-wrap{background:#e0e0e0;border-radius:8px;height:18px;width:100%;margin:10px 0;}' +
-    '.bar{background:linear-gradient(90deg,#2F75B5,#4CAF50);height:18px;border-radius:8px;width:0%;transition:width 0.4s;}' +
-    '.status{font-size:13px;color:#555;margin-top:10px;}' +
-    '</style></head><body>' +
-    '<h3>📤 Enviando OP ' + op + '...</h3>' +
-    '<div class="bar-wrap"><div class="bar" id="bar"></div></div>' +
-    '<div class="status" id="status">Preparando datos...</div>' +
-    '<script>' +
-    'var pct=0; var areas=' + JSON.stringify(areasSeleccionadas) + ';' +
-    'var step=Math.round(100/areas.length);' +
-    'var idx=0;' +
-    'function tick(){' +
-    '  if(idx<areas.length){' +
-    '    document.getElementById("status").innerText="Enviando a "+areas[idx]+"... ("+(idx+1)+"/"+areas.length+")";' +
-    '    pct=Math.min(100,(idx+1)*step);' +
-    '    document.getElementById("bar").style.width=pct+"%";' +
-    '    idx++;setTimeout(tick,1800);' +
-    '  } else {' +
-    '    document.getElementById("status").innerText="✅ Completado";' +
-    '    document.getElementById("bar").style.width="100%";' +
-    '  }' +
-    '}' +
-    'setTimeout(tick,500);' +
-    '</script></body></html>'
-  ).setWidth(380).setHeight(160);
+    // Fecha de entrega (OP antiguas no la tienen)
+    var fechaEntrega = m.fecha;
+    if (!_esFecha(fechaEntrega)) {
+      var pr = ui.prompt('📅 Fecha de entrega al cliente',
+        'La OP "' + op + '" no tiene fecha de entrega al cliente.\n' +
+        'Escríbela en formato dd/mm/aaaa (o deja vacío para enviar sin fecha):',
+        ui.ButtonSet.OK_CANCEL);
+      if (pr.getSelectedButton() !== ui.Button.OK) return;
+      var txt = pr.getResponseText().trim();
+      if (txt) {
+        fechaEntrega = _parseFecha(txt);
+        if (!fechaEntrega) { ui.alert('❌ Fecha no válida: "' + txt + '". Usa dd/mm/aaaa.'); return; }
+        ws.getRange(1, COL_META_FECHA).setValue(fechaEntrega).setNumberFormat('dd/mm/yyyy');
+      } else {
+        fechaEntrega = '';
+      }
+    }
 
-  SpreadsheetApp.getUi().showModalDialog(htmlProgress, '⏳ Enviando OP a Áreas...');
+    // KG_TOTAL = suma de KG_SUBESTRUCTURA (col F)
+    var kgTotal = 0;
+    if (ws.getLastRow() >= 2) {
+      var colF = ws.getRange(2, 6, ws.getLastRow() - 1, 1).getValues();
+      for (var ki = 0; ki < colF.length; ki++) {
+        var kgVal = parseFloat(colF[ki][0]);
+        if (!isNaN(kgVal) && kgVal > 0) kgTotal += kgVal;
+      }
+    }
+    var datosHoja = _leerDatosHojaOP(ws);
 
-  // Leer datos de fechas y kg por subestructura desde la hoja OP
-  var lastRow = ws.getLastRow();
-  var datosHoja = [];
-  if (lastRow >= 2) {
-    var rango = ws.getRange(2, 1, lastRow - 1, 28).getValues();
-    for (var i = 0; i < rango.length; i++) {
-      datosHoja.push({
-        nombreSub:    rango[i][4],   // col E = Nombre SubEstructura
-        kgSub:        rango[i][5],   // col F = KG_SUBESTRUCTURA
-        fechaIniPlan: rango[i][8],   // col I = FECHA_INICIO_TAREA_PLANEADO
-        durPlan:      rango[i][9],   // col J = DURACION_DIAS_TAREAS_PLANEADO
-        fechaIniReal: rango[i][16],  // col Q = FECHA_INICIO_TAREA_REAL
-        durReal:      rango[i][17]   // col R = DURACION_DIAS_TAREAS_REAL
+    // ---------- 1) PLAN: revisar cada cronograma antes de tocar nada ----------
+    ss.toast('Revisando los cronogramas de las áreas...', '🔎 OP ' + op, 6);
+    var plan = [], offset = 0;
+    m.areas.forEach(function(area) {
+      var T     = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
+      var nSubs = AREAS_GENERALES.indexOf(area) !== -1 ? 1 : m.numSubs;
+      var it = { area: area, id: IDS_AREAS[area], T: T, newSubs: nSubs, riesgos: [],
+                 datos: datosHoja.slice(offset, offset + nSubs * T) };
+      offset += nSubs * T;
+      if (!it.id || it.id.indexOf('PON_AQUI') !== -1) { it.accion = 'error'; it.error = 'ID no configurado'; plan.push(it); return; }
+      try {
+        it.tSheet = _abrirCronograma(it.id);
+        it.blk    = _bloqueOP(it.tSheet, op);
+        if (!it.blk) {
+          it.accion = 'crear';
+        } else if (it.blk.len % T !== 0) {
+          it.accion = 'error';
+          it.error  = 'la OP ocupa ' + it.blk.len + ' filas y no cuadra con ' + T + ' tareas por subestructura (revisar a mano)';
+        } else {
+          it.accion  = 'actualizar';
+          it.oldSubs = it.blk.len / T;
+          if (nSubs < it.oldSubs)
+            it.riesgos = _subsConAvance(it.tSheet, it.blk.start + nSubs * T, (it.oldSubs - nSubs) * T, T, nSubs);
+        }
+      } catch (e) { it.accion = 'error'; it.error = e.message; }
+      plan.push(it);
+    });
+
+    var candidatos = (m.enviadas.length ? m.enviadas : Object.keys(IDS_AREAS))
+      .filter(function(a) { return m.areas.indexOf(a) === -1; });
+    candidatos.forEach(function(area) {
+      var id = IDS_AREAS[area];
+      if (!id || id.indexOf('PON_AQUI') !== -1) return;
+      try {
+        var tSheet = _abrirCronograma(id), blk = _bloqueOP(tSheet, op);
+        if (!blk) return;
+        var T = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
+        plan.push({ area: area, id: id, tSheet: tSheet, blk: blk, T: T, accion: 'eliminar',
+                    riesgos: _subsConAvance(tSheet, blk.start, blk.len, T, 0) });
+      } catch (_) {}
+    });
+
+    // ---------- 2) CONFIRMAR ----------
+    var grupo = function(acc) { return plan.filter(function(p) { return p.accion === acc; }); };
+
+    // v9.1: falta de permisos → instrucciones claras en vez del error técnico
+    if (grupo('error').some(function(p) { return _esErrorPermiso(p.error); })) {
+      ui.alert('🔐 Falta autorizar el script', _MSG_PERMISOS, ui.ButtonSet.OK);
+      return;
+    }
+    if (!grupo('crear').length && !grupo('actualizar').length && !grupo('eliminar').length) {
+      ui.alert('❌ No se pudo procesar ninguna área',
+        grupo('error').map(function(p) { return '• ' + p.area + ': ' + p.error; }).join('\n'), ui.ButtonSet.OK);
+      return;
+    }
+    var lin = ['OP ' + op + ' – "' + m.nombreOp + '"',
+               'KG Total: ' + kgTotal.toLocaleString('es-CO') + ' kg  ·  Fecha entrega: ' + _fmtFecha(fechaEntrega), ''];
+    if (grupo('crear').length)
+      lin.push('🆕 Se ENVÍA por primera vez a:\n   ' + grupo('crear').map(function(p) { return p.area; }).join(', '));
+    if (grupo('actualizar').length) {
+      lin.push('🔄 Se ACTUALIZA (se conserva estado, KG avance, fechas reales y observaciones):');
+      grupo('actualizar').forEach(function(p) {
+        var t = '   • ' + p.area;
+        if (p.newSubs > p.oldSubs) t += '  (+' + (p.newSubs - p.oldSubs) + ' subestructura/s nueva/s)';
+        if (p.newSubs < p.oldSubs) t += '  (−' + (p.oldSubs - p.newSubs) + ' subestructura/s se borran)';
+        if (p.riesgos.length) t += '\n       ⚠️ con avance: ' + p.riesgos.join(', ');
+        lin.push(t);
       });
     }
-  }
-
-  var exitosas = [], fallidas = [], offsetPorArea = 0;
-
-  for (var i = 0; i < areasSeleccionadas.length; i++) {
-    var area = areasSeleccionadas[i].trim();
-    var id   = IDS_AREAS[area];
-
-    SpreadsheetApp.getActiveSpreadsheet().toast(
-      'Procesando área ' + (i+1) + ' de ' + areasSeleccionadas.length + '...',
-      '📤 ' + area, 3
-    );
-
-    var tareasDeEstaArea = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
-
-    // Si el área es general (Administración), solo tiene una subestructura
-      var numSubsArea = AREAS_GENERALES.indexOf(area) !== -1 ? 1 : numSubs;
-
-      var filasDeEstaArea = numSubsArea * tareasDeEstaArea;
-
-      var datosDeEstaArea = datosHoja.slice(
-          offsetPorArea,
-          offsetPorArea + filasDeEstaArea
-      );
-
-offsetPorArea += filasDeEstaArea;
-
-    if (!id || id.indexOf('PON_AQUI') !== -1) {
-      fallidas.push(area + ': ID no configurado'); continue;
+    if (grupo('eliminar').length) {
+      lin.push('🗑 Se QUITA la OP de (te pediré confirmar aparte):');
+      grupo('eliminar').forEach(function(p) {
+        lin.push('   • ' + p.area + (p.riesgos.length ? '  ⚠️ con avance: ' + p.riesgos.join(', ') : ''));
+      });
     }
-    try {
-      _enviarAPlantillaArea(id, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosDeEstaArea, fechaEntrega);
-      exitosas.push(area);
-    } catch(e) {
-      fallidas.push(area + ': ' + e.message);
-    }
+    if (grupo('error').length)
+      lin.push('❌ No se puede en:\n' + grupo('error').map(function(p) { return '   • ' + p.area + ': ' + p.error; }).join('\n'));
+    lin.push('', '¿Continuar?');
+    if (ui.alert('📤 Enviar / Actualizar OP en Áreas', lin.join('\n'), ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+
+    grupo('eliminar').forEach(function(p) {
+      var r = ui.alert('🗑 Quitar OP ' + op + ' de ' + p.area,
+        'Se borrarán ' + p.blk.len + ' filas de la OP en el Cronograma de ' + p.area + '.' +
+        (p.riesgos.length ? '\n\n⚠️ Esas filas tienen avance registrado por el área: ' + p.riesgos.join(', ') : '') +
+        '\n\n¿Quitarla?', ui.ButtonSet.YES_NO);
+      if (r !== ui.Button.YES) p.accion = 'omitir';
+    });
+
+    // ---------- 3) EJECUTAR ----------
+    var reg = _nuevoRegistro(op);
+    var creadas = [], actualizadas = [], quitadasOk = [], omitidas = [], fallidas = [];
+    var trabajo = plan.filter(function(p) { return p.accion !== 'error' && p.accion !== 'omitir'; });
+    grupo('error').forEach(function(p) { fallidas.push(p.area + ': ' + p.error); });
+    grupo('omitir').forEach(function(p) { omitidas.push(p.area); });
+
+    trabajo.forEach(function(p, i) {
+      ss.toast('Área ' + (i + 1) + ' de ' + trabajo.length + '...', '📤 ' + p.area, 4);
+      var origen = 'Cronograma ' + p.area;
+      try {
+        if (p.accion === 'crear') {
+          _enviarAPlantillaArea(p.id, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
+                                m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega, p.tSheet);
+          reg.add(origen, p.area, '', '', 'OP', '', 'enviada (' + p.newSubs + ' subestructura/s)');
+          creadas.push(p.area);
+        } else if (p.accion === 'actualizar') {
+          var ctx = _ctxArea(p.tSheet, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
+                             m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega);
+          var n = _actualizarOPEnArea(p.tSheet, ctx, p.blk, function(area, sub, tarea, campo, antes, despues) {
+            reg.add(origen, area, sub, tarea, campo, antes, despues);
+          });
+          actualizadas.push(p.area + (n ? ' (' + n + ' cambio/s)' : ' (sin cambios)'));
+        } else if (p.accion === 'eliminar') {
+          p.tSheet.deleteRows(p.blk.start, p.blk.len);
+          reg.add(origen, p.area, '', '', 'OP', 'en cronograma (' + p.blk.len + ' filas)', 'eliminada');
+          quitadasOk.push(p.area);
+        }
+      } catch (e) {
+        fallidas.push(p.area + ': ' + e.message);
+      }
+    });
+
+    // Áreas donde la OP quedó publicada
+    var enviadas = m.enviadas.slice();
+    creadas.concat(actualizadas.map(function(a) { return a.split(' (')[0]; })).forEach(function(a) {
+      if (enviadas.indexOf(a) === -1) enviadas.push(a);
+    });
+    enviadas = enviadas.filter(function(a) { return quitadasOk.indexOf(a) === -1; });
+    ws.getRange(1, COL_META_ENVIADAS).setValue(_ordenarAreas(enviadas).join(','));
+    reg.guardar(ss);
+
+    var msg = '✅ OP ' + op + '\n';
+    if (creadas.length)      msg += '\n🆕 Enviada a: ' + creadas.join(', ');
+    if (actualizadas.length) msg += '\n🔄 Actualizada en: ' + actualizadas.join(', ');
+    if (quitadasOk.length)   msg += '\n🗑 Quitada de: ' + quitadasOk.join(', ');
+    if (omitidas.length)     msg += '\n⏭ No se quitó de: ' + omitidas.join(', ');
+    if (fallidas.length)     msg += '\n\n⚠️ Falló en:\n' + fallidas.join('\n');
+    if (reg.n())             msg += '\n\n📋 ' + reg.n() + ' cambio/s anotados en "' + HOJA_REGISTRO + '".';
+    ui.alert(msg);
+  } finally {
+    lock.releaseLock();
   }
-
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    exitosas.join(', ') + (fallidas.length ? '\n⚠️ Falló: ' + fallidas.join(', ') : ''),
-    '✅ OP ' + op + ' enviada', 8
-  );
-
-  var msg = '✅ OP ' + op + ' enviada a:\n' + exitosas.join(', ');
-  if (fallidas.length) msg += '\n\n⚠️ Falló en:\n' + fallidas.join('\n');
-  ui.alert(msg);
 }
 
 // ============================================================
@@ -509,7 +907,8 @@ function _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTot
     'META_OP','META_NOMBRE','META_CLIENTE','META_COMERCIAL','META_SEDE','META_SUBS',
     'META_KG_TOTAL',              // col AH — NUEVO
     'META_AREAS_N','META_AREAS_LIST',
-    'META_FECHA_ENTREGA'          // col AK — v8
+    'META_FECHA_ENTREGA',         // col AK — v8
+    'META_AREAS_ENVIADAS'         // col AL — v9 (áreas donde ya está publicada)
   ];
 
   ws.getRange(1, 1, 1, headers.length).setValues([headers]);
@@ -526,7 +925,8 @@ function _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTot
   ws.getRange(1, 35).setValue(numAreas);
   ws.getRange(1, 36).setValue(areasSeleccionadas.join(','));
   ws.getRange(1, COL_META_FECHA).setValue(_esFecha(fechaEntrega) ? fechaEntrega : '').setNumberFormat('dd/mm/yyyy'); // v8
-  ws.hideColumns(27, 11);
+  ws.getRange(1, COL_META_ENVIADAS).setValue('');                                  // v9
+  ws.hideColumns(27, 12);
   ws.setFrozenRows(1);
   ws.setFrozenColumns(1);
 
@@ -639,265 +1039,332 @@ function _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTot
 }
 
 // ============================================================
-//  ENVIAR DATOS A LA PLANTILLA DE ÁREA (nueva estructura)
+//  ENVIAR DATOS A LA PLANTILLA DE ÁREA
+//  v9: dividido en piezas reutilizables para poder CREAR y ACTUALIZAR
+//      con exactamente las mismas fórmulas de antes.
 // ============================================================
 
-function _enviarAPlantillaArea(spreadsheetId, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega) {
-  var tSS    = SpreadsheetApp.openById(spreadsheetId);
-  var tSheet = tSS.getSheetByName('Cronograma');
+function _abrirCronograma(spreadsheetId) {
+  var tSheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName('Cronograma');
   if (!tSheet) throw new Error('Hoja "Cronograma" no encontrada');
+  return tSheet;
+}
 
-  // v8: ubica (o crea) la columna FECHA ENTREGA CLIENTE después de OBSERVACIONES
-  var colFecha = _columnaFechaEntrega(tSheet);
-  // v8: si la columna de fecha quedó antes del bloque PLANEADO (AD..AJ), ese
-  // bloque se corrió k columnas. P(n) = columna real, PL(n) = su letra.
-  var k  = _offsetPlaneado(tSheet);
-  var P  = function(n) { return n >= 30 ? n + k : n; };
-  var PL = function(n) { return _colLetra(P(n)); };
-
-  var lastExistingRow = Math.max(tSheet.getLastRow(), 6);
-  tSheet.getRange(6, 14, lastExistingRow - 5, 1).clearDataValidations();
-  tSheet.getRange(6, 15, lastExistingRow - 5, 1).clearDataValidations();
-
-  var tareas         = TAREAS_AREA[area] || TAREAS_AREA['Diseño'];
-  var TAREAS_POR_SUB = tareas.length;
-  var mes            = _getNombreMes();
-
-  var numSubsEfectivo = (AREAS_GENERALES.indexOf(area) !== -1) ? 1 : numSubs;
-  var totalFilas      = numSubsEfectivo * TAREAS_POR_SUB;
-
-  var lastRow = tSheet.getLastRow();
-  if (lastRow >= 6) {
-    var colB = tSheet.getRange(6, 2, lastRow-5, 1).getValues();
-    for (var ri = colB.length-1; ri >= 0; ri--) {
-      if (String(colB[ri][0]).trim() === String(op).trim()) {
-        tSheet.deleteRows(ri+6, totalFilas); break;
-      }
-    }
+/** Ubica el bloque de filas de una OP en el Cronograma: {start, len} o null. */
+function _bloqueOP(tSheet, op) {
+  var last = tSheet.getLastRow();
+  if (last < FILA_INICIO_CRONO) return null;
+  var n = last - FILA_INICIO_CRONO + 1;
+  var colB = tSheet.getRange(FILA_INICIO_CRONO, 2, n, 1).getValues();
+  var colN = tSheet.getRange(FILA_INICIO_CRONO, 14, n, 1).getValues();
+  var objetivo = String(op).trim();
+  for (var i = 0; i < n; i++) {
+    if (String(colB[i][0]).trim() !== objetivo) continue;
+    var j = i + 1;
+    while (j < n && String(colB[j][0]).trim() === '' && String(colN[j][0]).trim() !== '') j++;
+    return { start: FILA_INICIO_CRONO + i, len: j - i };
   }
+  return null;
+}
 
-  var fila       = tSheet.getLastRow() + 1;
-  var opStartRow = fila;
-  var hojaIdx    = 0;
-  var ejecRanges = [];
-  var tipoArea   = TIPO_AREA[area] || 'B';
-  var asFilas    = AS_FILAS[area]  || {};
+/** Subestructuras (dentro de un rango de filas) donde el área ya registró avance. */
+function _subsConAvance(tSheet, start, nFilas, T, s0) {
+  if (nFilas <= 0) return [];
+  var v = tSheet.getRange(start, 1, nFilas, 29).getValues();
+  var out = [];
+  for (var b = 0; b * T < nFilas; b++) {
+    var con = false;
+    for (var t = 0; t < T && b * T + t < nFilas; t++) {
+      var row = v[b * T + t];
+      var estado = String(row[15]).trim();                         // P = ESTADO
+      if ((estado && estado !== 'En pausa') ||
+          (parseFloat(row[18]) > 0) ||                              // S = KG avance
+          String(row[28]).trim() !== '') { con = true; break; }     // AC = OBSERVACIONES
+    }
+    if (con) out.push('Sub ' + (s0 + b + 1) + (String(v[b * T][10]).trim() ? ' (' + String(v[b * T][10]).trim() + ')' : ''));
+  }
+  return out;
+}
+
+/** Contexto común de un área (columnas corridas, tareas, KG...). */
+function _ctxArea(tSheet, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega) {
+  var colFecha = _columnaFechaEntrega(tSheet);     // v8
+  var k        = _offsetPlaneado(tSheet);          // v8
+  var tareas   = TAREAS_AREA[area] || TAREAS_AREA['Diseño'];
+  var T        = tareas.length;
+  var numSubsEf = (AREAS_GENERALES.indexOf(area) !== -1) ? 1 : numSubs;
+  datosHoja = datosHoja || [];
 
   var kgTotalArea = 0;
-  var TAREAS_POR_SUB_LOCAL = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
-  for (var si = 0; si < numSubsEfectivo; si++) {
-    var idxSi = si * TAREAS_POR_SUB_LOCAL;
-    if (datosHoja && idxSi < datosHoja.length) {
-      var kgSi = parseFloat(datosHoja[idxSi].kgSub);
+  for (var si = 0; si < numSubsEf; si++) {
+    var idx = si * T;
+    if (idx < datosHoja.length) {
+      var kgSi = parseFloat(datosHoja[idx].kgSub);
       if (!isNaN(kgSi) && kgSi > 0) kgTotalArea += kgSi;
     }
   }
   if (kgTotalArea === 0) kgTotalArea = kgTotal;
 
-  for (var s = 0; s < numSubsEfectivo; s++) {
-    var subStart = fila;
-    var subLabel = op + '_' + (s+1);
-
-    // kgSub CORREGIDO
-    var kgSub = 0;
-    var datoSubPrimero = (datosHoja && hojaIdx < datosHoja.length) ? datosHoja[hojaIdx] : null;
-    if (datoSubPrimero && datoSubPrimero.kgSub) {
-      kgSub = parseFloat(datoSubPrimero.kgSub) || 0;
-    } else if (numSubsEfectivo > 0) {
-      kgSub = kgTotal / numSubsEfectivo;
-    } else {
-      kgSub = kgTotal;
-    }
-
-    for (var tIdx = 0; tIdx < tareas.length; tIdx++) {
-      var descTarea   = tareas[tIdx][0];
-      var responsable = tareas[tIdx][1];
-      var r           = fila;
-      var isFirst     = (s === 0 && tIdx === 0);
-      var isFirstSub  = (tIdx === 0);
-
-      var datoFila        = (datosHoja && hojaIdx < datosHoja.length) ? datosHoja[hojaIdx] : null;
-      var nombreSubManual = datoFila ? datoFila.nombreSub    : '';
-      var fechaIniPlan    = datoFila ? datoFila.fechaIniPlan : '';
-      var durPlan         = datoFila ? datoFila.durPlan      : '';
-      var fechaIniReal    = datoFila ? datoFila.fechaIniReal : '';
-      var durReal         = datoFila ? datoFila.durReal      : '';
-      hojaIdx++;
-
-      if (isFirstSub) tSheet.getRange(r, 1).setValue(mes);
-      tSheet.getRange(r, 2).setValue(isFirst ? op : '');
-      tSheet.getRange(r, 3).setValue(isFirst ? nombreOp : '');
-      tSheet.getRange(r, 4).setValue(isFirst ? cliente : '');
-      tSheet.getRange(r, 5).setValue(isFirst ? comercial : '');
-
-      if (isFirst) {
-        tSheet.getRange(r, 6).setValue(kgTotalArea);
-        tSheet.getRange(r, 6).setNumberFormat('#,##0 "kg"');
-      }
-
-      if (isFirst) {
-        tSheet.getRange(r, 7).setValue(numAreas);
-        tSheet.getRange(r, 8).setValue(numAreas > 0 ? 1/numAreas : 0);
-        tSheet.getRange(r, 8).setNumberFormat('0.00%');
-      }
-
-      if (isFirstSub) {
-        tSheet.getRange(r, 9).setFormula('=((L' + r + '*100%)/F' + opStartRow + ')/G' + opStartRow);
-        tSheet.getRange(r, 9).setNumberFormat('0.00%');
-        tSheet.getRange(r, 10).setFormula('=I' + r + '*R' + r);
-        tSheet.getRange(r, 10).setNumberFormat('0.00%');
-      }
-
-      if (isFirstSub) tSheet.getRange(r, 11).setValue(nombreSubManual || ('Nombre ' + (s+1)));
-
-      if (isFirstSub) {
-        tSheet.getRange(r, 12).setValue(kgSub);
-        tSheet.getRange(r, 12).setNumberFormat('#,##0 "kg"');
-      }
-
-      if (isFirstSub) tSheet.getRange(r, 13).setValue(sede);
-
-      tSheet.getRange(r, 14).setValue(descTarea);
-      tSheet.getRange(r, 15).setValue(responsable);
-      tSheet.getRange(r, 16).setValue('En pausa');
-
-      // Col Q (%_APORTE_TAREA)
-      if (tipoArea === 'A') {
-        var pt = (tareas[tIdx][2]||0).toString().replace('.',',');
-        var pp = (tareas[tIdx][3]||0).toString().replace('.',',');
-        var pr = (tareas[tIdx][4]||0).toString().replace('.',',');
-        tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt + ';IF(P' + r + '="En pausa";' + pp + ';IF(P' + r + '="Reproceso";' + pr + ';0)))');
-      } else {
-        var asRow = asFilas[descTarea] || null;
-        if (asRow) {
-          tSheet.getRange(r, 17).setFormula("='Assignees and Status'!B" + asRow + '%*T' + r);
-        } else {
-          var pt2 = (tareas[tIdx][2]||0).toString().replace('.',',');
-          var pp2 = (tareas[tIdx][3]||0).toString().replace('.',',');
-          tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt2 + ';IF(P' + r + '="En pausa";' + pp2 + ';0))');
-        }
-      }
-      tSheet.getRange(r, 17).setNumberFormat('0.00%');
-
-      // Col S = KG_AVANCE_ACUMULADO — SIEMPRE es valor manual (el usuario
-      // escribe el kg avanzado por tarea). A propósito NO se le pone
-      // fórmula aquí: si S dependiera de R (vía L*R, por ejemplo) se
-      // generaría una referencia circular S → R → Q → T → S, que es
-      // justo lo que causaba los #REF!/#ERROR!. Solo se define el
-      // formato numérico para que la celda quede lista para digitar.
-      tSheet.getRange(r, 19).setNumberFormat('#,##0.00 "kg"');
-
-      // ==================== FÓRMULAS DE RESUMEN ====================
-//if (isFirstSub) {
-
-  // Calcula el último registro REAL de esta subestructura
-  //var subEnd = fila + (TAREAS_POR_SUB - tIdx) - 1;
-
-  //setSubSummaryFormulas(tSheet, subStart, subEnd - subStart + 1);
-//}
-// ============================================================
-
-      tSheet.getRange(r, 18).setNumberFormat('0.00%');
-      tSheet.getRange(r, 20).setFormula('=S' + r + '/L' + subStart);
-
-      // Resto de lógica (fechas, etc.) se mantiene igual...
-      if (fechaIniReal && fechaIniReal instanceof Date && fechaIniReal.getFullYear() > 1900) {
-        tSheet.getRange(r, 21).setValue(fechaIniReal).setNumberFormat('dd/mm/yyyy');
-      } else if (isFirstSub) {
-        tSheet.getRange(r, 21).setFormula('=' + PL(30) + r);
-      } else {
-        tSheet.getRange(r, 21).setValue('=WORKDAY(W' + (r-1) + ';1;DIAS_FESTIVOS!$A$3:$A$20)');
-      }
-
-      if (durReal && typeof durReal === 'number' && durReal > 0) {
-        tSheet.getRange(r, 22).setValue(durReal);
-      }
-
-      tSheet.getRange(r, 23).setValue('=IF(OR(U' + r + '="";V' + r + '=0);"";WORKDAY.INTL(U' + r + ';V' + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
-
-      if (tIdx === 0) {
-        tSheet.getRange(r, 26).setFormula('=V' + r + '*Y$' + subStart);
-        tSheet.getRange(r, 27).setFormula('=Z' + r);
-      } else {
-        tSheet.getRange(r, 26).setFormula('=V' + r + '*Y$' + subStart);
-        tSheet.getRange(r, 27).setFormula('=AA' + (r-1) + '+Z' + r);
-      }
-      tSheet.getRange(r, 28).setFormula('=' + PL(33) + r + '/X' + r);
-      tSheet.getRange(r, 28).setNumberFormat('0.00%');
-
-      if (fechaIniPlan && fechaIniPlan instanceof Date && fechaIniPlan.getFullYear() > 1900) {
-        tSheet.getRange(r, P(30)).setValue(fechaIniPlan).setNumberFormat('dd/mm/yyyy');
-      }
-      if (durPlan && typeof durPlan === 'number' && durPlan > 0) {
-        tSheet.getRange(r, P(31)).setValue(durPlan);
-      }
-      tSheet.getRange(r, P(32)).setValue('=IF(OR(' + PL(30) + r + '="";' + PL(31) + r + '=0);"";WORKDAY.INTL(' + PL(30) + r + ';' + PL(31) + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
-
-      if (isFirstSub) {
-        tSheet.getRange(r, P(35)).setFormula('=' + PL(31) + r + '*' + PL(34) + '$' + subStart);
-        tSheet.getRange(r, P(36)).setFormula('=' + PL(35) + r);
-      } else {
-        tSheet.getRange(r, P(35)).setFormula('=' + PL(31) + r + '*' + PL(34) + '$' + subStart);
-        tSheet.getRange(r, P(36)).setFormula('=' + PL(36) + (r-1) + '+' + PL(35) + r);
-      }
-
-      fila++;
+  return {
+    area: area, op: op, nombreOp: nombreOp, cliente: cliente, comercial: comercial, sede: sede,
+    numAreas: numAreas, kgTotal: kgTotal, kgTotalArea: kgTotalArea, datosHoja: datosHoja,
+    fechaEntrega: fechaEntrega, tareas: tareas, T: T, numSubsEf: numSubsEf,
+    mes: _getNombreMes(), tipoArea: TIPO_AREA[area] || 'B', asFilas: AS_FILAS[area] || {},
+    colFecha: colFecha, k: k,
+    P:  function(n) { return n >= 30 ? n + k : n; },
+    PL: function(n) { return _colLetra(n >= 30 ? n + k : n); },
+    opStartRow: null
+  };
 }
 
-     var subEnd = fila - 1;
+function _kgSubCtx(ctx, s) {
+  var d = ctx.datosHoja[s * ctx.T];
+  if (d && d.kgSub) return parseFloat(d.kgSub) || 0;
+  return ctx.numSubsEf > 0 ? ctx.kgTotal / ctx.numSubsEf : ctx.kgTotal;
+}
 
-     // Crear las fórmulas de resumen una vez ya existen todas las filas
-       setSubSummaryFormulas(
-       tSheet,
-       subStart,
- subEnd - subStart + 1,
-       k
-     ); 
+/** Escribe UNA subestructura completa (mismas fórmulas que v8). */
+function _escribirSub(tSheet, ctx, s, subStart) {
+  var tareas = ctx.tareas, TAREAS_POR_SUB = ctx.T, P = ctx.P, PL = ctx.PL;
+  var opStartRow = ctx.opStartRow;
+  var kgSub = _kgSubCtx(ctx, s);
 
-    // Merges
-    var mergeCols = [1, 6, 9, 10, 11, 12, 13, 18, 24, 25, 28, P(33), P(34)];
-    for (var mc = 0; mc < mergeCols.length; mc++) {
-      try {
-        tSheet.getRange(subStart, mergeCols[mc], TAREAS_POR_SUB, 1).mergeVertically();
-        tSheet.getRange(subStart, mergeCols[mc], TAREAS_POR_SUB, 1).setVerticalAlignment('middle');
-      } catch(_) {}
+  for (var tIdx = 0; tIdx < tareas.length; tIdx++) {
+    var descTarea   = tareas[tIdx][0];
+    var responsable = tareas[tIdx][1];
+    var r           = subStart + tIdx;
+    var isFirst     = (s === 0 && tIdx === 0);
+    var isFirstSub  = (tIdx === 0);
+
+    var datoFila        = ctx.datosHoja[s * TAREAS_POR_SUB + tIdx] || null;
+    var nombreSubManual = datoFila ? datoFila.nombreSub    : '';
+    var fechaIniPlan    = datoFila ? datoFila.fechaIniPlan : '';
+    var durPlan         = datoFila ? datoFila.durPlan      : '';
+    var fechaIniReal    = datoFila ? datoFila.fechaIniReal : '';
+    var durReal         = datoFila ? datoFila.durReal      : '';
+
+    if (isFirstSub) tSheet.getRange(r, 1).setValue(ctx.mes);
+    tSheet.getRange(r, 2).setValue(isFirst ? ctx.op : '');
+    tSheet.getRange(r, 3).setValue(isFirst ? ctx.nombreOp : '');
+    tSheet.getRange(r, 4).setValue(isFirst ? ctx.cliente : '');
+    tSheet.getRange(r, 5).setValue(isFirst ? ctx.comercial : '');
+
+    if (isFirst) {
+      tSheet.getRange(r, 6).setValue(ctx.kgTotalArea);
+      tSheet.getRange(r, 6).setNumberFormat('#,##0 "kg"');
+      tSheet.getRange(r, 7).setValue(ctx.numAreas);
+      tSheet.getRange(r, 8).setValue(ctx.numAreas > 0 ? 1/ctx.numAreas : 0);
+      tSheet.getRange(r, 8).setNumberFormat('0.00%');
     }
 
-    var bloqueRange = tSheet.getRange(subStart, 1, TAREAS_POR_SUB, Math.max(P(36), colFecha));
-    bloqueRange.setBorder(true,true,true,true,null,null,'#000000',SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
-    bloqueRange.setBorder(null,null,null,null,true,true,'#000000',SpreadsheetApp.BorderStyle.SOLID);
+    if (isFirstSub) {
+      tSheet.getRange(r, 9).setFormula('=((L' + r + '*100%)/F' + opStartRow + ')/G' + opStartRow);
+      tSheet.getRange(r, 9).setNumberFormat('0.00%');
+      tSheet.getRange(r, 10).setFormula('=I' + r + '*R' + r);
+      tSheet.getRange(r, 10).setNumberFormat('0.00%');
+      tSheet.getRange(r, 11).setValue(nombreSubManual || ('Nombre ' + (s+1)));
+      tSheet.getRange(r, 12).setValue(kgSub);
+      tSheet.getRange(r, 12).setNumberFormat('#,##0 "kg"');
+      tSheet.getRange(r, 13).setValue(ctx.sede);
+    }
+
+    tSheet.getRange(r, 14).setValue(descTarea);
+    tSheet.getRange(r, 15).setValue(responsable);
+    tSheet.getRange(r, 16).setValue('En pausa');
+
+    // Col Q (%_APORTE_TAREA)
+    if (ctx.tipoArea === 'A') {
+      var pt = (tareas[tIdx][2]||0).toString().replace('.',',');
+      var pp = (tareas[tIdx][3]||0).toString().replace('.',',');
+      var pr = (tareas[tIdx][4]||0).toString().replace('.',',');
+      tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt + ';IF(P' + r + '="En pausa";' + pp + ';IF(P' + r + '="Reproceso";' + pr + ';0)))');
+    } else {
+      var asRow = ctx.asFilas[descTarea] || null;
+      if (asRow) {
+        tSheet.getRange(r, 17).setFormula("='Assignees and Status'!B" + asRow + '%*T' + r);
+      } else {
+        var pt2 = (tareas[tIdx][2]||0).toString().replace('.',',');
+        var pp2 = (tareas[tIdx][3]||0).toString().replace('.',',');
+        tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt2 + ';IF(P' + r + '="En pausa";' + pp2 + ';0))');
+      }
+    }
+    tSheet.getRange(r, 17).setNumberFormat('0.00%');
+
+    // Col S = KG_AVANCE_ACUMULADO — valor manual del área (sin fórmula, evita circularidad)
+    tSheet.getRange(r, 19).setNumberFormat('#,##0.00 "kg"');
+
+    tSheet.getRange(r, 18).setNumberFormat('0.00%');
+    tSheet.getRange(r, 20).setFormula('=S' + r + '/L' + subStart);
+
+    if (fechaIniReal && fechaIniReal instanceof Date && fechaIniReal.getFullYear() > 1900) {
+      tSheet.getRange(r, 21).setValue(fechaIniReal).setNumberFormat('dd/mm/yyyy');
+    } else if (isFirstSub) {
+      tSheet.getRange(r, 21).setFormula('=' + PL(30) + r);
+    } else {
+      tSheet.getRange(r, 21).setValue('=WORKDAY(W' + (r-1) + ';1;DIAS_FESTIVOS!$A$3:$A$20)');
+    }
+
+    if (durReal && typeof durReal === 'number' && durReal > 0) {
+      tSheet.getRange(r, 22).setValue(durReal);
+    }
+
+    tSheet.getRange(r, 23).setValue('=IF(OR(U' + r + '="";V' + r + '=0);"";WORKDAY.INTL(U' + r + ';V' + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
+
+    tSheet.getRange(r, 26).setFormula('=V' + r + '*Y$' + subStart);
+    if (tIdx === 0) tSheet.getRange(r, 27).setFormula('=Z' + r);
+    else            tSheet.getRange(r, 27).setFormula('=AA' + (r-1) + '+Z' + r);
+    tSheet.getRange(r, 28).setFormula('=' + PL(33) + r + '/X' + r);
+    tSheet.getRange(r, 28).setNumberFormat('0.00%');
+
+    if (fechaIniPlan && fechaIniPlan instanceof Date && fechaIniPlan.getFullYear() > 1900) {
+      tSheet.getRange(r, P(30)).setValue(fechaIniPlan).setNumberFormat('dd/mm/yyyy');
+    }
+    if (durPlan && typeof durPlan === 'number' && durPlan > 0) {
+      tSheet.getRange(r, P(31)).setValue(durPlan);
+    }
+    tSheet.getRange(r, P(32)).setValue('=IF(OR(' + PL(30) + r + '="";' + PL(31) + r + '=0);"";WORKDAY.INTL(' + PL(30) + r + ';' + PL(31) + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
+
+    tSheet.getRange(r, P(35)).setFormula('=' + PL(31) + r + '*' + PL(34) + '$' + subStart);
+    if (isFirstSub) tSheet.getRange(r, P(36)).setFormula('=' + PL(35) + r);
+    else            tSheet.getRange(r, P(36)).setFormula('=' + PL(36) + (r-1) + '+' + PL(35) + r);
   }
 
-  // Merges OP y formatos finales
-  var mergeColsOp = [2, 3, 4, 5, 6, 7, 8];
-  var totalFilasEfectivo = (AREAS_GENERALES.indexOf(area) !== -1) ? TAREAS_POR_SUB : totalFilas;
-  for (var mc2 = 0; mc2 < mergeColsOp.length; mc2++) {
+  // Fórmulas de resumen de la subestructura
+  setSubSummaryFormulas(tSheet, subStart, TAREAS_POR_SUB, ctx.k);
+
+  // Merges
+  var mergeCols = [1, 6, 9, 10, 11, 12, 13, 18, 24, 25, 28, P(33), P(34)];
+  for (var mc = 0; mc < mergeCols.length; mc++) {
     try {
-      tSheet.getRange(opStartRow, mergeColsOp[mc2], totalFilasEfectivo, 1).mergeVertically();
-      tSheet.getRange(opStartRow, mergeColsOp[mc2], totalFilasEfectivo, 1).setVerticalAlignment('middle');
+      tSheet.getRange(subStart, mergeCols[mc], TAREAS_POR_SUB, 1).mergeVertically();
+      tSheet.getRange(subStart, mergeCols[mc], TAREAS_POR_SUB, 1).setVerticalAlignment('middle');
     } catch(_) {}
   }
 
-  tSheet.getRange(opStartRow, 21, totalFilasEfectivo, 1).setNumberFormat('dd/mm/yyyy');
-  tSheet.getRange(opStartRow, 23, totalFilasEfectivo, 1).setNumberFormat('dd/mm/yyyy');
-  tSheet.getRange(opStartRow, P(30), totalFilasEfectivo, 1).setNumberFormat('dd/mm/yyyy');
-  tSheet.getRange(opStartRow, P(32), totalFilasEfectivo, 1).setNumberFormat('dd/mm/yyyy');
+  var bloqueRange = tSheet.getRange(subStart, 1, TAREAS_POR_SUB, Math.max(P(36), ctx.colFecha));
+  bloqueRange.setBorder(true,true,true,true,null,null,'#000000',SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+  bloqueRange.setBorder(null,null,null,null,true,true,'#000000',SpreadsheetApp.BorderStyle.SOLID);
+}
+
+/** Merges de la OP completa, formatos de fecha y FECHA_ENTREGA_CLIENTE. */
+function _cerrarBloqueOP(tSheet, ctx, start, len) {
+  var P = ctx.P;
+  var mergeColsOp = [2, 3, 4, 5, 6, 7, 8];
+  for (var mc2 = 0; mc2 < mergeColsOp.length; mc2++) {
+    try {
+      var rg = tSheet.getRange(start, mergeColsOp[mc2], len, 1);
+      rg.breakApart();
+      rg.mergeVertically();
+      rg.setVerticalAlignment('middle');
+    } catch(_) {}
+  }
+
+  tSheet.getRange(start, 21, len, 1).setNumberFormat('dd/mm/yyyy');
+  tSheet.getRange(start, 23, len, 1).setNumberFormat('dd/mm/yyyy');
+  tSheet.getRange(start, P(30), len, 1).setNumberFormat('dd/mm/yyyy');
+  tSheet.getRange(start, P(32), len, 1).setNumberFormat('dd/mm/yyyy');
 
   // v8: Fecha de entrega al cliente (una vez por OP, combinada como OP/Cliente)
-  var rgFecha = tSheet.getRange(opStartRow, colFecha, totalFilasEfectivo, 1);
+  var rgFecha = tSheet.getRange(start, ctx.colFecha, len, 1);
   try { rgFecha.breakApart(); } catch(_) {}
   rgFecha.clearContent();
-  tSheet.getRange(opStartRow, colFecha).setValue(_esFecha(fechaEntrega) ? fechaEntrega : '');
+  tSheet.getRange(start, ctx.colFecha).setValue(_esFecha(ctx.fechaEntrega) ? ctx.fechaEntrega : '');
   rgFecha.setNumberFormat('dd/mm/yyyy').setHorizontalAlignment('center').setFontWeight('bold');
   try { rgFecha.mergeVertically().setVerticalAlignment('middle'); } catch(_) {}
+}
 
-  if (ejecRanges.length > 0) {
-    var rules = tSheet.getConditionalFormatRules();
-    rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberGreaterThanOrEqualTo(0.80).setBackground('#c6efce').setFontColor('#276221').setRanges(ejecRanges).build());
-    rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberBetween(0.40, 0.7999).setBackground('#ffeb9c').setFontColor('#9c6500').setRanges(ejecRanges).build());
-    rules.push(SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(0.40).setBackground('#ffc7ce').setFontColor('#9c0006').setRanges(ejecRanges).build());
-    tSheet.setConditionalFormatRules(rules);
+/** CREA la OP en el cronograma del área (primer envío). */
+function _enviarAPlantillaArea(spreadsheetId, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega, tSheetOpt) {
+  var tSheet = tSheetOpt || _abrirCronograma(spreadsheetId);
+  var ctx    = _ctxArea(tSheet, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega);
+
+  var lastExistingRow = Math.max(tSheet.getLastRow(), FILA_INICIO_CRONO);
+  tSheet.getRange(FILA_INICIO_CRONO, 14, lastExistingRow - FILA_INICIO_CRONO + 1, 1).clearDataValidations();
+  tSheet.getRange(FILA_INICIO_CRONO, 15, lastExistingRow - FILA_INICIO_CRONO + 1, 1).clearDataValidations();
+
+  // v9: si por algún motivo ya estaba, se borra su tamaño REAL (antes podía borrar filas de otra OP)
+  var blk = _bloqueOP(tSheet, op);
+  if (blk) tSheet.deleteRows(blk.start, blk.len);
+
+  var fila = tSheet.getLastRow() + 1;
+  ctx.opStartRow = fila;
+  for (var s = 0; s < ctx.numSubsEf; s++) _escribirSub(tSheet, ctx, s, fila + s * ctx.T);
+  _cerrarBloqueOP(tSheet, ctx, fila, ctx.numSubsEf * ctx.T);
+}
+
+/**
+ * ACTUALIZA una OP que ya está en el cronograma del área.
+ * Solo reescribe lo que es de comercial; NO toca ESTADO, KG avance,
+ * fechas/duración reales ni OBSERVACIONES. Devuelve # de cambios.
+ */
+function _actualizarOPEnArea(tSheet, ctx, blk, registrar) {
+  var T = ctx.T, start = blk.start, P = ctx.P;
+  var oldSubs = blk.len / T, newSubs = ctx.numSubsEf;
+  var cambios = 0;
+  ctx.opStartRow = start;
+
+  // Subestructuras sobrantes → se borran solo las del final
+  if (newSubs < oldSubs) {
+    var desde = start + newSubs * T, nBorrar = (oldSubs - newSubs) * T;
+    var nombres = tSheet.getRange(desde, 11, nBorrar, 1).getValues();
+    tSheet.deleteRows(desde, nBorrar);
+    for (var sb = newSubs; sb < oldSubs; sb++) {
+      registrar(ctx.area, ctx.op + '_' + (sb + 1) + ' ' + String(nombres[(sb - newSubs) * T][0] || ''), '',
+                'Subestructura', 'existía', 'eliminada');
+      cambios++;
+    }
   }
+  // Subestructuras nuevas → se agregan debajo de las existentes
+  if (newSubs > oldSubs) {
+    var despues = start + blk.len - 1, nNuevas = (newSubs - oldSubs) * T;
+    tSheet.insertRowsAfter(despues, nNuevas);
+    tSheet.getRange(despues + 1, 1, nNuevas, Math.max(P(36), ctx.colFecha)).breakApart().clearContent();
+    tSheet.getRange(despues + 1, 14, nNuevas, 2).clearDataValidations();
+    for (var sn = oldSubs; sn < newSubs; sn++) {
+      _escribirSub(tSheet, ctx, sn, start + sn * T);
+      registrar(ctx.area, ctx.op + '_' + (sn + 1), '', 'Subestructura', '', 'agregada');
+      cambios++;
+    }
+  }
+
+  var len   = newSubs * T;
+  var ancho = Math.max(P(36), ctx.colFecha);
+  var v     = tSheet.getRange(start, 1, len, ancho).getValues();
+  var set = function(i, col, nuevo, sub, tarea, campo) {
+    var antes = v[i][col - 1];
+    if (_mismoValor(antes, nuevo)) return;
+    tSheet.getRange(start + i, col).setValue(nuevo);
+    registrar(ctx.area, sub, tarea, campo, antes, nuevo);
+    cambios++;
+  };
+
+  // Datos generales de la OP (primera fila)
+  set(0, 3, ctx.nombreOp,  '', '', 'NOMBRE_OP');
+  set(0, 4, ctx.cliente,   '', '', 'CLIENTE');
+  set(0, 5, ctx.comercial, '', '', 'COMERCIAL');
+  set(0, 6, ctx.kgTotalArea, '', '', 'KG_TOTAL_PROYECTO');
+  set(0, 7, ctx.numAreas,  '', '', 'NUM_PROCESOS');
+  set(0, 8, ctx.numAreas > 0 ? 1 / ctx.numAreas : 0, '', '', '%_PARTICIPACION_PROCESO');
+  set(0, ctx.colFecha, _esFecha(ctx.fechaEntrega) ? ctx.fechaEntrega : '', '', '', 'FECHA_ENTREGA_CLIENTE');
+
+  // Subestructuras que ya existían: datos de comercial + PLANEADO
+  var hasta = Math.min(oldSubs, newSubs);
+  for (var s = 0; s < hasta; s++) {
+    var i0  = s * T, d0 = ctx.datosHoja[i0];
+    var sub = ctx.op + '_' + (s + 1);
+    set(i0, 11, (d0 && d0.nombreSub) || ('Nombre ' + (s + 1)), sub, '', 'NOMBRE_SUBESTRUCTURA');
+    set(i0, 12, _kgSubCtx(ctx, s), sub, '', 'PESO_KG_SUBESTRUCTURA');
+    set(i0, 13, ctx.sede, sub, '', 'Sede');
+    for (var t = 0; t < T; t++) {
+      var i = i0 + t, d = ctx.datosHoja[i], tarea = ctx.tareas[t][0];
+      if (!d) continue;
+      if (_esFecha(d.fechaIniPlan))                        set(i, P(30), d.fechaIniPlan, sub, tarea, 'FECHA_INICIO_TAREA_PLANEADO');
+      if (typeof d.durPlan === 'number' && d.durPlan > 0)  set(i, P(31), d.durPlan,      sub, tarea, 'DURACION_DIAS_TAREAS_PLANEADO');
+    }
+  }
+
+  _cerrarBloqueOP(tSheet, ctx, start, len);
+  return cambios;
 }
 
 // ============================================================
@@ -1169,4 +1636,132 @@ function _colLetra(n) {
   var s = '';
   while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
   return s;
+}
+
+// ============================================================
+//  v9 — REGISTRO DE CAMBIOS
+// ============================================================
+function _nuevoRegistro(op) {
+  var filas = [], usuario = _usuario(), ahora = new Date();
+  return {
+    add: function(origen, area, sub, tarea, campo, antes, despues) {
+      filas.push([ahora, usuario, String(op), origen || '', area || '', sub || '', tarea || '',
+                  campo || '', _fmtLog(antes), _fmtLog(despues)]);
+    },
+    guardar: function(ss) { _escribirRegistro(ss, filas); },
+    n: function() { return filas.length; }
+  };
+}
+
+function _escribirRegistro(ss, filas) {
+  if (!filas || !filas.length) return;
+  var sh = ss.getSheetByName(HOJA_REGISTRO);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_REGISTRO);
+    var enc = ['FECHA_HORA', 'USUARIO', 'OP', 'ORIGEN', 'AREA', 'SUBESTRUCTURA', 'TAREA',
+               'CAMPO', 'VALOR_ANTERIOR', 'VALOR_NUEVO'];
+    sh.getRange(1, 1, 1, enc.length).setValues([enc])
+      .setBackground('#2F75B5').setFontColor('#FFFFFF').setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 140); sh.setColumnWidth(2, 190); sh.setColumnWidth(4, 170);
+    sh.setColumnWidth(6, 150); sh.setColumnWidth(7, 180); sh.setColumnWidth(8, 210);
+    sh.setColumnWidth(9, 180); sh.setColumnWidth(10, 180);
+    try { sh.protect().setDescription('Registro de cambios (solo lo escribe el script)').setWarningOnly(true); } catch (_) {}
+  }
+  var desde = sh.getLastRow() + 1;
+  sh.getRange(desde, 1, filas.length, filas[0].length).setValues(filas);
+  sh.getRange(desde, 1, filas.length, 1).setNumberFormat('dd/mm/yyyy hh:mm');
+}
+
+function verRegistroCambios() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(HOJA_REGISTRO);
+  if (!sh) { SpreadsheetApp.getUi().alert('Todavía no hay cambios registrados.'); return; }
+  ss.setActiveSheet(sh);
+  sh.setActiveRange(sh.getRange(Math.max(sh.getLastRow(), 1), 1));
+}
+
+function _usuario() {
+  var e = '';
+  try { e = Session.getActiveUser().getEmail(); } catch (_) {}
+  if (!e) { try { e = Session.getEffectiveUser().getEmail(); } catch (_) {} }
+  return e || 'desconocido';
+}
+
+function _fmtLog(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return _esFecha(v) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'dd/MM/yyyy') : '';
+  if (typeof v === 'number') return String(Math.round(v * 10000) / 10000);
+  return String(v);
+}
+
+/** Compara valores de celda: fechas por día, números con tolerancia, texto sin espacios extra. */
+function _mismoValor(a, b) {
+  var vacio = function(x) { return x === '' || x === null || x === undefined; };
+  if (vacio(a) && vacio(b)) return true;
+  if (a instanceof Date || b instanceof Date) return _fmtLog(a) === _fmtLog(b);
+  var na = (typeof a === 'number') ? a : (String(a).trim() !== '' && !isNaN(Number(a)) ? Number(a) : null);
+  var nb = (typeof b === 'number') ? b : (String(b).trim() !== '' && !isNaN(Number(b)) ? Number(b) : null);
+  if (na !== null && nb !== null) return Math.abs(na - nb) < 1e-6;
+  return String(a).trim() === String(b).trim();
+}
+
+
+// ============================================================
+//  v9.1 — PERMISOS PARA ABRIR LOS ARCHIVOS DE LAS ÁREAS
+// ============================================================
+var _SCOPE_SHEETS = 'https://www.googleapis.com/auth/spreadsheets';
+var _MSG_PERMISOS =
+  'El script no tiene permiso para abrir los cronogramas de las áreas (son otros archivos).\n\n' +
+  '1. Extensiones > Apps Script.\n' +
+  '2. Revisa que ningún archivo tenga la anotación de "solo documento actual".\n' +
+  '3. En appsscript.json, si hay "oauthScopes", debe incluir\n   ' + _SCOPE_SHEETS + '\n   (no ".currentonly").\n' +
+  '4. Escoge la función onOpen > Ejecutar, y en la ventana de Google MARCA TODAS las casillas,\n' +
+  '   en especial "Ver, editar, crear y eliminar todas tus hojas de cálculo".\n' +
+  '5. Vuelve a enviar la OP.';
+
+function _esErrorPermiso(msg) {
+  return /permiso|permission|authorization|autoriza/i.test(String(msg || ''));
+}
+
+/**
+ * Pide (si hace falta) el permiso de hojas de cálculo completo.
+ * Con el consentimiento "por casillas" de Google, ScriptApp.requireScopes
+ * muestra la ventana de autorización y detiene la ejecución hasta aceptar.
+ */
+function _verificarPermisoAreas() {
+  // SIN try/catch: si falta algún permiso, Google detiene aquí y muestra
+  // su ventana "Se requiere autorización". (Atraparlo impedía que saliera.)
+  if (typeof ScriptApp.requireAllScopes === 'function') {
+    ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  }
+  return true;
+}
+
+
+/**
+ * v9.2 — Ejecútala UNA VEZ desde el editor (o el menú 🔐).
+ * Pide el permiso completo de hojas de cálculo y prueba abrir el archivo
+ * de cada área. El resultado queda en el Registro de ejecución y, si se
+ * corre desde la hoja, también en una ventana.
+ */
+function autorizarAreas() {
+  // Sin try/catch a propósito: si falta un permiso, Google detiene aquí y muestra la ventana de autorización
+  _verificarPermisoAreas();
+  var lineas = [];
+  var nombres = Object.keys(IDS_AREAS);
+  for (var i = 0; i < nombres.length; i++) {
+    var area = nombres[i], id = IDS_AREAS[area];
+    try {
+      var archivo = SpreadsheetApp.openById(id);
+      var crono   = archivo.getSheetByName('Cronograma');
+      lineas.push('✅ ' + area + ': ' + archivo.getName() + (crono ? '' : '  ⚠️ (no tiene hoja "Cronograma")'));
+    } catch (e) {
+      lineas.push('❌ ' + area + ': ' + e.message);
+    }
+  }
+  lineas.forEach(function(l) { Logger.log(l); });
+  try {
+    SpreadsheetApp.getUi().alert('🔐 Acceso a los archivos de las áreas', lineas.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (_) { /* desde el editor no hay ventana: ver Registro de ejecución */ }
 }
