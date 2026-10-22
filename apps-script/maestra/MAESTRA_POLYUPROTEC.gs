@@ -1,4 +1,11 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v2
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3
+//
+// v3 (oct-2026):
+//  - Nueva hoja PRODUCCION_DIARIA: kilos reales y planeados por día, OP y
+//    subestructura, leídos de las hojas mensuales (ENERO 2026, ...) de
+//    PLANTILLA_LOOKER_PRODUCCION_V2. Se actualiza junto con LOOKER_MAESTRA
+//    y con el menú '🏭 Actualizar Producción diaria'.
+//  - doGet: nuevo ?tipo=produccion y campo "produccion" dentro de ?tipo=todos.
 //
 // v2 (oct-2026):
 //  - Las columnas de cada área se ubican por NOMBRE de encabezado, no por
@@ -14,6 +21,7 @@ function onOpen() {
     .createMenu('🚀 Torre de Control')
     .addItem('🔄 Actualizar LOOKER_MAESTRA', 'actualizarLookerMaestra')
     .addItem('📈 Generar Curva S', 'generarCurvaS')
+    .addItem('🏭 Actualizar Producción diaria', 'actualizarProduccionDiaria')
     .addSeparator()
     .addItem('🔧 Ampliar importaciones a A5:AK (una sola vez)', 'ampliarImportaciones')
     .addToUi();
@@ -213,6 +221,11 @@ function actualizarLookerMaestra() {
   if (maestra.getFilter()) maestra.getFilter().remove();
   maestra.autoResizeColumns(1, header.length);
 
+  // v3: producción diaria (no detiene la actualización principal si falla)
+  var msgDiario = '';
+  try { msgDiario = actualizarProduccionDiaria(true); }
+  catch (e) { msgDiario = '⚠ Producción diaria: ' + e.message; Logger.log(msgDiario); }
+
   // Solo mostrar alert si hay UI disponible (ejecución manual)
   try {
     SpreadsheetApp.getUi().alert(
@@ -226,7 +239,8 @@ function actualizarLookerMaestra() {
       `• Logística: ${ss.getSheetByName('LOGISTICA')?.getLastRow()-1 || 0}\n` +
       `• Montaje: ${ss.getSheetByName('MONTAJE')?.getLastRow()-1 || 0}\n` +
       `• Producción: ${ss.getSheetByName('PRODUCCION')?.getLastRow()-1 || 0}\n` +
-      `• Administración: ${ss.getSheetByName('ADMINISTRACION')?.getLastRow()-1 || 0}`
+      `• Administración: ${ss.getSheetByName('ADMINISTRACION')?.getLastRow()-1 || 0}` +
+      (msgDiario ? '\n\n' + msgDiario : '')
     );
   } catch(e) {
     // Ejecución automática — sin UI, registrar en log
@@ -317,6 +331,7 @@ function doGet(e) {
     case 'areas': output = getDatosAreas();  break;
     case 'curva': output = getDatosCurvaS(); break;
     case 'tareas':output = getDatosTareas(); break;
+    case 'produccion': output = getDatosProduccion(); break;   // v3
     default:      output = getTodosDatos();  break;
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
@@ -328,7 +343,8 @@ function getTodosDatos() {
     ops:    getDatosOPs(),
     areas:  getDatosAreas(),
     curva:  getDatosCurvaS(),
-    tareas: getDatosTareas()
+    tareas: getDatosTareas(),
+    produccion: getDatosProduccion()      // v3
   };
 }
 
@@ -666,4 +682,100 @@ function ampliarImportaciones() {
     (ok.length ? '✅ Ampliadas a A5:AK: ' + ok.join(', ') : '') +
     (sin.length ? '\n\nℹ️ Sin cambio (ya estaban o tienen otro rango): ' + sin.join(', ') : ''),
     SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+
+// ============================================================
+//  v3 — PRODUCCIÓN DIARIA (desde PLANTILLA_LOOKER_PRODUCCION_V2)
+// ============================================================
+// Si lo dejas vacío, el ID se toma del IMPORTRANGE de la hoja PRODUCCION.
+var ID_PRODUCCION_V2 = '';
+var HOJA_DIARIO = 'PRODUCCION_DIARIA';
+var MESES_PROD = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+function _idProduccionV2(ss) {
+  if (ID_PRODUCCION_V2) return ID_PRODUCCION_V2;
+  var sh = ss.getSheetByName('PRODUCCION');
+  if (!sh) return '';
+  var fx = sh.getRange('A1').getFormula();
+  var m = fx.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || fx.match(/IMPORTRANGE\(\s*"+([a-zA-Z0-9_-]{20,})"/i);
+  return m ? m[1] : '';
+}
+
+/**
+ * Lee las hojas "MES AÑO" de la V2 y deja una fila por día con kilos:
+ * FECHA, OP, SUB_ID, SUBESTRUCTURA, PROYECTO, CLIENTE, COMERCIAL, LINEA_LOTE, KG_REAL, KG_PLAN, HOJA
+ */
+function actualizarProduccionDiaria(silencioso) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var id = _idProduccionV2(ss);
+  if (!id) throw new Error('No encontré el ID de PRODUCCION_V2 (revisa la hoja PRODUCCION o ID_PRODUCCION_V2).');
+  var src = SpreadsheetApp.openById(id);
+  var filas = [['FECHA','OP','SUB_ID','SUBESTRUCTURA','PROYECTO','CLIENTE','COMERCIAL','LINEA_LOTE','KG_REAL','KG_PLAN','HOJA']];
+  var hojasLeidas = 0;
+
+  src.getSheets().forEach(function(sh) {
+    var nm = sh.getName().match(/^([A-Z]+) (\d{4})$/);
+    if (!nm || MESES_PROD.indexOf(nm[1]) < 0) return;
+    var data = sh.getDataRange().getValues();
+    if (data.length < 4) return;
+    var fila2 = data[1], p = -1, n = 0;
+    for (var c = 0; c < fila2.length; c++) { if (fila2[c] instanceof Date) { p = c; break; } }
+    if (p < 0) return;
+    while (p + n < fila2.length && fila2[p + n] instanceof Date) n++;
+    var fin = data.length;
+    for (var r = 2; r < data.length; r++) {
+      if (String(data[r][2]).trim().toUpperCase() === 'TOTAL REAL INF. PRODUCCION') { fin = r; break; }
+    }
+    hojasLeidas++;
+    for (var i = 2; i < fin; i++) {
+      var etiqueta = String(data[i][2]).trim();
+      var m = etiqueta.match(/^OP\.?\s*([^\s·]+)\s*(.*)$/i);
+      if (!m) continue;
+      var token = m[1], resto = m[2].replace(/^·\s*/, '').trim();
+      var mm = token.match(/^(.+)_(\d+)$/);
+      var op = mm ? mm[1] : token;
+      var subNombre = mm ? resto : '';
+      var plan = (i + 1 < fin && /^PLANEADO/i.test(String(data[i + 1][2]).trim())) ? data[i + 1] : null;
+      var proyecto = String(data[i][5] || '').trim() || (mm ? '' : resto);
+      for (var d = 0; d < n; d++) {
+        var real = Number(data[i][p + d]) || 0, pl = plan ? (Number(plan[p + d]) || 0) : 0;
+        if (!real && !pl) continue;
+        filas.push([fila2[p + d], op, token, subNombre, proyecto, data[i][3], data[i][4], data[i][1], real, pl, sh.getName()]);
+      }
+    }
+  });
+
+  var dest = ss.getSheetByName(HOJA_DIARIO) || ss.insertSheet(HOJA_DIARIO);
+  dest.clearContents();
+  dest.getRange(1, 1, filas.length, filas[0].length).setValues(filas);
+  dest.getRange(1, 1, 1, filas[0].length).setBackground('#4a86e8').setFontColor('white').setFontWeight('bold');
+  if (filas.length > 1) {
+    dest.getRange(2, 1, filas.length - 1, 1).setNumberFormat('dd/mm/yyyy');
+    dest.getRange(2, 9, filas.length - 1, 2).setNumberFormat('#,##0.00');
+  }
+  dest.setFrozenRows(1);
+
+  var msg = '🏭 Producción diaria: ' + (filas.length - 1) + ' registros de ' + hojasLeidas + ' hoja/s de mes.';
+  Logger.log(msg);
+  if (silencioso !== true) { try { SpreadsheetApp.getUi().alert(msg); } catch (e) {} }
+  return msg;
+}
+
+function getDatosProduccion() {
+  var ss = SpreadsheetApp.openById('1v55aTL923MTMVXU2iuxYMATP0LePk6tUFyYx1jMsLj4');
+  var sh = ss.getSheetByName(HOJA_DIARIO);
+  if (!sh) return [];
+  var data = sh.getDataRange().getValues(), out = [];
+  for (var i = 1; i < data.length; i++) {
+    var r = data[i];
+    if (!(r[0] instanceof Date)) continue;
+    out.push({
+      fecha: _formatFecha(r[0]), op: String(r[1]).trim().replace(/\.0$/, ''), subId: String(r[2]).trim(),
+      sub: String(r[3] || '').trim(), proyecto: String(r[4] || '').trim(), cliente: String(r[5] || '').trim(),
+      comercial: String(r[6] || '').trim(), linea: String(r[7] || '').trim(),
+      real: Number(r[8]) || 0, plan: Number(r[9]) || 0
+    });
+  }
+  return out;
 }
