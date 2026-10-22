@@ -1,5 +1,8 @@
 // ============================================================
-//  MACRO_COMERCIAL — v9.5
+//  MACRO_COMERCIAL — v10
+//  v10: el área Producción apunta a PLANTILLA_LOOKER_PRODUCCION_V2 (pegar su ID en IDS_AREAS).
+//
+//  v9.5
 //  v9.5: ya no se atrapa la petición de permisos: Google muestra su
 //        ventana 'Se requiere autorización' (desde la hoja o el editor).
 //
@@ -98,7 +101,11 @@ const IDS_AREAS = {
   'Logistica':         '1u4G64iP2NC79BvMoDmGbXuy4RV5TlW00gQ4_HAvodhE',  // BORRADOR PRUEBAS
   'Montaje':           '1FSS3Y7O1jrhAXJ9LNI6oaIdmU3WgQD9xepYNtteigwY',  // BORRADOR PRUEBAS
   'Pintura':           '1AmUQuvq62wOLSNDa0dgWOFx-6ELU5kZuiI6WiMYmL34',  // BORRADOR PRUEBAS
-  'Produccion':        '1fPNU8AEwnI591RXr6zfuhDwQ8Ry7u1zqMVkoet6ySyA',  // BORRADOR PRUEBAS
+  // v10: Producción ahora es PLANTILLA_LOOKER_PRODUCCION_V2 (Cronograma + registro diario).
+  //      Pega aquí el ID de la V2 (lo que va entre /d/ y /edit en su enlace).
+  //      Mientras diga PON_AQUI, el envío a Producción se salta y lo avisa.
+  'Produccion':        'PON_AQUI_ID_DE_PLANTILLA_LOOKER_PRODUCCION_V2',
+  // (antes: '1fPNU8AEwnI591RXr6zfuhDwQ8Ry7u1zqMVkoet6ySyA'  — PLANTILLA_LOOKER_PRODUCCION)
   'Administración':    '1-JPB1aMFRSoin5Y4DMwDTinVRMWnOMhMK4fwR9uj9_4'
   // v4: Gestión Humana eliminada como área — ver tarea en Montaje
 
