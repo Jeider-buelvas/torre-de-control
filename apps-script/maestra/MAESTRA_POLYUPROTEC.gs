@@ -1,4 +1,9 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3.1
+//
+// v3.1: los campos numéricos (duraciones, %, KG) que llegaban como FECHA
+//       (31/12/1899, 19/1/1900…) por el formato de las hojas de importación
+//       se convierten otra vez a número, y LOOKER_MAESTRA queda con el
+//       formato correcto en esas columnas.
 //
 // v3 (oct-2026):
 //  - Nueva hoja PRODUCCION_DIARIA: kilos reales y planeados por día, OP y
@@ -139,13 +144,13 @@ function actualizarLookerMaestra() {
       if (!esVacio(g('NOMBRE_OP')))                     lNombre      = g('NOMBRE_OP');
       if (!esVacio(g('CLIENTE')))                       lCliente     = g('CLIENTE');
       if (!esVacio(g('COMERCIAL')))                     lComercial   = g('COMERCIAL');
-      if (!esVacio(g('KG_TOTAL_PROYECTO')))             lKgTotal     = g('KG_TOTAL_PROYECTO');
-      if (!esVacio(g('NUM_PROCESOS')))                  lNumProc     = g('NUM_PROCESOS');
-      if (!esVacio(g('%_PARTICIPACION_PROCESO')))       lPctPart     = g('%_PARTICIPACION_PROCESO');
-      if (!esVacio(g('%_PESO_SUBESTRUCTURA_PESO')))     lPesoSub     = g('%_PESO_SUBESTRUCTURA_PESO');
-      if (!esVacio(g('%_PROGRESO_POR_SUBESTRUCTURA')))  lProgresoSub = g('%_PROGRESO_POR_SUBESTRUCTURA');
+      if (!esVacio(g('KG_TOTAL_PROYECTO')))             lKgTotal     = _num(g('KG_TOTAL_PROYECTO'));
+      if (!esVacio(g('NUM_PROCESOS')))                  lNumProc     = _num(g('NUM_PROCESOS'));
+      if (!esVacio(g('%_PARTICIPACION_PROCESO')))       lPctPart     = _num(g('%_PARTICIPACION_PROCESO'));
+      if (!esVacio(g('%_PESO_SUBESTRUCTURA_PESO')))     lPesoSub     = _num(g('%_PESO_SUBESTRUCTURA_PESO'));
+      if (!esVacio(g('%_PROGRESO_POR_SUBESTRUCTURA')))  lProgresoSub = _num(g('%_PROGRESO_POR_SUBESTRUCTURA'));
       if (!esVacio(g('NOMBRE_SUBESTRUCTURA')))          lNombreSub   = g('NOMBRE_SUBESTRUCTURA');
-      if (!esVacio(g('PESO_KG_SUBESTRUCTURA')))         lPesoKg      = g('PESO_KG_SUBESTRUCTURA');
+      if (!esVacio(g('PESO_KG_SUBESTRUCTURA')))         lPesoKg      = _num(g('PESO_KG_SUBESTRUCTURA'));
       if (!esVacio(g('SEDE')))                          lSede        = g('SEDE');
       if (C['FECHA_ENTREGA_CLIENTE'] !== undefined && !esVacio(g('FECHA_ENTREGA_CLIENTE')))
                                                         lFechaEnt    = parseFecha(g('FECHA_ENTREGA_CLIENTE')) || '';
@@ -178,27 +183,27 @@ function actualizarLookerMaestra() {
         g('DESCRIPCION_TAREAS'),                // 14 DESCRIPCION_TAREAS
         g('ASIGNADO'),                          // 15 Asignado
         g('ESTADO'),                            // 16 ESTADO
-        g('%_APORTE_TAREA'),                    // 17 %_APORTE_TAREA
-        g('%_EJECUCION_SUBESTRUCTURA'),         // 18 %_EJECUCION_SUB
-        g('KG_AVANCE_ACUMULADO'),               // 19 KG_AVANCE_ACUMULADO
-        g('AVANCE_REAL_%'),                     // 20 AVANCE_REAL_%
+        _num(g('%_APORTE_TAREA')),                    // 17 %_APORTE_TAREA
+        _num(g('%_EJECUCION_SUBESTRUCTURA')),         // 18 %_EJECUCION_SUB
+        _num(g('KG_AVANCE_ACUMULADO')),               // 19 KG_AVANCE_ACUMULADO
+        _num(g('AVANCE_REAL_%')),                     // 20 AVANCE_REAL_%
         fechaInicioReal,                        // 21 F_INI_REAL
-        g('DURACION_DIAS_TAREAS_REAL'),         // 22 DUR_REAL
+        _num(g('DURACION_DIAS_TAREAS_REAL')),         // 22 DUR_REAL
         fechaFinReal,                           // 23 F_FIN_REAL
-        g('DURACION_PROCESO_REAL_DIAS'),        // 24 DUR_PROCESO_REAL
-        g('%_TAREA_REAL'),                      // 25 %_TAREA_REAL
-        g('%_TAREAS_INDIVIDUALES_REAL'),        // 26 %_INDIV_REAL
-        g('%_TAREAS_ACUMULADO_REAL'),           // 27 %_ACUM_REAL
-        g('%_DE_CUMPLIMIENTO_VS_PLANEACION'),   // 28 %_CUMPLIMIENTO
+        _num(g('DURACION_PROCESO_REAL_DIAS')),        // 24 DUR_PROCESO_REAL
+        _num(g('%_TAREA_REAL')),                      // 25 %_TAREA_REAL
+        _num(g('%_TAREAS_INDIVIDUALES_REAL')),        // 26 %_INDIV_REAL
+        _num(g('%_TAREAS_ACUMULADO_REAL')),           // 27 %_ACUM_REAL
+        _num(g('%_DE_CUMPLIMIENTO_VS_PLANEACION')),   // 28 %_CUMPLIMIENTO
         g('OBSERVACIONES'),                     // 29 OBS
         fechaInicioPlan,                        // 30 F_INI_PLAN
-        g('DURACION_DIAS_TAREAS_PLANEADO'),     // 31 DUR_PLAN
+        _num(g('DURACION_DIAS_TAREAS_PLANEADO')),     // 31 DUR_PLAN
         fechaFinPlan,                           // 32 F_FIN_PLAN
-        g('DURACION_PROCESO_PLANEADO_DIAS'),    // 33 DUR_PROCESO_PLAN
-        g('%_TAREA_PLANEADO'),                  // 34 %_TAREA_PLAN
-        g('%_TAREAS_INDIVIDUALES_PLANEADO'),    // 35 %_INDIV_PLAN
-        g('%_TAREAS_ACUMULADO_PLANEADO'),       // 36 %_ACUM_PLAN
-        g('%_TAREA_PLANEADO'),                  // 37 KPI Individual (igual que antes: f[33])
+        _num(g('DURACION_PROCESO_PLANEADO_DIAS')),    // 33 DUR_PROCESO_PLAN
+        _num(g('%_TAREA_PLANEADO')),                  // 34 %_TAREA_PLAN
+        _num(g('%_TAREAS_INDIVIDUALES_PLANEADO')),    // 35 %_INDIV_PLAN
+        _num(g('%_TAREAS_ACUMULADO_PLANEADO')),       // 36 %_ACUM_PLAN
+        _num(g('%_TAREA_PLANEADO')),                  // 37 KPI Individual (igual que antes: f[33])
         estadoOP,                               // 38 Estado_OP
         lFechaEnt                               // 39 FECHA_ENTREGA_CLIENTE (v2)
       ]);
@@ -217,6 +222,10 @@ function actualizarLookerMaestra() {
   maestra.getRange(2, 7,  datos.length - 1, 1).setNumberFormat('#,##0 "kg"');
   maestra.getRange(2, 13, datos.length - 1, 1).setNumberFormat('#,##0 "kg"');
   maestra.getRange(2, 20, datos.length - 1, 1).setNumberFormat('#,##0.00 "kg"');
+  // v3.1: duraciones como número (no fecha) y porcentajes como %
+  [23, 25, 32, 34].forEach(function(c) { maestra.getRange(2, c, datos.length - 1, 1).setNumberFormat('0'); });
+  [9, 10, 11, 18, 19, 21, 26, 27, 28, 29, 35, 36, 37, 38].forEach(function(c) { maestra.getRange(2, c, datos.length - 1, 1).setNumberFormat('0.00%'); });
+  maestra.getRange(2, 8, datos.length - 1, 1).setNumberFormat('0');
 
   if (maestra.getFilter()) maestra.getFilter().remove();
   maestra.autoResizeColumns(1, header.length);
@@ -778,4 +787,20 @@ function getDatosProduccion() {
     });
   }
   return out;
+}
+
+
+// ============================================================
+//  v3.1 — Número que llegó como fecha → número otra vez
+// ============================================================
+// En Sheets una fecha es un número de días desde 30/12/1899. Si una celda
+// numérica tiene formato de fecha, getValues() la entrega como Date:
+// 1 → 31/12/1899, 19 → 18/01/1900. Aquí se recupera el número original.
+var _EPOCA_SHEETS = new Date(1899, 11, 30).getTime();
+function _num(v) {
+  if (v instanceof Date) {
+    var n = (v.getTime() - _EPOCA_SHEETS) / 86400000;
+    return Math.round(n * 1e6) / 1e6;
+  }
+  return v;
 }
