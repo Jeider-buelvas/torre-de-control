@@ -1,5 +1,17 @@
 // ============================================================
-//  MACRO_COMERCIAL — v10
+//  MACRO_COMERCIAL — v11.2
+//  v11.2: menú '📨 Reenviar correo de una O.P ya creada'.
+//
+//  v11.1
+//  v11.1: si la cuenta no tiene acceso a un archivo de área, lo dice claro
+//         (antes salía 'Falta autorizar el script').
+//
+//  v11
+//  v11: al crear una O.P se envía un correo de aviso (detalles + áreas)
+//       desde la cuenta del HOSTING, vía notificar_op.php. Configurar
+//       URL_NOTIFICAR_OP y TOKEN_CORREO más abajo (sección v11).
+//
+//  v10
 //  v10: el área Producción apunta a PLANTILLA_LOOKER_PRODUCCION_V2 (pegar su ID en IDS_AREAS).
 //
 //  v9.5
@@ -104,7 +116,7 @@ const IDS_AREAS = {
   // v10: Producción ahora es PLANTILLA_LOOKER_PRODUCCION_V2 (Cronograma + registro diario).
   //      Pega aquí el ID de la V2 (lo que va entre /d/ y /edit en su enlace).
   //      Mientras diga PON_AQUI, el envío a Producción se salta y lo avisa.
-  'Produccion':        'PON_AQUI_ID_DE_PLANTILLA_LOOKER_PRODUCCION_V2',
+  'Produccion':        '1hjd1v3L7rfJhK3Nu5LsRXoN5WTNnoigepwZis0Gh0Mc',  // PLANTILLA_LOOKER_PRODUCCION_V2
   // (antes: '1fPNU8AEwnI591RXr6zfuhDwQ8Ry7u1zqMVkoet6ySyA'  — PLANTILLA_LOOKER_PRODUCCION)
   'Administración':    '1-JPB1aMFRSoin5Y4DMwDTinVRMWnOMhMK4fwR9uj9_4'
   // v4: Gestión Humana eliminada como área — ver tarea en Montaje
@@ -278,6 +290,8 @@ function onOpen() {
     .addSeparator()
     .addItem('📅 Agregar campo Fecha de entrega (una sola vez)', 'agregarCampoFechaEntrega')
     .addItem('🔐 Autorizar / probar acceso a las áreas', 'autorizarAreas')
+    .addItem('✉️ Probar correo de nueva O.P', 'probarCorreoNuevaOP')
+    .addItem('📨 Reenviar correo de una O.P ya creada', 'reenviarCorreoOP')
     .addToUi();
 }
 
@@ -388,12 +402,17 @@ function crearNuevaOP() {
   reg.add('Formulario BASE_CREADOR', '', '', '', 'OP', '', 'creada (' + numAreas + ' áreas, ' + d.numSubs + ' subestructuras)');
   reg.guardar(ss);
 
+  // v11: correo de aviso de nueva O.P (si falla, la O.P igual queda creada)
+  var wsNueva = ss.getSheetByName(d.op);
+  var aviso = _notificarNuevaOP(d, wsNueva ? ss.getUrl() + '#gid=' + wsNueva.getSheetId() : ss.getUrl());
+
   ui.alert(
     '✅ OP ' + d.op + ' creada.\n\n' +
     'Áreas: ' + d.areas.join(', ') + '\n\n' +
     '1. Ve a la hoja "' + d.op + '"\n' +
     '2. Completa fechas, duraciones, nombres de subestructura y KG por subestructura (col F)\n' +
-    '3. Usa  📤 Enviar / Actualizar OP en Áreas  para enviarla'
+    '3. Usa  📤 Enviar / Actualizar OP en Áreas  para enviarla' +
+    (aviso ? '\n\n' + aviso : '')
   );
 }
 
@@ -793,7 +812,12 @@ function _sincronizarOPConAreas(ss, ws) {
     // ---------- 2) CONFIRMAR ----------
     var grupo = function(acc) { return plan.filter(function(p) { return p.accion === acc; }); };
 
-    // v9.1: falta de permisos → instrucciones claras en vez del error técnico
+    // v11.1: distinguir "el script no está autorizado" de "la cuenta no tiene acceso al archivo del área"
+    var sinAcceso = grupo('error').filter(function(p) { return _esErrorAccesoArchivo(p.error); });
+    if (sinAcceso.length) {
+      ui.alert('🔒 Sin acceso a archivos de áreas', _msgSinAcceso(sinAcceso.map(function(p) { return p.area; })), ui.ButtonSet.OK);
+      return;
+    }
     if (grupo('error').some(function(p) { return _esErrorPermiso(p.error); })) {
       ui.alert('🔐 Falta autorizar el script', _MSG_PERMISOS, ui.ButtonSet.OK);
       return;
@@ -1731,6 +1755,22 @@ function _esErrorPermiso(msg) {
   return /permiso|permission|authorization|autoriza/i.test(String(msg || ''));
 }
 
+/** Error de Drive: la cuenta no puede abrir ese archivo (no está compartido o el ID no existe). */
+function _esErrorAccesoArchivo(msg) {
+  var m = String(msg || '');
+  if (/auth\/spreadsheets|permisos especificados|specified permissions/i.test(m)) return false;   // eso es de autorización
+  return /acceder al documento|access the requested document|no existe|does not exist|not found|no se encontr/i.test(m);
+}
+
+function _msgSinAcceso(areas) {
+  return 'Tu cuenta (' + _usuario() + ') no puede abrir el cronograma de:\n\n• ' + areas.join('\n• ') + '\n\n' +
+    'El envío usa la cuenta de quien pulsa el botón, así que cada persona que envía O.P necesita ' +
+    'acceso de EDITOR a los archivos PLANTILLA_LOOKER_… de esas áreas.\n\n' +
+    'Pídele al dueño de los archivos que los comparta contigo como Editor ' +
+    '(lo más fácil: compartir la carpeta PLANTILLA_GENERAL completa).\n\n' +
+    'Luego vuelve a intentar. Puedes revisar el acceso con  Torre de Control > 🔐 Autorizar / probar acceso a las áreas.';
+}
+
 /**
  * Pide (si hace falta) el permiso de hojas de cálculo completo.
  * Con el consentimiento "por casillas" de Google, ScriptApp.requireScopes
@@ -1764,11 +1804,95 @@ function autorizarAreas() {
       var crono   = archivo.getSheetByName('Cronograma');
       lineas.push('✅ ' + area + ': ' + archivo.getName() + (crono ? '' : '  ⚠️ (no tiene hoja "Cronograma")'));
     } catch (e) {
-      lineas.push('❌ ' + area + ': ' + e.message);
+      lineas.push('❌ ' + area + ': ' + (_esErrorAccesoArchivo(e.message)
+        ? 'sin acceso de Editor con ' + _usuario() + ' (compartir el archivo con esta cuenta)'
+        : e.message));
     }
   }
   lineas.forEach(function(l) { Logger.log(l); });
   try {
     SpreadsheetApp.getUi().alert('🔐 Acceso a los archivos de las áreas', lineas.join('\n'), SpreadsheetApp.getUi().ButtonSet.OK);
   } catch (_) { /* desde el editor no hay ventana: ver Registro de ejecución */ }
+}
+
+
+// ============================================================
+//  v11 — CORREO "SE CREÓ UNA NUEVA O.P"
+//  Lo envía el HOSTING (notificar_op.php), no la cuenta de quien
+//  crea la O.P. Los destinatarios se configuran en notificar_op.php.
+// ============================================================
+var URL_NOTIFICAR_OP = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_op.php';
+var TOKEN_CORREO     = 'CONFIGURAR_AQUI';   // igual que 'TOKEN' en notificar_op.php
+var CORREO_ACTIVO    = true;                   // false = no enviar correos
+
+/** Envía el aviso. Devuelve un texto corto para mostrar al usuario (o '' si está apagado). */
+function _notificarNuevaOP(d, urlHoja) {
+  if (!CORREO_ACTIVO) return '';
+  if (URL_NOTIFICAR_OP.indexOf('TU-DOMINIO') !== -1) return 'ℹ️ Correo no enviado: falta configurar URL_NOTIFICAR_OP.';
+  try {
+    var resp = UrlFetchApp.fetch(URL_NOTIFICAR_OP, {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      payload: JSON.stringify({
+        token:        TOKEN_CORREO,
+        op:           d.op,
+        nombre:       d.nombreOp,
+        cliente:      d.cliente,
+        comercial:    d.comercial,
+        sede:         d.sede,
+        subs:         d.numSubs,
+        fechaEntrega: _esFecha(d.fechaEntrega) ? Utilities.formatDate(d.fechaEntrega, Session.getScriptTimeZone(), 'dd/MM/yyyy') : '',
+        areas:        d.areas,
+        creador:      _usuario(),
+        urlHoja:      urlHoja || ''
+      })
+    });
+    var r = {};
+    try { r = JSON.parse(resp.getContentText()); } catch (_) {}
+    if (resp.getResponseCode() === 200 && r.ok) return '✉️ ' + (r.mensaje || 'Correo enviado');
+    return '⚠️ No se envió el correo: ' + (r.mensaje || ('HTTP ' + resp.getResponseCode()));
+  } catch (e) {
+    return '⚠️ No se envió el correo: ' + e.message;
+  }
+}
+
+/** Menú ✉️: envía un correo de prueba (y pide el permiso de conexión externa la primera vez). */
+function probarCorreoNuevaOP() {
+  if (typeof ScriptApp.requireAllScopes === 'function') ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  var hoy = new Date(); hoy.setDate(hoy.getDate() + 20);
+  var res = _notificarNuevaOP({
+    op: 'PRUEBA', nombreOp: 'Correo de prueba — Torre de Control', cliente: 'Cliente de prueba',
+    comercial: 'Comercial de prueba', sede: 'BOGOTÁ', numSubs: 2, fechaEntrega: hoy,
+    areas: ['Administración', 'Diseño', 'Dibujo', 'Compras', 'Produccion', 'Galvanizado', 'Logistica', 'Montaje']
+  }, SpreadsheetApp.getActiveSpreadsheet().getUrl());
+  Logger.log(res);
+  try { SpreadsheetApp.getUi().alert('✉️ Prueba de correo', res || 'El correo está desactivado (CORREO_ACTIVO = false).', SpreadsheetApp.getUi().ButtonSet.OK); } catch (_) {}
+}
+
+
+/** Menú 📨: envía el aviso de una O.P que ya existe (p. ej. las creadas antes de v11). */
+function reenviarCorreoOP() {
+  if (typeof ScriptApp.requireAllScopes === 'function') ScriptApp.requireAllScopes(ScriptApp.AuthMode.FULL);
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var activa = ss.getActiveSheet();
+  var sugerida = _esHojaOP(activa) ? activa.getName() : '';
+  var pr = ui.prompt('📨 Reenviar correo de O.P',
+    'Escribe el número de la O.P (o varias separadas por coma):' + (sugerida ? '\n(Hoja actual: ' + sugerida + ')' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (pr.getSelectedButton() !== ui.Button.OK) return;
+  var lista = (pr.getResponseText().trim() || sugerida).split(',').map(function(x) { return x.trim(); }).filter(String);
+  if (!lista.length) return;
+  var res = [];
+  lista.forEach(function(op) {
+    var ws = ss.getSheetByName(op);
+    if (!_esHojaOP(ws)) { res.push('❌ ' + op + ': no encontré la hoja de esa O.P'); return; }
+    var m = _leerMetaOP(ws);
+    var r = _notificarNuevaOP({
+      op: m.op, nombreOp: m.nombreOp, cliente: m.cliente, comercial: m.comercial, sede: m.sede,
+      numSubs: m.numSubs, fechaEntrega: m.fecha, areas: m.areas
+    }, ss.getUrl() + '#gid=' + ws.getSheetId());
+    res.push(op + ': ' + r);
+  });
+  ui.alert('📨 Resultado', res.join('\n'), ui.ButtonSet.OK);
 }
