@@ -1,4 +1,12 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v3 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4 (fusionada)
+//
+// v4 (auditoría):
+//  - La sincronización diaria ya no baja datos digitados a mano por Producción:
+//    no pasa un "Terminado" a "Abierto", no reduce el KG avance, no reemplaza
+//    una fecha de inicio real más temprana ni acorta la duración.
+//  - Al programar UNA subestructura de una O.P con varias, el bloque toma el
+//    peso de esa subestructura (antes tomaba el total de la O.P).
+//
 //
 // v3:
 //  - Hoja "Cronograma" estándar (igual a las demás áreas) dentro de esta V2:
@@ -145,7 +153,10 @@ function enviarOP() {
           linea: form.linea, op: token, nombre: '· ' + sub.nombre,
           cliente: form.cliente || opC.cliente, comercial: form.comercial || opC.comercial,
           descripcion: form.descripcion || opC.nombre,
-          peso: subs.length === 1 && form.peso ? form.peso : sub.kg
+          // v4: el peso del formulario solo se usa si la O.P tiene UNA subestructura;
+          // si tiene varias, cada bloque lleva el peso de SU subestructura (antes se
+          // ponía el total de la O.P al escoger una sola subestructura).
+          peso: (opC.subs.length === 1 && form.peso) ? form.peso : sub.kg
         });
         agregadas.push(etiqueta);
       });
@@ -879,15 +890,32 @@ function sincronizarDiarioACronograma() {
         if (!s.filaKg) { sinFila.push(op + '_' + s.n); return; }
         const r = s.filaKg;
         real = Math.round(real * 100) / 100;
-        sh.getRange(r, C.KG_AV).setValue(real);
-        sh.getRange(r, C.F_INI_REAL).setValue(ini).setNumberFormat('dd/mm/yyyy');
-        sh.getRange(r, C.DUR_REAL).setValue(Math.max(1, diasHabiles_(ini, fin)));
-        const est = sh.getRange(r, C.ESTADO), actual = String(est.getValue()).trim();
-        let nuevo = (s.kg > 0 && real >= s.kg) ? 'Terminado' : 'Abierto';
-        if (actual === 'Reproceso' && nuevo !== 'Terminado') nuevo = 'Reproceso';
-        if (actual !== nuevo) est.setValue(nuevo);
+        // v4 — se respeta lo que Producción digitó a mano (comportamiento original):
+        //   la sincronización solo SUBE valores, nunca los baja ni los borra.
+        const vals = sh.getRange(r, 1, 1, Math.max(C.KG_AV, C.F_INI_REAL, C.DUR_REAL, C.ESTADO)).getValues()[0];
+        const kgActual = Number(vals[C.KG_AV - 1]) || 0;
+        const iniActual = vals[C.F_INI_REAL - 1] instanceof Date ? vals[C.F_INI_REAL - 1] : null;
+        const durActual = Number(vals[C.DUR_REAL - 1]) || 0;
+        const actual = String(vals[C.ESTADO - 1]).trim();
+        let cambio = false;
+        if (real > kgActual) { sh.getRange(r, C.KG_AV).setValue(real); cambio = true; }
+        const kgFinal = Math.max(real, kgActual);
+        const usaIniDiario = !!(ini && (!iniActual || ini < iniActual));
+        if (usaIniDiario) { sh.getRange(r, C.F_INI_REAL).setValue(ini).setNumberFormat('dd/mm/yyyy'); cambio = true; }
+        // La duración solo se calcula con el reporte diario cuando el inicio también sale
+        // de él (o no hay duración digitada); si Producción ya tenía fechas propias, se respetan.
+        if (usaIniDiario || durActual <= 0) {
+          const dur = Math.max(1, diasHabiles_(usaIniDiario ? ini : iniActual, fin));
+          if (dur !== durActual) { sh.getRange(r, C.DUR_REAL).setValue(dur); cambio = true; }
+        }
+        // Estado: En pausa → Abierto → Terminado. Nunca se baja un "Terminado"
+        // y "Reproceso" se respeta mientras no se complete el peso.
+        let nuevo = actual;
+        if (s.kg > 0 && kgFinal >= s.kg) nuevo = 'Terminado';
+        else if (actual === '' || actual === 'En pausa') nuevo = 'Abierto';
+        if (nuevo !== actual) { sh.getRange(r, C.ESTADO).setValue(nuevo); cambio = true; }
         if (nuevo === 'Terminado') terminadas++;
-        actualizadas++;
+        if (cambio) actualizadas++;
       });
     });
 
