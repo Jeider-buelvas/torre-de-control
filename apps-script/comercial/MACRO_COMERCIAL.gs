@@ -1,5 +1,15 @@
 // ============================================================
-//  MACRO_COMERCIAL — v11.2
+//  MACRO_COMERCIAL — v12
+//  v12 (auditoría vs. original):
+//   - Recuperado del original: al actualizar la O.P en las áreas se vuelven a
+//     pasar FECHA_INICIO_TAREA_REAL y DURACION_DIAS_TAREAS_REAL de la hoja O.P
+//     (si están digitadas). v9–v11 habían dejado de hacerlo.
+//   - Recuperado del original: si una O.P aparece repetida en un cronograma, se
+//     toma la ÚLTIMA aparición (como el borrado original).
+//   - Todo lo demás (creación, fórmulas, planeado, KG, fecha de entrega,
+//     edición, registro, correo) se mantiene; verificado celda por celda.
+//
+//  v11.2
 //  v11.2: menú '📨 Reenviar correo de una O.P ya creada'.
 //
 //  v11.1
@@ -1089,7 +1099,8 @@ function _bloqueOP(tSheet, op) {
   var colB = tSheet.getRange(FILA_INICIO_CRONO, 2, n, 1).getValues();
   var colN = tSheet.getRange(FILA_INICIO_CRONO, 14, n, 1).getValues();
   var objetivo = String(op).trim();
-  for (var i = 0; i < n; i++) {
+  // v12: como el original, se toma la ÚLTIMA aparición de la O.P (búsqueda de abajo hacia arriba)
+  for (var i = n - 1; i >= 0; i--) {
     if (String(colB[i][0]).trim() !== objetivo) continue;
     var j = i + 1;
     while (j < n && String(colB[j][0]).trim() === '' && String(colN[j][0]).trim() !== '') j++;
@@ -1391,6 +1402,15 @@ function _actualizarOPEnArea(tSheet, ctx, blk, registrar) {
       if (!d) continue;
       if (_esFecha(d.fechaIniPlan))                        set(i, P(30), d.fechaIniPlan, sub, tarea, 'FECHA_INICIO_TAREA_PLANEADO');
       if (typeof d.durPlan === 'number' && d.durPlan > 0)  set(i, P(31), d.durPlan,      sub, tarea, 'DURACION_DIAS_TAREAS_PLANEADO');
+      // v12 — LÓGICA ORIGINAL RECUPERADA: el original, al reenviar, pasaba al área la
+      // FECHA_INICIO_TAREA_REAL y la DURACION_DIAS_TAREAS_REAL digitadas en la hoja de la
+      // O.P (cols Q y R). Se vuelve a hacer igual; si en la hoja O.P están vacías, se
+      // conserva lo que haya en el área (no se borra nada).
+      if (d.fechaIniReal instanceof Date && d.fechaIniReal.getFullYear() > 1900) {
+        if (!_mismoValor(v[i][20], d.fechaIniReal)) tSheet.getRange(start + i, 21).setNumberFormat('dd/mm/yyyy');
+        set(i, 21, d.fechaIniReal, sub, tarea, 'FECHA_INICIO_TAREA_REAL');
+      }
+      if (typeof d.durReal === 'number' && d.durReal > 0)  set(i, 22, d.durReal,      sub, tarea, 'DURACION_DIAS_TAREAS_REAL');
     }
   }
 
