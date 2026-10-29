@@ -1,4 +1,9 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3.1
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3.2
+//
+// v3.2 (auditoría): si falta un encabezado en un área con FECHA_ENTREGA_CLIENTE, no se
+//       toma la columna vecina; y las importaciones se amplían solas a A5:AK.
+//
+// v3.1
 //
 // v3.1: los campos numéricos (duraciones, %, KG) que llegaban como FECHA
 //       (31/12/1899, 19/1/1900…) por el formato de las hojas de importación
@@ -34,6 +39,10 @@ function onOpen() {
 
 function actualizarLookerMaestra() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // v3.2: las importaciones de las áreas se amplían solas a A5:AK (antes A5:AJ dejaba
+  // por fuera la última columna en las áreas que tienen FECHA_ENTREGA_CLIENTE).
+  var ampliadas = _ampliarImportacionesSilencioso(ss);
+  if (ampliadas.length) { SpreadsheetApp.flush(); Utilities.sleep(4000); }
   let maestra = ss.getSheetByName('LOOKER_MAESTRA');
   if (!maestra) maestra = ss.insertSheet('LOOKER_MAESTRA');
   maestra.clearContents();
@@ -659,11 +668,17 @@ function _mapaColumnas(filaEnc) {
     var n = _normEnc(filaEnc[c]);
     if (n && vistos[n] === undefined) vistos[n] = c;
   }
+  // v3.2: si el área tiene la columna FECHA_ENTREGA_CLIENTE, las posiciones por defecto
+  // desde OBSERVACIONES+1 se corren 1. Así, si un encabezado no se encuentra (p. ej. la
+  // importación aún llega solo hasta AJ), no se toma por error la columna vecina:
+  // queda vacío en vez de mostrar un dato equivocado.
+  var fe = vistos['FECHA_ENTREGA_CLIENTE'];
   for (k in _COLS_DEFECTO) {
     var kn = _normEnc(k);
     if (vistos[kn] !== undefined) mapa[k] = vistos[kn];
+    else if (fe !== undefined && _COLS_DEFECTO[k] >= fe) mapa[k] = _COLS_DEFECTO[k] + 1;
   }
-  if (vistos['FECHA_ENTREGA_CLIENTE'] !== undefined) mapa['FECHA_ENTREGA_CLIENTE'] = vistos['FECHA_ENTREGA_CLIENTE'];
+  if (fe !== undefined) mapa['FECHA_ENTREGA_CLIENTE'] = fe;
   return mapa;
 }
 
@@ -672,6 +687,22 @@ function _mapaColumnas(filaEnc) {
  * a Cronograma!A5:AK, para no perder la última columna en las áreas que
  * ya tienen FECHA_ENTREGA_CLIENTE.
  */
+function _ampliarImportacionesSilencioso(ss) {
+  var hojas = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
+  var ok = [];
+  hojas.forEach(function(n) {
+    var sh = ss.getSheetByName(n);
+    if (!sh) return;
+    var celda = sh.getRange('A1'), fx = celda.getFormula();
+    if (/Cronograma!A5:AJ(?![A-Z0-9])/.test(fx)) {
+      celda.setFormula(fx.replace(/Cronograma!A5:AJ(?![A-Z0-9])/, 'Cronograma!A5:AK'));
+      ok.push(n);
+    }
+  });
+  if (ok.length) Logger.log('Importaciones ampliadas a A5:AK: ' + ok.join(', '));
+  return ok;
+}
+
 function ampliarImportaciones() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var hojas = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
