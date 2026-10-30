@@ -1,4 +1,9 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.1 (fusionada)
+//
+// v4.1:
+//  - Una fecha anterior al año 2000 (p. ej. 01/01/1900 de una celda de inicio
+//    real vacía) se trata como vacía en la sincronización. Antes se tomaba como
+//    fecha válida y la duración real salía en ~31.000 días (caso OP 4103).
 //
 // v4 (auditoría):
 //  - La sincronización diaria ya no baja datos digitados a mano por Producción:
@@ -886,6 +891,7 @@ function sincronizarDiarioACronograma() {
           if (comp.ini && (!ini || comp.ini < ini)) ini = comp.ini;
           if (comp.fin && (!fin || comp.fin > fin)) fin = comp.fin;
         }
+        if (ini && ini.getFullYear() < 2000) ini = null;   // v4.1: fecha < 2000 = vacía
         if (real <= 0) return;                         // sin reportes: no se toca nada
         if (!s.filaKg) { sinFila.push(op + '_' + s.n); return; }
         const r = s.filaKg;
@@ -894,7 +900,7 @@ function sincronizarDiarioACronograma() {
         //   la sincronización solo SUBE valores, nunca los baja ni los borra.
         const vals = sh.getRange(r, 1, 1, Math.max(C.KG_AV, C.F_INI_REAL, C.DUR_REAL, C.ESTADO)).getValues()[0];
         const kgActual = Number(vals[C.KG_AV - 1]) || 0;
-        const iniActual = vals[C.F_INI_REAL - 1] instanceof Date ? vals[C.F_INI_REAL - 1] : null;
+        const iniActual = vals[C.F_INI_REAL - 1] instanceof Date && vals[C.F_INI_REAL - 1].getFullYear() >= 2000 ? vals[C.F_INI_REAL - 1] : null; // v4.1
         const durActual = Number(vals[C.DUR_REAL - 1]) || 0;
         const actual = String(vals[C.ESTADO - 1]).trim();
         let cambio = false;
