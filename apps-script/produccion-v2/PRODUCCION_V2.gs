@@ -1,4 +1,8 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.2 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.3 (fusionada)
+//
+// v4.3:
+//  - Si "Entrega en negro" de una subestructura está en "No aplica" (lo marca
+//    Comercial), la sincronización diaria no la toca.
 //
 // v4.2:
 //  - Línea base: si la tarea "Entrega en negro" ya está Terminado y tiene una
@@ -910,6 +914,7 @@ function sincronizarDiarioACronograma() {
         const iniActual = vals[C.F_INI_REAL - 1] instanceof Date && vals[C.F_INI_REAL - 1].getFullYear() >= 2000 ? vals[C.F_INI_REAL - 1] : null; // v4.1
         const durActual = Number(vals[C.DUR_REAL - 1]) || 0;
         const actual = String(vals[C.ESTADO - 1]).trim();
+        if (actual === 'No aplica') return;   // v4.3: la marcó Comercial, no se sincroniza
         let cambio = false;
         if (real > kgActual) { sh.getRange(r, C.KG_AV).setValue(real); cambio = true; }
         const kgFinal = Math.max(real, kgActual);

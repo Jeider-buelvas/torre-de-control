@@ -1,4 +1,14 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.1
+//
+// v4.1:
+//  - Tareas en estado "No aplica" (las marca Comercial en "🧩 Tareas de la OP")
+//    no cuentan en el total de tareas de la OP ni del área.
+//  - Vigilancia: un área no puede poner ni quitar "No aplica" (solo Comercial).
+//  - Cumplimiento de entrega al cliente: lee ENTREGAS_CLIENTE y
+//    REPROGRAMACIONES_ENTREGA del archivo de Comercial (ID_COMERCIAL).
+//    API: ?tipo=entregas y "entregas" en ?tipo=todos.
+//
+// v4
 //
 // v4 (acuerdos de la reunión):
 //  - Semáforo: una OP sin fechas planeadas ya NO sale "verde" → 'sinplan'.
@@ -369,6 +379,7 @@ function doGet(e) {
     case 'tareas':output = getDatosTareas(); break;
     case 'produccion': output = getDatosProduccion(); break;   // v3
     case 'historial':  output = getDatosHistorial();  break;   // v4
+    case 'entregas':   output = getDatosEntregas();   break;   // v4.1
     default:      output = getTodosDatos();  break;
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
@@ -382,7 +393,8 @@ function getTodosDatos() {
     curva:  getDatosCurvaS(),
     tareas: getDatosTareas(),
     produccion: getDatosProduccion(),     // v3
-    historial: getDatosHistorial()        // v4
+    historial: getDatosHistorial(),       // v4
+    entregas: getDatosEntregas()          // v4.1
   };
 }
 
@@ -466,6 +478,7 @@ function getDatosOPs() {
     if (area && opsMap[lastOp].areas.indexOf(area)===-1) opsMap[lastOp].areas.push(area);
 
     if (!row[14]) continue;
+    if (String(estado).trim() === 'No aplica') continue;   // v4.1: no cuenta como tarea
     opsMap[lastOp].tareas.total++;
     if (estado==='Terminado')      opsMap[lastOp].tareas.terminadas++;
     else if (estado==='En pausa')  opsMap[lastOp].tareas.enPausa++;
@@ -505,6 +518,7 @@ function getDatosAreas() {
     var diasReal     = estado === 'Terminado' ? (parseFloat(row[22]) || 0) : 0;
     var diasPlan     = estado === 'Terminado' ? (parseFloat(row[31]) || 0) : 0;
     var cumplimiento = evid[i] ? (parseFloat(row[28]) || 0) : 0;   // v4: solo con evidencia
+    if (String(estado).trim() === 'No aplica') continue;           // v4.1: no cuenta como tarea
 
     if (!areasMap[area]) {
       areasMap[area]={area:area,tareas:{total:0,terminadas:0,enPausa:0,reproceso:0,abierto:0},diasReal:0,diasPlan:0,cumplimiento:[],avancePct:0};
@@ -1190,6 +1204,7 @@ function _alEditarArea(e) {
         if (k === 'ENTREGA') { protegido = true; motivo = 'La fecha de entrega es línea base comercial: solo cambia desde Comercial (Editar OP).'; }
         else if (bloq && (k === 'INI_REAL' || k === 'DUR_REAL' || k === 'FIN_REAL')) { protegido = true; motivo = 'La tarea está Terminado: su fecha fin real es línea base.'; }
         else if (bloq && k === 'ESTADO' && String(nuevo).trim() !== 'Terminado') { protegido = true; motivo = 'La tarea está Terminado: no se puede sacar de Terminado.'; }
+        else if (k === 'ESTADO' && (String(nuevo).trim() === 'No aplica' || String(ant).trim() === 'No aplica')) { protegido = true; motivo = 'Solo Comercial marca o quita "No aplica" (menú 🧩 Tareas de la OP).'; }   // v4.1
 
         if (protegido && !autorizado) {
           // Revertir: fórmula de la línea base si la había; si no, el valor anterior.
@@ -1333,4 +1348,43 @@ function _evidenciaPorFila(data) {
     if (est === 'Terminado' || est === 'Reproceso' || (parseFloat(row[19]) || 0) > 0) ev[k] = true;
   }
   return claves.map(function(k) { return !!ev[k]; });
+}
+
+
+// ============================================================
+//  v4.1 — CUMPLIMIENTO DE ENTREGA AL CLIENTE (datos de Comercial)
+// ============================================================
+// ID del archivo PLANTILLA_LOOKER_COMERCIAL (lo que va entre /d/ y /edit en su enlace).
+// ⚠ Verifica que sea exactamente el de tu enlace.
+var ID_COMERCIAL = '1VkjXl8Ghur28ecCtOrphfZle3sAOW2qFenv2qC8jSUg';
+
+function getDatosEntregas() {
+  var out = { configurado: !!ID_COMERCIAL, error: '', entregas: [] };
+  if (!ID_COMERCIAL) { out.error = 'Falta ID_COMERCIAL en la Maestra'; return out; }
+  var ss;
+  try { ss = SpreadsheetApp.openById(ID_COMERCIAL); } catch (e) { out.error = 'No se pudo abrir el archivo de Comercial: ' + e.message; return out; }
+  var tz = Session.getScriptTimeZone();
+  var f = function(v) { return (v instanceof Date && v.getFullYear() >= 2000) ? Utilities.formatDate(v, tz, 'dd/MM/yyyy') : ''; };
+  var reprog = {};
+  var shR = ss.getSheetByName('REPROGRAMACIONES_ENTREGA');
+  if (shR && shR.getLastRow() > 1) {
+    shR.getRange(2, 1, shR.getLastRow() - 1, 8).getValues().forEach(function(r) {
+      var op = String(r[2]).trim().replace(/\.0$/, '');
+      if (!op) return;
+      (reprog[op] = reprog[op] || []).push({ fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], tz, 'dd/MM/yyyy HH:mm') : String(r[0]),
+        usuario: String(r[1]), anterior: f(r[3]), nueva: f(r[4]), dias: r[5] === '' ? null : Number(r[5]), motivo: String(r[6]), comentario: String(r[7]) });
+    });
+  }
+  var sh = ss.getSheetByName('ENTREGAS_CLIENTE');
+  if (!sh) { out.error = 'Comercial todavía no tiene la hoja ENTREGAS_CLIENTE (menú 📅 Preparar registro de entregas)'; return out; }
+  if (sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues().forEach(function(r) {
+    var op = String(r[0]).trim().replace(/\.0$/, '');
+    if (!op) return;
+    out.entregas.push({ op: op, nombre: String(r[1]), cliente: String(r[2]), comercial: String(r[3]),
+      original: f(r[4]), vigente: f(r[5]), reprogramaciones: parseInt(r[6], 10) || 0,
+      real: f(r[7]), observacion: String(r[8] || ''), registradaPor: String(r[9] || ''),
+      reprog: reprog[op] || [] });
+  });
+  return out;
 }
