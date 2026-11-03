@@ -1,4 +1,10 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.2
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.3
+//
+// v4.3: ID_COMERCIAL corregido (I mayúscula). Entregas: si una OP aparece repetida en
+//       ENTREGAS_CLIENTE se toma una sola (la que tenga entrega real; si no, la última),
+//       y se ignoran filas con errores (#REF!) o sin OP.
+//
+// v4.2
 //
 // v4.2 — Semáforo de la OP con tres miradas (antes solo miraba la última fecha planeada):
 //   🔴 rojo     : entrega vencida sin terminar · el cronograma termina después de la
@@ -1420,7 +1426,7 @@ function _evidenciaPorFila(data) {
 // ============================================================
 // ID del archivo PLANTILLA_LOOKER_COMERCIAL (lo que va entre /d/ y /edit en su enlace).
 // ⚠ Verifica que sea exactamente el de tu enlace.
-var ID_COMERCIAL = '1VkjXl8Ghur28ecCtOrphfZle3sAOW2qFenv2qC8jSUg';
+var ID_COMERCIAL = '1VkjXI8Ghur28ecCtOrphfZIe3sAOW2qFenv2qC8jSUg';
 
 function getDatosEntregas() {
   var out = { configurado: !!ID_COMERCIAL, error: '', entregas: [] };
@@ -1442,9 +1448,14 @@ function getDatosEntregas() {
   var sh = ss.getSheetByName('ENTREGAS_CLIENTE');
   if (!sh) { out.error = 'Comercial todavía no tiene la hoja ENTREGAS_CLIENTE (menú 📅 Preparar registro de entregas)'; return out; }
   if (sh.getLastRow() < 2) return out;
+  var porOP = {};   // v4.3: una sola fila por OP
   sh.getRange(2, 1, sh.getLastRow() - 1, 11).getValues().forEach(function(r) {
     var op = String(r[0]).trim().replace(/\.0$/, '');
-    if (!op) return;
+    if (!op || op.charAt(0) === '#') return;                       // v4.3: sin OP o con error (#REF!)
+    var previa = porOP[op];
+    if (previa !== undefined && previa.real && !f(r[7])) return;   // ya hay una con entrega real
+    if (previa !== undefined) out.entregas.splice(previa.i, 1);
+    porOP[op] = { i: out.entregas.length, real: !!f(r[7]) };
     out.entregas.push({ op: op, nombre: String(r[1]), cliente: String(r[2]), comercial: String(r[3]),
       original: f(r[4]), vigente: f(r[5]), reprogramaciones: parseInt(r[6], 10) || 0,
       real: f(r[7]), observacion: String(r[8] || ''), registradaPor: String(r[9] || ''),

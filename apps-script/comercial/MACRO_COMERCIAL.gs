@@ -1,4 +1,8 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.1
+//  v14.1: "Preparar registro de entregas" no se ejecuta dos veces a la vez (doble
+//         clic) y no toma las hojas de respaldo (…_respaldo_…), para no repetir OP.
+//
 //  MACRO_COMERCIAL — v14
 //  v14:
 //   - Menú "🧩 Tareas de la OP": Comercial marca tareas que NO APLICAN (su peso
@@ -2453,6 +2457,11 @@ function registrarEntregaReal() {
  */
 function prepararRegistroEntregas() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var lock = LockService.getDocumentLock();   // v14.1: evita doble ejecución
+  if (!lock.tryLock(1000)) { ui.alert('⏳ El registro de entregas ya se está preparando. Espera a que termine.'); return; }
+  try { _prepararRegistroEntregas(ss, ui); } finally { lock.releaseLock(); }
+}
+function _prepararRegistroEntregas(ss, ui) {
   var log = ss.getSheetByName(HOJA_REGISTRO), cambiosF = {};
   if (log && log.getLastRow() > 1) {
     log.getRange(2, 1, log.getLastRow() - 1, 10).getValues().forEach(function(r) {
@@ -2465,6 +2474,7 @@ function prepararRegistroEntregas() {
   ss.getSheets().forEach(function(ws) {
     if (!_esHojaOP(ws)) return;
     var m = _leerMetaOP(ws), op = m.op;
+    if (ws.getName() !== String(op)) return;   // v14.1: hojas de respaldo
     if (_filaEntrega(sh, op)) { ya++; return; }
     var cam = (cambiosF[op] || []).sort(function(a, b) { return a.cuando - b.cuando; });
     var original = cam.length ? (_parseFecha(String(cam[0].antes)) || m.fecha) : m.fecha;
