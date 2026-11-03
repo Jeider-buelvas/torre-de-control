@@ -1,4 +1,15 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.1
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.2
+//
+// v4.2 — Semáforo de la OP con tres miradas (antes solo miraba la última fecha planeada):
+//   🔴 rojo     : entrega vencida sin terminar · el cronograma termina después de la
+//                 entrega · plan vencido > 7 días · brecha ≥ 25 puntos
+//   🟡 amarillo : brecha ≥ 10 puntos · plan vencido 1–7 días · entrega en ≤ 15 días con avance < 80%
+//   🟢 verde    : lo demás.  (Sin fechas planeadas → 'sinplan'; Terminado → verde.)
+//   Brecha = avance esperado a hoy (% de tareas cuya fecha fin planeada ya pasó)
+//            − avance real (% de tareas terminadas). Se envían los motivos
+//            (semaforoMotivos) y los números (semaforoDatos) para mostrarlos en la App.
+//
+// v4.1
 //
 // v4.1:
 //  - Tareas en estado "No aplica" (las marca Comercial en "🧩 Tareas de la OP")
@@ -480,6 +491,11 @@ function getDatosOPs() {
     if (!row[14]) continue;
     if (String(estado).trim() === 'No aplica') continue;   // v4.1: no cuenta como tarea
     opsMap[lastOp].tareas.total++;
+    // v4.2: tareas cuya fecha fin planeada ya pasó (para el avance esperado a hoy)
+    if (row[32] instanceof Date && row[32].getFullYear() >= 2000) {
+      var hoySem = new Date(); hoySem.setHours(0,0,0,0);
+      if (row[32] < hoySem) opsMap[lastOp]._debian = (opsMap[lastOp]._debian || 0) + 1;
+    }
     if (estado==='Terminado')      opsMap[lastOp].tareas.terminadas++;
     else if (estado==='En pausa')  opsMap[lastOp].tareas.enPausa++;
     else if (estado==='Reproceso') opsMap[lastOp].tareas.reproceso++;
@@ -496,6 +512,8 @@ function getDatosOPs() {
     // v4: el fin real que cuenta para el semáforo es el de tareas Terminado (lo proyectado no es real)
     if (finRealTerm[k]) maxRealDate=new Date(finRealTerm[k].getTime());
     opsMap[k].semaforo=_getSemaforo(opsMap[k].estado,maxPlanDate,maxRealDate,opsMap[k].avanceReal);
+    _semaforoCompleto(opsMap[k], maxPlanDate);   // v4.2: avance vs plan y fecha de entrega
+    delete opsMap[k]._debian;
   }
   return Object.values(opsMap);
 }
@@ -662,6 +680,52 @@ function _formatFecha(val) {
   if (!val) return '';
   if (val instanceof Date) return Utilities.formatDate(val, Session.getScriptTimeZone(), 'dd/MM/yyyy');
   return String(val);
+}
+
+/**
+ * v4.2 — Completa el semáforo de la OP: además de la fecha final del plan
+ * (_getSemaforo), revisa el avance esperado a hoy y la fecha de entrega.
+ * Siempre se queda con el color más grave. Deja motivos y datos para la App.
+ */
+function _semaforoCompleto(o, maxPlanDate) {
+  var tz = Session.getScriptTimeZone(), fmt = function(d) { return Utilities.formatDate(d, tz, 'dd/MM/yyyy'); };
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var total = o.tareas.total || 0, term = o.tareas.terminadas || 0, debian = o._debian || 0;
+  var esperado = total ? Math.round(debian / total * 100) : 0, real = o.avanceReal || 0, brecha = esperado - real;
+  var entrega = null;
+  if (o.fechaEntregaCliente) { var pe = String(o.fechaEntregaCliente).split('/'); if (pe.length === 3) entrega = new Date(+pe[2], +pe[1] - 1, +pe[0]); }
+  var datos = { total: total, terminadas: term, debian: debian, esperado: esperado, real: real, brecha: brecha,
+                finPlan: maxPlanDate ? fmt(maxPlanDate) : '', entrega: entrega ? fmt(entrega) : '', diasPlanVencido: 0, diasEntrega: null };
+  var motivos = [], nivel = { verde: 0, amarillo: 1, rojo: 2 }, peor = o.semaforo;
+  var subir = function(color, txt) { motivos.push({ nivel: color, texto: txt }); if (peor !== 'sinplan' && nivel[color] > (nivel[peor] || 0)) peor = color; };
+
+  if (o.estado === 'Terminado' || real >= 100) { o.semaforoMotivos = [{ nivel: 'verde', texto: 'OP terminada' }]; o.semaforoDatos = datos; return; }
+  if (o.semaforo === 'sinplan') motivos.push({ nivel: 'sinplan', texto: 'No tiene fechas planeadas: no se puede medir si va al día' });
+
+  if (maxPlanDate) {
+    var dpv = Math.round((hoy - maxPlanDate) / 86400000);
+    datos.diasPlanVencido = Math.max(0, dpv);
+    if (dpv > 7) subir('rojo', 'El plan terminó el ' + fmt(maxPlanDate) + ' (hace ' + dpv + ' días) y la OP no ha terminado');
+    else if (dpv > 0) subir('amarillo', 'El plan terminó el ' + fmt(maxPlanDate) + ' (hace ' + dpv + ' día' + (dpv === 1 ? '' : 's') + ')');
+  }
+  if ((o.semaforo === 'rojo' || o.semaforo === 'amarillo') && !motivos.length)
+    motivos.push({ nivel: o.semaforo, texto: 'Las tareas terminadas acabaron después de la fecha planeada' });
+  if (total && debian) {
+    var txtB = debian + ' de ' + total + ' tareas debían estar terminadas a hoy y van ' + term + ' (esperado ' + esperado + '% · real ' + real + '%)';
+    if (brecha >= 25) subir('rojo', txtB + ' → brecha de ' + brecha + ' puntos');
+    else if (brecha >= 10) subir('amarillo', txtB + ' → brecha de ' + brecha + ' puntos');
+  }
+  if (entrega) {
+    var de = Math.round((entrega - hoy) / 86400000);
+    datos.diasEntrega = de;
+    if (de < 0) subir('rojo', 'La entrega al cliente venció el ' + fmt(entrega) + ' (hace ' + (-de) + ' días)');
+    if (maxPlanDate && maxPlanDate > entrega) subir('rojo', 'El cronograma termina el ' + fmt(maxPlanDate) + ', después de la entrega al cliente (' + fmt(entrega) + ')');
+    if (de >= 0 && de <= 15 && real < 80) subir('amarillo', (de === 0 ? 'La entrega es HOY' : 'Faltan ' + de + ' día' + (de === 1 ? '' : 's') + ' para la entrega') + ' y el avance es ' + real + '%');
+  }
+  if (!motivos.length) motivos.push({ nivel: 'verde', texto: 'Avance acorde al plan' + (total && debian ? ': a hoy debían ir ' + debian + ' tareas terminadas y van ' + term : ' (todavía no vence ninguna tarea)') });
+  o.semaforo = peor;
+  o.semaforoMotivos = motivos;
+  o.semaforoDatos = datos;
 }
 
 function _getSemaforo(estado, maxPlanDate, maxRealDate, avanceReal) {
