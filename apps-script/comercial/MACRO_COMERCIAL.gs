@@ -1,4 +1,15 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14
+//  v14:
+//   - Menú "🧩 Tareas de la OP": Comercial marca tareas que NO APLICAN (su peso
+//     se reparte entre las demás de la subestructura; en el área quedan en estado
+//     "No aplica") y puede poner un nombre de tarea solo para esa OP.
+//   - Cumplimiento de entrega al cliente: hojas ENTREGAS_CLIENTE (fecha original,
+//     vigente, reprogramaciones, entrega real) y REPROGRAMACIONES_ENTREGA.
+//     Al cambiar la fecha de entrega con Editar OP se pide motivo obligatorio.
+//     Menú "🚚 Registrar entrega real al cliente" (queda fija; solo usuario
+//     autorizado la corrige) y "📅 Preparar registro de entregas" (una vez).
+//
 //  MACRO_COMERCIAL — v13
 //  v13 (acuerdos de la reunión):
 //   - Las tareas NUEVAS nacen en estado "Abierto" (antes "En pausa", que en las
@@ -321,6 +332,10 @@ function onOpen() {
     .addItem('✉️ Probar correo de nueva O.P', 'probarCorreoNuevaOP')
     .addItem('📨 Reenviar correo de una O.P ya creada', 'reenviarCorreoOP')
     .addItem('🔀 Ordenar lista de áreas (BASE_CREADOR)', 'ordenarListaAreas')
+    .addSeparator()
+    .addItem('🧩 Tareas de la OP (No aplica / nombre)', 'abrirTareasOP')
+    .addItem('🚚 Registrar entrega real al cliente', 'registrarEntregaReal')
+    .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
     .addToUi();
 }
 
@@ -430,6 +445,8 @@ function crearNuevaOP() {
   var reg = _nuevoRegistro(d.op);
   reg.add('Formulario BASE_CREADOR', '', '', '', 'OP', '', 'creada (' + numAreas + ' áreas, ' + d.numSubs + ' subestructuras)');
   reg.guardar(ss);
+  // v14: línea base de la entrega (fecha comprometida original = la de la creación)
+  try { _upsertEntrega(ss, d.op, { nombre: d.nombreOp, cliente: d.cliente, comercial: d.comercial, original: d.fechaEntrega, vigente: d.fechaEntrega, reprog: 0 }); } catch (e) {}
 
   // v11: correo de aviso de nueva O.P (si falla, la O.P igual queda creada)
   var wsNueva = ss.getSheetByName(d.op);
@@ -544,12 +561,33 @@ function guardarCambiosOP() {
   txt += '\n\n¿Guardar cambios?';
   if (ui.alert('💾 Guardar cambios', txt, ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
+  // v14: reprogramación de la entrega → motivo obligatorio; con entrega real registrada no se reprograma
+  var cambioFecha = !_mismoValor(m.fecha, d.fechaEntrega), motivoReprog = null;
+  if (cambioFecha && _esFecha(m.fecha)) {
+    var fe = _filaEntrega(_hojaEntregas(ss), d.op);
+    if (fe && _esFecha(fe.v[7])) {
+      ui.alert('🔒 Entrega ya realizada', 'La OP ' + d.op + ' ya tiene entrega real registrada (' + _fmtFecha(fe.v[7]) + ').\nLa fecha comprometida ya no se puede reprogramar. No se guardó nada.', ui.ButtonSet.OK);
+      return;
+    }
+    motivoReprog = _pedirMotivoReprog(ui, d.op, m.fecha, d.fechaEntrega);
+    if (!motivoReprog) { ui.alert('No se guardó nada: la reprogramación necesita un motivo.'); return; }
+  }
+
   if (estructural) ws = _reconstruirHojaOP(ss, ws, d, m);
   else             _actualizarMetaOP(ws, d);
 
   var reg = _nuevoRegistro(d.op);
   cambios.forEach(function(c) { reg.add('Formulario BASE_CREADOR', '', '', '', c[0], c[1], c[2]); });
+  if (motivoReprog) reg.add('Formulario BASE_CREADOR', '', '', '', 'Motivo reprogramación', '', motivoReprog.motivo + (motivoReprog.comentario ? ' — ' + motivoReprog.comentario : ''));
   reg.guardar(ss);
+  // v14: registro de entregas
+  try {
+    var feAct = _filaEntrega(_hojaEntregas(ss), d.op);
+    var nRep = (feAct ? (parseInt(feAct.v[6], 10) || 0) : 0) + (motivoReprog ? 1 : 0);
+    _upsertEntrega(ss, d.op, { nombre: d.nombreOp, cliente: d.cliente, comercial: d.comercial,
+      original: _esFecha(m.fecha) ? m.fecha : d.fechaEntrega, vigente: d.fechaEntrega, reprog: nRep });
+    if (motivoReprog) _registrarReprog(ss, d.op, m.fecha, d.fechaEntrega, motivoReprog);
+  } catch (e) {}
 
   _limpiarFormulario(form);
   _salirEdicion(form);
@@ -660,7 +698,10 @@ function _areaDesdeEtiqueta(et) {
 /** Guarda lo que el comercial llenó a mano en la hoja OP. */
 function _leerManualesOP(ws) {
   var filas = {}, subs = {};
+  var metaT = _leerMetaTareas(ws), cont = {};   // v14: tareas renombradas en esta OP → nombre original
   _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub, v) {
+    var g = area + '|' + s; cont[g] = inicioSub ? 0 : (cont[g] || 0) + 1;
+    tarea = _nombreOriginalOP(metaT, area, s, cont[g], tarea);
     filas[area + '|' + s + '|' + tarea] = { I: v[8], J: v[9], Q: v[16], R: v[17], Z: v[25] };
     if (inicioSub) subs[area + '|' + s] = { E: v[4], F: v[5] };
   });
@@ -693,6 +734,7 @@ function _restaurarManualesOP(ws, datos) {
  * hoja original vuelve a quedar como estaba.
  */
 function _reconstruirHojaOP(ss, viejo, d, m) {
+  var metaT = _leerMetaTareas(viejo);   // v14
   var datos = _leerManualesOP(viejo);
   var idx   = viejo.getIndex();
   viejo.setName(d.op + '_respaldo_' + new Date().getTime());
@@ -702,6 +744,13 @@ function _reconstruirHojaOP(ss, viejo, d, m) {
                          d.areas, d.areas.length, d.fechaEntrega);
     _restaurarManualesOP(nuevo, datos);
     nuevo.getRange(1, COL_META_ENVIADAS).setValue(m.enviadas.join(','));
+    // v14: se conservan las tareas No aplica / nombres (solo de áreas y subestructuras que siguen)
+    if (metaT.na.length || Object.keys(metaT.nom).length) {
+      var vale = function(k) { var p = k.split('|'); return d.areas.indexOf(p[0]) !== -1 && (AREAS_GENERALES.indexOf(p[0]) !== -1 || Number(p[1]) < d.numSubs); };
+      var nomOk = {}; Object.keys(metaT.nom).forEach(function(k) { if (vale(k)) nomOk[k] = metaT.nom[k]; });
+      _guardarMetaTareas(nuevo, { na: metaT.na.filter(vale), nom: nomOk, ant: metaT.ant || {} });
+      _formatoTareasOP(nuevo);
+    }
     ss.setActiveSheet(nuevo);
     ss.moveActiveSheet(idx);
     ss.deleteSheet(viejo);
@@ -795,6 +844,7 @@ function _sincronizarOPConAreas(ss, ws) {
       }
     }
     var datosHoja = _leerDatosHojaOP(ws);
+    var metaT = _leerMetaTareas(ws);   // v14
 
     // ---------- 1) PLAN: revisar cada cronograma antes de tocar nada ----------
     ss.toast('Revisando los cronogramas de las áreas...', '🔎 OP ' + op, 6);
@@ -904,11 +954,18 @@ function _sincronizarOPConAreas(ss, ws) {
           _enviarAPlantillaArea(p.id, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
                                 m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega, p.tSheet);
           reg.add(origen, p.area, '', '', 'OP', '', 'enviada (' + p.newSubs + ' subestructura/s)');
+          _aplicarTareasEnArea(p.tSheet, p.area, op, metaT, function(area, sub, tarea, campo, antes, despues) {   // v14
+            reg.add(origen, area, sub, tarea, campo, antes, despues);
+          });
           creadas.push(p.area);
         } else if (p.accion === 'actualizar') {
           var ctx = _ctxArea(p.tSheet, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
                              m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega);
           var n = _actualizarOPEnArea(p.tSheet, ctx, p.blk, function(area, sub, tarea, campo, antes, despues) {
+            reg.add(origen, area, sub, tarea, campo, antes, despues);
+          });
+          // v14: tareas No aplica / nombres en esta OP
+          n += _aplicarTareasEnArea(p.tSheet, p.area, op, metaT, function(area, sub, tarea, campo, antes, despues) {
             reg.add(origen, area, sub, tarea, campo, antes, despues);
           });
           actualizadas.push(p.area + (n ? ' (' + n + ' cambio/s)' : ' (sin cambios)'));
@@ -1988,4 +2045,435 @@ function reenviarCorreoOP() {
     res.push(op + ': ' + r);
   });
   ui.alert('📨 Resultado', res.join('\n'), ui.ButtonSet.OK);
+}
+
+
+// ============================================================
+//  v14 — TAREAS QUE NO APLICAN Y NOMBRE DE TAREA POR OP
+// ============================================================
+//  Solo Comercial decide, desde el menú "🧩 Tareas de la OP":
+//   • ☐ No aplica: la tarea queda en su fila (no se rompe la estructura), en el
+//     área pasa a ESTADO "No aplica", su % de aporte queda en 0 y su peso se
+//     REPARTE proporcionalmente entre las tareas que sí aplican de esa
+//     subestructura → al terminarlas, la subestructura llega a 100%.
+//   • ✏️ Nombre en esta OP: cambia el texto que ven las áreas solo en esa OP.
+//     Por dentro la tarea conserva su nombre original (pesos, Assignees and
+//     Status, fechas y KG no se pierden).
+//  Se guarda en la hoja de la OP, celda META AM1 (col 39), y llega a las
+//  áreas con "📤 Enviar / Actualizar OP en Áreas". Todo queda en REGISTRO_CAMBIOS.
+// ------------------------------------------------------------
+var COL_META_TAREAS = 39;                       // hoja OP: col AM = tareas No aplica / nombres
+var ESTADO_NO_APLICA = 'No aplica';
+var NO_RENOMBRAR = { 'Produccion': ['Entrega en negro'] };   // Producción V2 la busca por nombre
+
+function _leerMetaTareas(ws) {
+  _asegurarColumnas(ws, COL_META_TAREAS);
+  var txt = String(ws.getRange(1, COL_META_TAREAS).getValue() || '').trim();
+  var m = { na: [], nom: {}, ant: {} };
+  if (!txt) return m;
+  try { var j = JSON.parse(txt); m.na = j.na || []; m.nom = j.nom || {}; m.ant = j.ant || {}; } catch (e) {}
+  return m;
+}
+
+function _guardarMetaTareas(ws, m) {
+  _asegurarColumnas(ws, COL_META_TAREAS);
+  // ant = nombres que se usaron antes en esta OP (para poder volver al original en las áreas)
+  var vacio = !m.na.length && !Object.keys(m.nom).length && !Object.keys(m.ant || {}).length;
+  ws.getRange(1, COL_META_TAREAS).setValue(vacio ? '' : JSON.stringify({ na: m.na, nom: m.nom, ant: m.ant || {} }));
+}
+
+/** Estructura de tareas de la OP: [{area, s, t, clave, original, sub}] */
+function _estructuraTareasOP(ws) {
+  var meta = _leerMetaOP(ws), datos = _leerDatosHojaOP(ws), out = [], offset = 0;
+  meta.areas.forEach(function(area) {
+    var tareas = TAREAS_AREA[area] || TAREAS_AREA['Diseño'], T = tareas.length;
+    var nSubs = AREAS_GENERALES.indexOf(area) !== -1 ? 1 : meta.numSubs;
+    for (var s = 0; s < nSubs; s++) {
+      var d0 = datos[offset + s * T];
+      var sub = (d0 && String(d0.nombreSub || '').trim()) || ('Nombre ' + (s + 1));
+      for (var t = 0; t < T; t++) out.push({ area: area, s: s, t: t, clave: area + '|' + s + '|' + t, original: tareas[t][0], sub: sub });
+    }
+    offset += nSubs * T;
+  });
+  return out;
+}
+
+/** Menú: abre la ventana para marcar "No aplica" y renombrar tareas de la OP activa. */
+function abrirTareasOP() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var ws = ss.getActiveSheet();
+  if (!_esHojaOP(ws)) {
+    var pr = ui.prompt('🧩 Tareas de la OP', 'Escribe el número de la OP (o abre su hoja antes de usar el menú):', ui.ButtonSet.OK_CANCEL);
+    if (pr.getSelectedButton() !== ui.Button.OK) return;
+    ws = ss.getSheetByName(pr.getResponseText().trim());
+    if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la hoja de esa OP.'); return; }
+  }
+  if (_opEnEdicion() === ws.getName()) { ui.alert('⚠ La OP ' + ws.getName() + ' está en edición. Guarda o cancela la edición primero.'); return; }
+  var meta = _leerMetaTareas(ws), est = _estructuraTareasOP(ws);
+  var datos = { op: ws.getName(), filas: est.map(function(x) {
+    return { clave: x.clave, area: x.area, s: x.s, sub: x.sub, original: x.original,
+             na: meta.na.indexOf(x.clave) !== -1, nombre: meta.nom[x.clave] || '',
+             fijo: (NO_RENOMBRAR[x.area] || []).indexOf(x.original) !== -1 };
+  }) };
+  var html = HtmlService.createHtmlOutput(_htmlTareasOP(datos)).setWidth(760).setHeight(600);
+  ui.showModalDialog(html, '🧩 Tareas de la OP ' + datos.op);
+}
+
+function _htmlTareasOP(datos) {
+  var esc = function(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); };
+  var grupos = [], ult = '';
+  datos.filas.forEach(function(f) {
+    var g = f.area + '|' + f.s;
+    if (g !== ult) { grupos.push({ area: f.area, sub: f.sub, filas: [] }); ult = g; }
+    grupos[grupos.length - 1].filas.push(f);
+  });
+  var cuerpo = grupos.map(function(g) {
+    return '<div class="g"><div class="gh"><b>' + esc(g.area) + '</b><span>' + esc(g.sub) + '</span></div>' +
+      g.filas.map(function(f) {
+        return '<div class="f' + (f.na ? ' na' : '') + '" data-c="' + esc(f.clave) + '">' +
+          '<label class="chk"><input type="checkbox" class="cna"' + (f.na ? ' checked' : '') + '> No aplica</label>' +
+          '<span class="ori">' + esc(f.original) + '</span>' +
+          (f.fijo ? '<span class="fijo">nombre fijo (Producción V2)</span>'
+                  : '<input class="nom" maxlength="60" placeholder="Nombre en esta OP (opcional)" value="' + esc(f.nombre) + '">') +
+        '</div>';
+      }).join('') + '</div>';
+  }).join('');
+  return '<!DOCTYPE html><html><head><base target="_top"><style>' +
+    'body{font-family:Arial,sans-serif;margin:0;color:#2b2b40;font-size:13px}' +
+    '.top{padding:10px 14px;background:#f1edfe;border-bottom:1px solid #e3dcfd;font-size:12px;line-height:1.5}' +
+    '.lst{padding:10px 14px;height:440px;overflow:auto}.g{border:1px solid #edeef5;border-radius:10px;margin-bottom:10px;overflow:hidden}' +
+    '.gh{background:#f7f7fc;padding:7px 10px;display:flex;gap:10px;align-items:center}.gh span{color:#8f9bb3;font-size:12px}' +
+    '.f{display:flex;gap:10px;align-items:center;padding:6px 10px;border-top:1px solid #f2f2f7}.f.na .ori{text-decoration:line-through;color:#8f9bb3}' +
+    '.chk{white-space:nowrap;font-size:12px;color:#5a5a72;width:92px}.ori{flex:0 0 220px}.nom{flex:1;padding:5px 8px;border:1px solid #dcdce8;border-radius:6px;font-size:12px}' +
+    '.fijo{flex:1;color:#8f9bb3;font-size:11px;font-style:italic}.bar{padding:10px 14px;border-top:1px solid #edeef5;display:flex;gap:8px;justify-content:flex-end;align-items:center}' +
+    'button{border:0;border-radius:18px;padding:8px 16px;font-weight:bold;cursor:pointer}.pri{background:#7c5cfc;color:#fff}.sec{background:#edeef5;color:#2b2b40}' +
+    '#msg{flex:1;font-size:12px;color:#5a5a72}' +
+    '</style></head><body>' +
+    '<div class="top">☐ <b>No aplica</b>: la tarea no se hace en este contrato. Su peso se reparte entre las demás tareas de la subestructura y en el área queda en estado "No aplica".<br>' +
+    '✏️ <b>Nombre en esta OP</b>: cambia solo el texto que ven las áreas en esta OP (vacío = nombre original).</div>' +
+    '<div class="lst">' + cuerpo + '</div>' +
+    '<div class="bar"><span id="msg"></span><button class="sec" onclick="google.script.host.close()">Cancelar</button>' +
+    '<button class="pri" id="btn" onclick="guardar()">💾 Guardar</button></div>' +
+    '<script>' +
+    'document.querySelectorAll(".cna").forEach(function(c){c.addEventListener("change",function(){c.closest(".f").classList.toggle("na",c.checked);});});' +
+    'function guardar(){var na=[],nom={};document.querySelectorAll(".f").forEach(function(f){var k=f.getAttribute("data-c");if(f.querySelector(".cna").checked)na.push(k);var n=f.querySelector(".nom");if(n&&n.value.trim())nom[k]=n.value.trim();});' +
+    'document.getElementById("btn").disabled=true;document.getElementById("msg").textContent="Guardando...";' +
+    'google.script.run.withSuccessHandler(function(r){document.getElementById("msg").textContent=r.msg;if(r.ok){document.getElementById("btn").textContent="📤 Enviar a las áreas";document.getElementById("btn").disabled=false;document.getElementById("btn").onclick=function(){google.script.run.enviarOPDesdeTareas(' + JSON.stringify(datos.op) + ');google.script.host.close();};}else{document.getElementById("btn").disabled=false;}})' +
+    '.withFailureHandler(function(e){document.getElementById("msg").textContent="❌ "+e.message;document.getElementById("btn").disabled=false;}).guardarTareasOP(' + JSON.stringify(datos.op) + ',{na:na,nom:nom});}' +
+    '</script></body></html>';
+}
+
+/** Llamada desde la ventana: guarda No aplica / nombres en la hoja de la OP. */
+function guardarTareasOP(op, nuevo) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(op);
+  if (!_esHojaOP(ws)) throw new Error('No encontré la hoja de la OP ' + op);
+  var est = _estructuraTareasOP(ws), porClave = {};
+  est.forEach(function(x) { porClave[x.clave] = x; });
+  var na = (nuevo.na || []).filter(function(k) { return porClave[k]; });
+  var nom = {};
+  Object.keys(nuevo.nom || {}).forEach(function(k) {
+    var x = porClave[k], n = String(nuevo.nom[k] || '').trim().slice(0, 60);
+    if (!x || !n || n === x.original) return;
+    if ((NO_RENOMBRAR[x.area] || []).indexOf(x.original) !== -1) return;
+    nom[k] = n;
+  });
+  // Al menos una tarea debe aplicar en cada subestructura
+  var porSub = {};
+  est.forEach(function(x) { var g = x.area + '|' + x.s; porSub[g] = porSub[g] || { tot: 0, na: 0, area: x.area, sub: x.sub }; porSub[g].tot++; if (na.indexOf(x.clave) !== -1) porSub[g].na++; });
+  var todas = Object.keys(porSub).filter(function(g) { return porSub[g].na === porSub[g].tot; });
+  if (todas.length) return { ok: false, msg: '❌ Debe aplicar al menos una tarea en: ' + todas.map(function(g) { return porSub[g].area + ' · ' + porSub[g].sub; }).join(', ') + '. Si el área completa no aplica, quítala de la OP con Editar OP.' };
+
+  var viejo = _leerMetaTareas(ws), reg = _nuevoRegistro(op);
+  est.forEach(function(x) {
+    var a = viejo.na.indexOf(x.clave) !== -1, b = na.indexOf(x.clave) !== -1;
+    if (a !== b) reg.add('Tareas de la OP', x.area, x.sub, x.original, 'No aplica', a ? 'Sí' : 'No', b ? 'Sí' : 'No');
+    var na1 = viejo.nom[x.clave] || '', nb1 = nom[x.clave] || '';
+    if (na1 !== nb1) reg.add('Tareas de la OP', x.area, x.sub, x.original, 'Nombre en esta OP', na1 || x.original, nb1 || x.original);
+  });
+  if (!reg.n()) return { ok: true, msg: 'Sin cambios.' };
+  var ant = viejo.ant || {};
+  Object.keys(viejo.nom).forEach(function(k) { ant[k] = (ant[k] || []); if (ant[k].indexOf(viejo.nom[k]) === -1) ant[k].push(viejo.nom[k]); });
+  _guardarMetaTareas(ws, { na: na, nom: nom, ant: ant });
+  _formatoTareasOP(ws);
+  reg.guardar(ss);
+  var env = _leerMetaOP(ws).enviadas.length;
+  return { ok: true, msg: '✅ ' + reg.n() + ' cambio/s guardados.' + (env ? ' Para que las áreas los vean, envía la OP.' : '') };
+}
+
+function enviarOPDesdeTareas(op) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(op);
+  if (_esHojaOP(ws)) _sincronizarOPConAreas(ss, ws);
+}
+
+/** Hoja OP: col H muestra el nombre en esta OP y las "No aplica" van tachadas en gris. */
+function _formatoTareasOP(ws) {
+  var meta = _leerMetaTareas(ws), cont = {};
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub) {
+    var g = area + '|' + s;
+    cont[g] = inicioSub ? 0 : (cont[g] || 0) + 1;
+    var t = cont[g], clave = g + '|' + t, lista = TAREAS_AREA[area];
+    if (!lista || !lista[t]) return;
+    var original = lista[t][0], deseado = meta.nom[clave] || original;
+    var c = ws.getRange(fila, 8), actual = String(c.getValue()).trim();
+    var tocable = !!meta.nom[clave] || ((meta.ant || {})[clave] || []).indexOf(actual) !== -1;
+    if (tocable && actual !== deseado) c.setValue(deseado);
+    var esNA = meta.na.indexOf(clave) !== -1;
+    if (esNA || c.getFontLine() === 'line-through')
+      ws.getRange(fila, 8, 1, 4).setFontLine(esNA ? 'line-through' : 'none').setFontColor(esNA ? '#9e9e9e' : null);
+    var nota = esNA ? 'No aplica en esta OP' : (meta.nom[clave] ? 'Nombre original: ' + original : '');
+    if (nota || c.getNote()) c.setNote(nota);
+  });
+}
+
+/** Nombre original de una fila de la hoja OP (si se renombró en esta OP). */
+function _nombreOriginalOP(meta, area, s, t, tarea) {
+  var clave = area + '|' + s + '|' + t, lista = TAREAS_AREA[area];
+  if (meta && meta.nom[clave] && meta.nom[clave] === tarea && lista && lista[t]) return lista[t][0];
+  return tarea;
+}
+
+/** Fórmula ORIGINAL de % aporte (col Q) de una tarea — igual que _escribirSub. */
+function _formulaAporteBase(area, t, r) {
+  var tareas = TAREAS_AREA[area] || TAREAS_AREA['Diseño'];
+  var tipo = TIPO_AREA[area] || 'B', asFilas = AS_FILAS[area] || {};
+  var c = function(x) { return (x || 0).toString().replace('.', ','); };
+  if (tipo === 'A') return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En pausa";' + c(tareas[t][3]) + ';IF(P' + r + '="Reproceso";' + c(tareas[t][4]) + ';0)))', w: c(tareas[t][2]), setFormula: false };
+  var asRow = asFilas[tareas[t][0]] || null;
+  if (asRow) return { fx: "='Assignees and Status'!B" + asRow + '%*T' + r, w: "'Assignees and Status'!B" + asRow + '%', setFormula: true };
+  return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En pausa";' + c(tareas[t][3]) + ';0))', w: c(tareas[t][2]), setFormula: false };
+}
+
+/**
+ * Lleva al Cronograma del área lo marcado en "Tareas de la OP".
+ * Si la OP no tiene nada marcado para esta área (y el área no tenía nada de
+ * antes), NO toca ninguna celda: comportamiento idéntico a v13.
+ */
+function _aplicarTareasEnArea(tSheet, area, op, meta, registrar) {
+  var blk = _bloqueOP(tSheet, op);
+  if (!blk) return 0;
+  var tareas = TAREAS_AREA[area] || TAREAS_AREA['Diseño'], T = tareas.length, nSubs = blk.len / T;
+  if (nSubs !== Math.floor(nSubs)) return 0;
+  var v = tSheet.getRange(blk.start, 1, blk.len, 17).getValues();
+  var fx = tSheet.getRange(blk.start, 17, blk.len, 1).getFormulas();
+  var ant = meta.ant || {};
+  var deArea = function(k) { return k.indexOf(area + '|') === 0; };
+  var hayMeta = meta.na.some(deArea) || Object.keys(meta.nom).some(deArea) || Object.keys(ant).some(deArea);
+  var hayPrevio = v.some(function(row, i) { return String(row[15]).trim() === ESTADO_NO_APLICA || String(fx[i][0]).indexOf('=IFERROR((') === 0; });
+  if (!hayMeta && !hayPrevio) return 0;
+
+  var cambios = 0;
+  for (var s = 0; s < nSubs; s++) {
+    var sub = op + '_' + (s + 1), filasNA = [], wTodos = [], wNA = [];
+    for (var t = 0; t < T; t++) {
+      var i = s * T + t, r = blk.start + i, clave = area + '|' + s + '|' + t;
+      var esNA = meta.na.indexOf(clave) !== -1, base = _formulaAporteBase(area, t, r);
+      wTodos.push(base.w); if (esNA) { wNA.push(base.w); filasNA.push(t); }
+      // Nombre que ve el área
+      // Solo se toca el nombre si se cambió desde "Tareas de la OP" (nombre actual o uno usado antes)
+      var deseado = meta.nom[clave] || tareas[t][0], actualN = String(v[i][13]).trim();
+      var tocable = !!meta.nom[clave] || (ant[clave] || []).indexOf(actualN) !== -1;
+      if (tocable && actualN !== deseado) { tSheet.getRange(r, 14).setValue(deseado); registrar(area, sub, tareas[t][0], 'DESCRIPCION_TAREAS', v[i][13], deseado); cambios++; }
+      // Estado
+      var est = String(v[i][15]).trim();
+      if (esNA && est !== ESTADO_NO_APLICA) { tSheet.getRange(r, 16).setValue(ESTADO_NO_APLICA); registrar(area, sub, tareas[t][0], 'ESTADO', est, ESTADO_NO_APLICA); cambios++; }
+      if (!esNA && est === ESTADO_NO_APLICA) { tSheet.getRange(r, 16).setValue('Abierto'); registrar(area, sub, tareas[t][0], 'ESTADO', est, 'Abierto (vuelve a aplicar)'); cambios++; }
+      if (esNA || est === ESTADO_NO_APLICA) tSheet.getRange(r, 14).setFontLine(esNA ? 'line-through' : 'none').setFontColor(esNA ? '#9e9e9e' : null);
+    }
+    // % aporte: si hay tareas No aplica, su peso se reparte entre las demás
+    var envuelta = false;
+    for (var t2 = 0; t2 < T; t2++) if (String(fx[s * T + t2][0]).indexOf('=IFERROR((') === 0) envuelta = true;
+    if (!filasNA.length && !envuelta) continue;
+    var sumTodos = wTodos.join('+'), sumNA = wNA.join('+');
+    for (var t3 = 0; t3 < T; t3++) {
+      var r3 = blk.start + s * T + t3, b3 = _formulaAporteBase(area, t3, r3), celda = tSheet.getRange(r3, 17);
+      if (filasNA.indexOf(t3) !== -1) celda.setValue(0);
+      else if (filasNA.length) celda.setValue('=IFERROR((' + b3.fx.slice(1) + ')*(' + sumTodos + ')/((' + sumTodos + ')-(' + sumNA + '));0)');
+      else if (b3.setFormula) celda.setFormula(b3.fx);
+      else celda.setValue(b3.fx);
+      celda.setNumberFormat('0.00%');
+    }
+    registrar(area, sub, '', '%_APORTE_TAREA', '', filasNA.length ? 'peso repartido (' + filasNA.length + ' tarea/s No aplica)' : 'pesos originales');
+    cambios++;
+  }
+  return cambios;
+}
+
+
+// ============================================================
+//  v14 — CUMPLIMIENTO DE ENTREGA AL CLIENTE
+// ============================================================
+//  Por cada OP:
+//   • FECHA_ORIGINAL : la que se puso al CREAR la OP (no se sobrescribe nunca).
+//   • FECHA_VIGENTE  : la última acordada con el cliente (Editar OP). Cada cambio
+//                      es una REPROGRAMACIÓN con motivo obligatorio.
+//   • FECHA_REAL     : cuándo se entregó. La registra Comercial con el menú
+//                      "🚚 Registrar entrega real". Queda fija (solo un usuario
+//                      autorizado la corrige, y queda registrado).
+//  La Maestra lee estas hojas y la App calcula el indicador.
+// ------------------------------------------------------------
+var HOJA_ENTREGAS = 'ENTREGAS_CLIENTE';
+var HOJA_REPROG   = 'REPROGRAMACIONES_ENTREGA';
+var ENC_ENTREGAS  = ['OP','NOMBRE_OP','CLIENTE','COMERCIAL','FECHA_ORIGINAL','FECHA_VIGENTE','REPROGRAMACIONES',
+                     'FECHA_ENTREGA_REAL','OBSERVACION_ENTREGA','REGISTRADA_POR','FECHA_REGISTRO'];
+var ENC_REPROG    = ['FECHA_HORA','USUARIO','OP','FECHA_ANTERIOR','FECHA_NUEVA','DIAS_CORRIDOS','MOTIVO','COMENTARIO'];
+var MOTIVOS_REPROG = ['Solicitud del cliente','Causa interna (planta / procesos)','Materiales / proveedores','Cambio de alcance','Otro'];
+// Correos que pueden corregir una fecha de entrega real ya registrada (queda en el registro)
+var AUTORIZADOS_ENTREGA = [
+  // 'gerencia@polyuprotec.com',
+];
+
+function _hojaEntregas(ss) {
+  var sh = ss.getSheetByName(HOJA_ENTREGAS);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_ENTREGAS);
+    sh.getRange(1, 1, 1, ENC_ENTREGAS.length).setValues([ENC_ENTREGAS]).setBackground('#2F75B5').setFontColor('#FFFFFF').setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange('E:F').setNumberFormat('dd/mm/yyyy'); sh.getRange('H:H').setNumberFormat('dd/mm/yyyy'); sh.getRange('K:K').setNumberFormat('dd/mm/yyyy hh:mm');
+    try { sh.protect().setDescription('Entregas al cliente (solo lo escribe el script)').setWarningOnly(true); } catch (_) {}
+  }
+  return sh;
+}
+
+function _hojaReprog(ss) {
+  var sh = ss.getSheetByName(HOJA_REPROG);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_REPROG);
+    sh.getRange(1, 1, 1, ENC_REPROG.length).setValues([ENC_REPROG]).setBackground('#2F75B5').setFontColor('#FFFFFF').setFontWeight('bold');
+    sh.setFrozenRows(1);
+    sh.getRange('A:A').setNumberFormat('dd/mm/yyyy hh:mm'); sh.getRange('D:E').setNumberFormat('dd/mm/yyyy');
+    try { sh.protect().setDescription('Reprogramaciones de entrega (solo lo escribe el script)').setWarningOnly(true); } catch (_) {}
+  }
+  return sh;
+}
+
+/** {fila, valores} de la OP en ENTREGAS_CLIENTE (o null). */
+function _filaEntrega(sh, op) {
+  var last = sh.getLastRow();
+  if (last < 2) return null;
+  var ops = sh.getRange(2, 1, last - 1, 1).getDisplayValues();
+  for (var i = 0; i < ops.length; i++) if (String(ops[i][0]).trim() === String(op).trim())
+    return { fila: i + 2, v: sh.getRange(i + 2, 1, 1, ENC_ENTREGAS.length).getValues()[0] };
+  return null;
+}
+
+/** Crea o actualiza la fila de la OP. campos: {nombre, cliente, comercial, original, vigente, reprog, real, obs, por, registro} */
+function _upsertEntrega(ss, op, c) {
+  var sh = _hojaEntregas(ss), f = _filaEntrega(sh, op);
+  var v = f ? f.v.slice() : [String(op), '', '', '', '', '', 0, '', '', '', ''];
+  if (c.nombre !== undefined)    v[1] = c.nombre;
+  if (c.cliente !== undefined)   v[2] = c.cliente;
+  if (c.comercial !== undefined) v[3] = c.comercial;
+  if (c.original !== undefined && !_esFecha(v[4])) v[4] = c.original;    // la original nunca se sobrescribe
+  if (c.vigente !== undefined)   v[5] = c.vigente;
+  if (c.reprog !== undefined)    v[6] = c.reprog;
+  if (c.real !== undefined)      v[7] = c.real;
+  if (c.obs !== undefined)       v[8] = c.obs;
+  if (c.por !== undefined)       v[9] = c.por;
+  if (c.registro !== undefined)  v[10] = c.registro;
+  if (f) sh.getRange(f.fila, 1, 1, v.length).setValues([v]);
+  else   sh.getRange(sh.getLastRow() + 1, 1, 1, v.length).setValues([v]);
+  return v;
+}
+
+/** Pide el motivo (obligatorio) de una reprogramación. Devuelve {motivo, comentario} o null si cancela. */
+function _pedirMotivoReprog(ui, op, antes, despues) {
+  var lista = MOTIVOS_REPROG.map(function(m, i) { return (i + 1) + '. ' + m; }).join('\n');
+  while (true) {
+    var p = ui.prompt('📅 Reprogramación de la entrega · OP ' + op,
+      'La fecha de entrega cambia de ' + _fmtFecha(antes) + ' a ' + _fmtFecha(despues) + '.\n\n' +
+      'Motivo (obligatorio) — escribe el número:\n' + lista, ui.ButtonSet.OK_CANCEL);
+    if (p.getSelectedButton() !== ui.Button.OK) return null;
+    var n = parseInt(p.getResponseText(), 10);
+    if (n >= 1 && n <= MOTIVOS_REPROG.length) {
+      var motivo = MOTIVOS_REPROG[n - 1];
+      var c = ui.prompt('📝 Comentario', 'Motivo: ' + motivo + '\nDetalle de la reprogramación' + (motivo === 'Otro' ? ' (obligatorio)' : ' (opcional)') + ':', ui.ButtonSet.OK_CANCEL);
+      if (c.getSelectedButton() !== ui.Button.OK) return null;
+      var com = c.getResponseText().trim();
+      if (motivo === 'Otro' && !com) { ui.alert('Con el motivo "Otro" el comentario es obligatorio.'); continue; }
+      return { motivo: motivo, comentario: com };
+    }
+    ui.alert('Escribe un número del 1 al ' + MOTIVOS_REPROG.length + '.');
+  }
+}
+
+function _registrarReprog(ss, op, antes, despues, mot) {
+  var sh = _hojaReprog(ss);
+  var dias = (_esFecha(antes) && _esFecha(despues)) ? Math.round((despues - antes) / 86400000) : '';
+  sh.getRange(sh.getLastRow() + 1, 1, 1, ENC_REPROG.length).setValues([[new Date(), _usuario(), String(op), antes, despues, dias, mot.motivo, mot.comentario]]);
+}
+
+/** Menú: registra la fecha de entrega REAL al cliente. */
+function registrarEntregaReal() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var sugerida = _esHojaOP(ss.getActiveSheet()) ? ss.getActiveSheet().getName() : '';
+  var p = ui.prompt('🚚 Registrar entrega real al cliente', 'Número de la OP' + (sugerida ? ' (vacío = ' + sugerida + ')' : '') + ':', ui.ButtonSet.OK_CANCEL);
+  if (p.getSelectedButton() !== ui.Button.OK) return;
+  var op = p.getResponseText().trim() || sugerida, ws = ss.getSheetByName(op);
+  if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la hoja de la OP "' + op + '".'); return; }
+  var m = _leerMetaOP(ws), sh = _hojaEntregas(ss), f = _filaEntrega(sh, op);
+  var yo = _usuario(), autorizado = AUTORIZADOS_ENTREGA.map(function(x) { return x.toLowerCase(); }).indexOf(String(yo).toLowerCase()) !== -1;
+  var anterior = f && _esFecha(f.v[7]) ? f.v[7] : '';
+  if (anterior && !autorizado) {
+    ui.alert('🔒 Entrega ya registrada', 'La OP ' + op + ' ya tiene entrega real el ' + _fmtFecha(anterior) +
+      ' (registrada por ' + (f.v[9] || '—') + ').\n\nEs línea base: solo un usuario autorizado puede corregirla.', ui.ButtonSet.OK);
+    return;
+  }
+  var q = ui.prompt('📅 Fecha de entrega real · OP ' + op,
+    'Fecha comprometida original: ' + _fmtFecha(f && _esFecha(f.v[4]) ? f.v[4] : m.fecha) +
+    '\nFecha comprometida vigente: ' + _fmtFecha(m.fecha) +
+    (anterior ? '\n⚠ Corrección: la registrada es ' + _fmtFecha(anterior) : '') +
+    '\n\n¿Cuándo se entregó al cliente? (dd/mm/aaaa)', ui.ButtonSet.OK_CANCEL);
+  if (q.getSelectedButton() !== ui.Button.OK) return;
+  var real = _parseFecha(q.getResponseText().trim());
+  if (!real) { ui.alert('❌ Fecha no válida. Usa dd/mm/aaaa.'); return; }
+  var hoy = new Date(); hoy.setHours(23, 59, 59, 0);
+  if (real > hoy) { ui.alert('❌ La entrega real no puede ser una fecha futura.'); return; }
+  var o = ui.prompt('📝 Observación de la entrega', 'Opcional (remisión, acta, quién recibió…)' + (anterior ? '\nPara la corrección escribe el motivo (obligatorio):' : ':'), ui.ButtonSet.OK_CANCEL);
+  if (o.getSelectedButton() !== ui.Button.OK) return;
+  var obs = o.getResponseText().trim();
+  if (anterior && !obs) { ui.alert('❌ Para corregir una entrega registrada el motivo es obligatorio.'); return; }
+
+  _upsertEntrega(ss, op, { nombre: m.nombreOp, cliente: m.cliente, comercial: m.comercial,
+    original: m.fecha, vigente: m.fecha, real: real, obs: obs, por: yo, registro: new Date() });
+  var reg = _nuevoRegistro(op);
+  reg.add('Entrega al cliente', '', '', '', anterior ? 'Fecha de entrega real (corrección autorizada)' : 'Fecha de entrega real', anterior, real);
+  reg.guardar(ss);
+  var fv = _filaEntrega(sh, op).v, ori = fv[4], vig = fv[5];
+  var est = function(ref) { if (!_esFecha(ref)) return 'sin fecha comprometida'; var d = Math.round((real - ref) / 86400000); return d <= 0 ? '✅ a tiempo' : '🔴 ' + d + ' día/s tarde'; };
+  ui.alert('✅ Entrega registrada · OP ' + op, 'Entrega real: ' + _fmtFecha(real) +
+    '\n\nContra la fecha original (' + _fmtFecha(ori) + '): ' + est(ori) +
+    '\nContra la fecha vigente (' + _fmtFecha(vig) + '): ' + est(vig), ui.ButtonSet.OK);
+}
+
+/**
+ * Menú (una sola vez): crea ENTREGAS_CLIENTE para las OP que ya existen.
+ * La fecha ORIGINAL se recupera de REGISTRO_CAMBIOS (valor anterior del primer
+ * cambio de "Fecha de entrega al cliente"); si nunca se cambió, es la actual.
+ * No toca las OP que ya estén en ENTREGAS_CLIENTE.
+ */
+function prepararRegistroEntregas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var log = ss.getSheetByName(HOJA_REGISTRO), cambiosF = {};
+  if (log && log.getLastRow() > 1) {
+    log.getRange(2, 1, log.getLastRow() - 1, 10).getValues().forEach(function(r) {
+      if (String(r[7]).trim() !== 'Fecha de entrega al cliente') return;
+      var op = String(r[2]).trim();
+      (cambiosF[op] = cambiosF[op] || []).push({ cuando: r[0], antes: r[8], despues: r[9] });
+    });
+  }
+  var sh = _hojaEntregas(ss), nuevas = [], ya = 0;
+  ss.getSheets().forEach(function(ws) {
+    if (!_esHojaOP(ws)) return;
+    var m = _leerMetaOP(ws), op = m.op;
+    if (_filaEntrega(sh, op)) { ya++; return; }
+    var cam = (cambiosF[op] || []).sort(function(a, b) { return a.cuando - b.cuando; });
+    var original = cam.length ? (_parseFecha(String(cam[0].antes)) || m.fecha) : m.fecha;
+    _upsertEntrega(ss, op, { nombre: m.nombreOp, cliente: m.cliente, comercial: m.comercial,
+      original: _esFecha(original) ? original : '', vigente: _esFecha(m.fecha) ? m.fecha : '', reprog: cam.length });
+    nuevas.push(op + (cam.length ? ' (' + cam.length + ' reprog.)' : ''));
+  });
+  _hojaReprog(ss);
+  ui.alert('📅 Registro de entregas', '✅ OP agregadas: ' + nuevas.length + (nuevas.length ? '\n' + nuevas.join(', ') : '') +
+    (ya ? '\n\nℹ️ Ya estaban: ' + ya : '') +
+    '\n\nLas OP sin fecha de entrega quedan con la fecha vacía: complétala con Editar OP.', ui.ButtonSet.OK);
 }
