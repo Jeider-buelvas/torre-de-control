@@ -1,4 +1,17 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v3.2
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4
+//
+// v4 (acuerdos de la reunión):
+//  - Semáforo: una OP sin fechas planeadas ya NO sale "verde" → 'sinplan'.
+//    Una OP sin terminar cuyo plan ya venció se mide contra HOY (antes, sin
+//    fecha real, salía verde). El fin real que cuenta es el de tareas Terminado.
+//  - Cumplimiento solo con evidencia (tarea Terminado/Reproceso o KG > 0) en
+//    la subestructura; sin evidencia se informa vacío (antes 100% falso).
+//    Eficiencia por área: solo con tareas Terminado (antes 100% si no había datos).
+//  - Protección de fecha fin real (Terminado) y de fecha de entrega, historial
+//    HISTORIAL_CAMBIOS (solo consulta), línea base y correo resumen cada 15 min.
+//    Menú: 🛡 Instalar protección.  API: ?tipo=historial y "historial" en todos.
+//
+// v3.2
 //
 // v3.2 (auditoría): si falta un encabezado en un área con FECHA_ENTREGA_CLIENTE, no se
 //       toma la columna vecina; y las importaciones se amplían solas a A5:AK.
@@ -34,6 +47,11 @@ function onOpen() {
     .addItem('🏭 Actualizar Producción diaria', 'actualizarProduccionDiaria')
     .addSeparator()
     .addItem('🔧 Ampliar importaciones a A5:AK (una sola vez)', 'ampliarImportaciones')
+    .addSeparator()
+    .addItem('🛡 Instalar protección (una sola vez)', 'instalarProteccion')
+    .addItem('📜 Ver historial de cambios', 'verHistorialCambios')
+    .addItem('✉️ Probar correo de cambios', 'probarCorreoCambios')
+    .addItem('⛔ Desinstalar protección', 'desinstalarProteccion')
     .addToUi();
 }
 
@@ -350,6 +368,7 @@ function doGet(e) {
     case 'curva': output = getDatosCurvaS(); break;
     case 'tareas':output = getDatosTareas(); break;
     case 'produccion': output = getDatosProduccion(); break;   // v3
+    case 'historial':  output = getDatosHistorial();  break;   // v4
     default:      output = getTodosDatos();  break;
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
@@ -362,7 +381,8 @@ function getTodosDatos() {
     areas:  getDatosAreas(),
     curva:  getDatosCurvaS(),
     tareas: getDatosTareas(),
-    produccion: getDatosProduccion()      // v3
+    produccion: getDatosProduccion(),     // v3
+    historial: getDatosHistorial()        // v4
   };
 }
 
@@ -374,6 +394,8 @@ function getDatosOPs() {
 
   var opsMap = {};
   var lastOp='', lastNombre='', lastCliente='', lastComercial='', lastEstadoOP='', lastSede='';
+  var evid = _evidenciaPorFila(data);   // v4
+  var finRealTerm = {};                 // v4: fin real de tareas Terminado por OP (para el semáforo)
 
   for (var i = 1; i < data.length; i++) {
     var row = data[i];
@@ -387,7 +409,7 @@ function getDatosOPs() {
 
     var area         = row[0]  || '';
     var estado       = row[16] || '';
-    var cumplimiento = parseFloat(row[28]) || 0;
+    var cumplimiento = evid[i] ? (parseFloat(row[28]) || 0) : 0;   // v4: solo con evidencia
 
     if (!lastOp) continue;
 
@@ -421,6 +443,8 @@ function getDatosOPs() {
         }
       }
     }
+    if (estado === 'Terminado' && row[23] instanceof Date && row[23].getFullYear() >= 2000 &&
+        (!finRealTerm[lastOp] || row[23] > finRealTerm[lastOp])) finRealTerm[lastOp] = row[23];   // v4
     if (row[23] && row[23] instanceof Date) {
       var ffr = _formatFecha(row[23]);
       if (!opsMap[lastOp].fechaFinReal) {
@@ -456,7 +480,8 @@ function getDatosOPs() {
     opsMap[k].avanceReal=t.total>0?Math.round((t.terminadas/t.total)*100):0;
     var maxPlanDate=null, maxRealDate=null;
     if (opsMap[k].fechaFinPlan){var pp=opsMap[k].fechaFinPlan.split('/');if(pp.length===3)maxPlanDate=new Date(parseInt(pp[2]),parseInt(pp[1])-1,parseInt(pp[0]));}
-    if (opsMap[k].fechaFinReal){var rp=opsMap[k].fechaFinReal.split('/');if(rp.length===3)maxRealDate=new Date(parseInt(rp[2]),parseInt(rp[1])-1,parseInt(rp[0]));}
+    // v4: el fin real que cuenta para el semáforo es el de tareas Terminado (lo proyectado no es real)
+    if (finRealTerm[k]) maxRealDate=new Date(finRealTerm[k].getTime());
     opsMap[k].semaforo=_getSemaforo(opsMap[k].estado,maxPlanDate,maxRealDate,opsMap[k].avanceReal);
   }
   return Object.values(opsMap);
@@ -469,15 +494,17 @@ function getDatosAreas() {
   if (data.length < 2) return [];
 
   var areasMap = {};
+  var evid = _evidenciaPorFila(data);   // v4
   for (var i = 1; i < data.length; i++) {
     var row  = data[i];
     var area = row[0] || '';
     if (!area || !row[14]) continue;
 
     var estado       = row[16] || '';
-    var diasReal     = parseFloat(row[22]) || 0;
-    var diasPlan     = parseFloat(row[31]) || 0;
-    var cumplimiento = parseFloat(row[28]) || 0;
+    // v4: días real/plan de la eficiencia solo de tareas Terminado (lo demás es proyección)
+    var diasReal     = estado === 'Terminado' ? (parseFloat(row[22]) || 0) : 0;
+    var diasPlan     = estado === 'Terminado' ? (parseFloat(row[31]) || 0) : 0;
+    var cumplimiento = evid[i] ? (parseFloat(row[28]) || 0) : 0;   // v4: solo con evidencia
 
     if (!areasMap[area]) {
       areasMap[area]={area:area,tareas:{total:0,terminadas:0,enPausa:0,reproceso:0,abierto:0},diasReal:0,diasPlan:0,cumplimiento:[],avancePct:0};
@@ -495,7 +522,7 @@ function getDatosAreas() {
   return Object.values(areasMap).map(function(a) {
     var t=a.tareas;
     a.avancePct=t.total>0?Math.round((t.terminadas/t.total)*100):0;
-    a.eficiencia=a.diasPlan>0?Math.round((a.diasPlan/Math.max(a.diasReal,a.diasPlan))*100):100;
+    a.eficiencia=a.diasPlan>0?Math.round((a.diasPlan/Math.max(a.diasReal,a.diasPlan))*100):null;   // v4: null = sin tareas terminadas (antes 100)
     a.cumplimientoPromedio=a.cumplimiento.length>0?Math.round(a.cumplimiento.reduce(function(s,v){return s+v;},0)/a.cumplimiento.length*100):0;
     delete a.cumplimiento;
     return a;
@@ -509,6 +536,7 @@ function getDatosTareas() {
   if (data.length < 2) return [];
 
   var result = [];
+  var evid = _evidenciaPorFila(data);   // v4
   var lastOp='', lastNombreOP='', lastCliente='', lastComercial='';
   var lastArea='', lastMes='', lastEstadoOP='';
   var lastKgTotal=0, lastNumAreas=0;
@@ -579,7 +607,8 @@ function getDatosTareas() {
       pctTareaReal:  cN(row[25]),
       pctIndivReal:  cN(row[26]),
       pctAcumReal:   cN(row[27]),
-      cumplimiento:  Math.round(cN(row[28])*100),
+      cumplimiento:  evid[i] ? Math.round(cN(row[28])*100) : '',   // v4: '' = sin avance registrado
+      sinAvance:     !evid[i],                                      // v4
       observaciones: cleanVal(row[29]),
       fechaIniPlan:  fF(row[30]),
       durPlan:       cN(row[31]),
@@ -623,15 +652,17 @@ function _formatFecha(val) {
 
 function _getSemaforo(estado, maxPlanDate, maxRealDate, avanceReal) {
   if (estado === 'Terminado' || avanceReal >= 100) return 'verde';
-  if (!maxPlanDate) return 'verde';
-  if (maxRealDate) {
-    maxPlanDate.setHours(0,0,0,0);
-    maxRealDate.setHours(0,0,0,0);
-    var diasAtraso = Math.round((maxRealDate - maxPlanDate) / (1000*60*60*24));
-    if (diasAtraso > 7)  return 'rojo';
-    if (diasAtraso > 0)  return 'amarillo';
-    return 'verde';
-  }
+  // v4: sin fechas planeadas no se puede afirmar que va al día (antes: 'verde')
+  if (!maxPlanDate) return 'sinplan';
+  // v4: la OP no ha terminado, así que su fin es como mínimo HOY.
+  //     Antes, sin fecha real, siempre salía 'verde' aunque el plan ya hubiera vencido.
+  var hoy = new Date(); hoy.setHours(0,0,0,0);
+  var finEfectivo = (maxRealDate && maxRealDate > hoy) ? maxRealDate : hoy;
+  maxPlanDate.setHours(0,0,0,0);
+  finEfectivo.setHours(0,0,0,0);
+  var diasAtraso = Math.round((finEfectivo - maxPlanDate) / (1000*60*60*24));
+  if (diasAtraso > 7)  return 'rojo';
+  if (diasAtraso > 0)  return 'amarillo';
   return 'verde';
 }
 
@@ -834,4 +865,472 @@ function _num(v) {
     return Math.round(n * 1e6) / 1e6;
   }
   return v;
+}
+
+
+var ID_MAESTRA = '1v55aTL923MTMVXU2iuxYMATP0LePk6tUFyYx1jMsLj4';
+
+// ============================================================
+//  v4 — PROTECCIÓN DE FECHAS, HISTORIAL DE CAMBIOS Y NOTIFICACIONES
+// ============================================================
+//  Acuerdos de la reunión:
+//   • La FECHA FIN REAL de una tarea "Terminado" es línea base: no se puede
+//     cambiar su inicio real, duración real, fin real ni sacarla de Terminado.
+//     El cambio se REVIERTE y queda registrado (salvo usuarios autorizados).
+//   • La FECHA_ENTREGA_CLIENTE es línea base comercial: solo cambia desde la
+//     macro de Comercial ("Editar OP"). Si un área la cambia, se revierte.
+//   • Todo cambio importante queda en HISTORIAL_CAMBIOS (solo consulta) y los
+//     críticos se notifican por correo en un resumen cada 15 minutos.
+//  Instalación: menú 🛡 Instalar protección (una vez, con la cuenta dueña).
+// ------------------------------------------------------------
+
+// Correos que SÍ pueden corregir fechas protegidas (el cambio igual queda registrado).
+var AUTORIZADOS_FECHAS = [
+  // 'gerencia@polyuprotec.com',
+];
+var HOJA_HISTORIAL   = 'HISTORIAL_CAMBIOS';
+var HOJA_LINEA_BASE  = 'LINEA_BASE';
+var HOJA_CRONO_AREA  = 'Cronograma';
+var FILA_ENC_AREA    = 5;          // encabezados del Cronograma de cada área
+var FILA_INI_AREA    = 6;          // primera fila de datos
+var CORREO_CAMBIOS_ACTIVO = true;  // false = solo historial, sin correo
+var URL_NOTIFICAR_CAMBIOS = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_cambios.php';
+var TOKEN_CORREO_CAMBIOS  = 'CONFIGURAR_AQUI';   // igual que TOKEN en el PHP
+var HOJAS_IMPORT_AREAS = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
+
+var ENC_HISTORIAL = ['FECHA_HORA','USUARIO','CORREO','OP','AREA','SUBESTRUCTURA','TAREA','CAMPO',
+                     'VALOR_ANTERIOR','VALOR_NUEVO','TIPO','DETALLE','CELDA','NOTIFICAR','NOTIFICADO'];
+var ENC_LINEA_BASE = ['CLAVE','AREA','OP','SUB','TAREA','ESTADO','INI_REAL','INI_REAL_FX',
+                      'DUR_REAL','DUR_REAL_FX','FIN_REAL','FIN_REAL_FX','ENTREGA','CAPTURA'];
+
+// Campos que se vigilan en el Cronograma de las áreas (por nombre de encabezado)
+var CAMPOS_VIGILADOS = {
+  ESTADO:   { enc: 'ESTADO',                        nombre: 'Estado',                 notificar: true  },
+  INI_REAL: { enc: 'FECHA_INICIO_TAREA_REAL',       nombre: 'Fecha inicio real',      notificar: true  },
+  DUR_REAL: { enc: 'DURACION_DIAS_TAREAS_REAL',     nombre: 'Duración real',          notificar: true  },
+  FIN_REAL: { enc: 'FECHA_FIN_TAREA_REAL',          nombre: 'Fecha fin real',         notificar: true  },
+  ENTREGA:  { enc: 'FECHA_ENTREGA_CLIENTE',         nombre: 'Fecha de entrega',       notificar: true  },
+  INI_PLAN: { enc: 'FECHA_INICIO_TAREA_PLANEADO',   nombre: 'Fecha inicio planeada',  notificar: true  },
+  DUR_PLAN: { enc: 'DURACION_DIAS_TAREAS_PLANEADO', nombre: 'Duración planeada',      notificar: true  },
+  KG:       { enc: 'KG_AVANCE_ACUMULADO',           nombre: 'KG avance',              notificar: false }
+};
+
+// ── Instalación ──────────────────────────────────────────────
+function instalarProteccion() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var areas = _idsAreasProtegidas(ss);
+  var ids = Object.keys(areas);
+  if (!ids.length) { ui.alert('❌ No encontré los archivos de las áreas en las hojas de importación.'); return; }
+
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    var f = t.getHandlerFunction();
+    if (f === '_alEditarArea' || f === '_tareaProgramadaCambios') ScriptApp.deleteTrigger(t);
+  });
+  var ok = [], err = [];
+  ids.forEach(function(id) {
+    try { ScriptApp.newTrigger('_alEditarArea').forSpreadsheet(id).onEdit().create(); ok.push(areas[id]); }
+    catch (e) { err.push(areas[id] + ': ' + e.message); }
+  });
+  ScriptApp.newTrigger('_tareaProgramadaCambios').timeBased().everyMinutes(15).create();
+  PropertiesService.getScriptProperties().setProperty('AREAS_PROTEGIDAS', JSON.stringify(areas));
+
+  _hojaHistorial(ss); _hojaLineaBase(ss);
+  var n = _capturarLineaBase(ss, false);
+  ui.alert('🛡 Protección instalada',
+    '✅ Vigilando: ' + ok.join(', ') + (err.length ? '\n\n⚠ Sin vigilar:\n' + err.join('\n') : '') +
+    '\n\n📌 Línea base capturada: ' + n + ' tareas.\n🕒 Resumen de cambios por correo cada 15 min' +
+    (CORREO_CAMBIOS_ACTIVO ? '.' : ' (apagado).'), ui.ButtonSet.OK);
+}
+
+function desinstalarProteccion() {
+  var n = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    var f = t.getHandlerFunction();
+    if (f === '_alEditarArea' || f === '_tareaProgramadaCambios') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  SpreadsheetApp.getUi().alert('Protección desinstalada (' + n + ' activadores eliminados). El historial se conserva.');
+}
+
+function verHistorialCambios() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ss.setActiveSheet(_hojaHistorial(ss));
+}
+
+/** {idArchivo: 'AREA'} leído del IMPORTRANGE de cada hoja de importación. */
+function _idsAreasProtegidas(ss) {
+  var out = {};
+  HOJAS_IMPORT_AREAS.forEach(function(n) {
+    var sh = ss.getSheetByName(n);
+    if (!sh) return;
+    var fx = sh.getRange('A1').getFormula();
+    var m = fx.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || fx.match(/IMPORTRANGE\(\s*"+([a-zA-Z0-9_-]{20,})"/i);
+    if (m) out[m[1]] = n;
+  });
+  return out;
+}
+
+function _hojaHistorial(ss) {
+  var sh = ss.getSheetByName(HOJA_HISTORIAL);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_HISTORIAL);
+    sh.getRange(1, 1, 1, ENC_HISTORIAL.length).setValues([ENC_HISTORIAL])
+      .setFontWeight('bold').setBackground('#2b2b40').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+    _protegerHoja(sh, 'Historial de cambios — solo lo escribe el script (solo consulta)');
+  }
+  return sh;
+}
+
+function _hojaLineaBase(ss) {
+  var sh = ss.getSheetByName(HOJA_LINEA_BASE);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_LINEA_BASE);
+    sh.getRange(1, 1, 1, ENC_LINEA_BASE.length).setValues([ENC_LINEA_BASE]).setFontWeight('bold');
+    sh.setFrozenRows(1);
+    _protegerHoja(sh, 'Línea base de fechas protegidas — solo lo escribe el script');
+    try { sh.hideSheet(); } catch (e) {}
+  }
+  return sh;
+}
+
+function _protegerHoja(sh, desc) {
+  try {
+    var p = sh.protect().setDescription(desc);
+    var yo = Session.getEffectiveUser();
+    p.addEditor(yo);
+    p.removeEditors(p.getEditors().filter(function(u) { return u.getEmail() !== yo.getEmail(); }));
+    if (p.canDomainEdit()) p.setDomainEdit(false);
+  } catch (e) { Logger.log('No se pudo proteger ' + sh.getName() + ': ' + e.message); }
+}
+
+// ── Lectura del Cronograma de un área ────────────────────────
+/** Índices (1-based) de los campos vigilados + B (OP), K (sub), N (tarea). */
+function _columnasArea(sh) {
+  var enc = sh.getRange(FILA_ENC_AREA, 1, 1, sh.getLastColumn()).getDisplayValues()[0];
+  var cols = { OP: 2, SUB: 11, TAREA: 14 };
+  var vistos = {};
+  enc.forEach(function(h, i) { var n = _normEnc(h); if (n && vistos[n] === undefined) vistos[n] = i + 1; });
+  Object.keys(CAMPOS_VIGILADOS).forEach(function(k) {
+    var c = vistos[_normEnc(CAMPOS_VIGILADOS[k].enc)];
+    if (c) cols[k] = c;
+  });
+  if (vistos['OP']) cols.OP = vistos['OP'];
+  if (vistos['NOMBRE_SUBESTRUCTURA']) cols.SUB = vistos['NOMBRE_SUBESTRUCTURA'];
+  if (vistos['DESCRIPCION_TAREAS']) cols.TAREA = vistos['DESCRIPCION_TAREAS'];
+  return cols;
+}
+
+/** Identidad de cada fila (desde FILA_INI_AREA hasta hasta): {op, sub, subN, tarea, tN, clave}. */
+function _identidadFilas(sh, cols, area, hasta) {
+  var n = hasta - FILA_INI_AREA + 1;
+  if (n <= 0) return [];
+  var w = Math.max(cols.OP, cols.SUB, cols.TAREA);
+  var v = sh.getRange(FILA_INI_AREA, 1, n, w).getValues();
+  var out = [], op = '', sub = '', subN = -1, tN = 0;
+  for (var i = 0; i < n; i++) {
+    var vOp = String(v[i][cols.OP - 1]).trim().replace(/\.0$/, '');
+    if (vOp) { op = vOp; subN = -1; }
+    var vSub = String(v[i][cols.SUB - 1]).trim();
+    if (vSub) { sub = vSub; subN++; tN = 0; } else { tN++; }
+    var tarea = String(v[i][cols.TAREA - 1]).trim();
+    out.push({ op: op, sub: sub, subN: subN, tarea: tarea, tN: tN,
+               clave: area + '|' + op + '|' + subN + '|' + tN + '|' + tarea });
+  }
+  return out;
+}
+
+function _esFechaValida(v) { return v instanceof Date && !isNaN(v.getTime()) && v.getFullYear() >= 2000; }
+
+function _txtValor(v) {
+  if (v === null || v === undefined) return '';
+  if (v instanceof Date) return _esFechaValida(v) ? Utilities.formatDate(v, Session.getScriptTimeZone(), 'dd/MM/yyyy') : '';
+  if (typeof v === 'number') return String(Math.round(v * 10000) / 10000);
+  return String(v);
+}
+
+/** e.oldValue llega como texto: serial de fecha, número o texto. */
+function _valorDesdeOld(txt, esFecha) {
+  if (txt === undefined || txt === null) return '';
+  var s = String(txt).trim();
+  if (s === '') return '';
+  if (esFecha) {
+    if (/^\d+(\.\d+)?$/.test(s)) return new Date(Math.round((Number(s) - 25569) * 86400000) + new Date().getTimezoneOffset() * 60000);
+    var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (m) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  }
+  if (!isNaN(Number(s))) return Number(s);
+  return s;
+}
+
+// ── Línea base ───────────────────────────────────────────────
+/** Lee la línea base: {clave: {fila, ...}} */
+function _leerLineaBase(ss) {
+  var sh = _hojaLineaBase(ss), last = sh.getLastRow(), out = {};
+  if (last < 2) return out;
+  var v = sh.getRange(2, 1, last - 1, ENC_LINEA_BASE.length).getValues();
+  v.forEach(function(r, i) {
+    out[r[0]] = { fila: i + 2, area: r[1], op: r[2], sub: r[3], tarea: r[4], estado: r[5],
+      iniReal: r[6], iniRealFx: r[7], durReal: r[8], durRealFx: r[9], finReal: r[10], finRealFx: r[11],
+      entrega: r[12] };
+  });
+  return out;
+}
+
+/** Fila protegida = Terminado con fin real válido en la línea base. */
+function _bloqueada(b) { return !!(b && String(b.estado).trim() === 'Terminado' && _esFechaValida(b.finReal)); }
+
+/**
+ * Recorre todas las áreas y deja en LINEA_BASE el estado, las fechas reales
+ * (valor y fórmula) y la fecha de entrega de cada tarea. Si registrar=true,
+ * anota en el historial lo que cambió por fuera de la vigilancia (macros,
+ * pegados múltiples sin valor anterior, etc.).
+ */
+function _capturarLineaBase(ss, registrar) {
+  var areas = _idsAreasProtegidas(ss), base = registrar ? _leerLineaBase(ss) : {};
+  var filas = [], eventos = [], ahora = new Date(), entregasOP = {}, vistosEnt = {};
+  Object.keys(areas).forEach(function(id) {
+    var area = areas[id], sh;
+    try { sh = SpreadsheetApp.openById(id).getSheetByName(HOJA_CRONO_AREA); } catch (e) { return; }
+    if (!sh || sh.getLastRow() < FILA_INI_AREA) return;
+    var cols = _columnasArea(sh), last = sh.getLastRow();
+    var ids = _identidadFilas(sh, cols, area, last);
+    var w = sh.getLastColumn(), rg = sh.getRange(FILA_INI_AREA, 1, last - FILA_INI_AREA + 1, w);
+    var v = rg.getValues(), fx = rg.getFormulas();
+    var g = function(i, k) { return cols[k] ? v[i][cols[k] - 1] : ''; };
+    var gf = function(i, k) { return cols[k] ? fx[i][cols[k] - 1] : ''; };
+    ids.forEach(function(it, i) {
+      if (!it.op || !it.tarea) return;
+      var ent = g(i, 'ENTREGA');
+      // Cada fila guarda SOLO su propio valor (no se propaga a filas vacías)
+      var nueva = [it.clave, area, it.op, it.sub, it.tarea, g(i, 'ESTADO'), g(i, 'INI_REAL'), gf(i, 'INI_REAL'),
+                   g(i, 'DUR_REAL'), gf(i, 'DUR_REAL'), g(i, 'FIN_REAL'), gf(i, 'FIN_REAL'),
+                   _esFechaValida(ent) ? ent : '', ahora];
+      filas.push(nueva);
+      if (_esFechaValida(nueva[12])) {
+        var k = it.op; entregasOP[k] = entregasOP[k] || {};
+        entregasOP[k][_txtValor(nueva[12])] = (entregasOP[k][_txtValor(nueva[12])] || []).concat(area);
+      }
+      var b = base[it.clave];
+      if (registrar && b) {
+        if (_bloqueada(b) && _txtValor(b.finReal) !== _txtValor(nueva[10]))
+          eventos.push(_evento('Sistema (sin valor anterior)', '', it.op, area, it.sub, it.tarea, 'Fecha fin real',
+            b.finReal, nueva[10], 'Cambio detectado en revisión', 'El cambio no pasó por la vigilancia (macro, pegado múltiple o archivo sin vigilar).', '', true));
+        if (_txtValor(b.entrega) !== _txtValor(nueva[12]) && _esFechaValida(b.entrega) && !vistosEnt[it.op + '|' + area] && (vistosEnt[it.op + '|' + area] = true))
+          eventos.push(_evento('Sistema (revisión)', '', it.op, area, it.sub, it.tarea, 'Fecha de entrega',
+            b.entrega, nueva[12], 'Cambio de línea base comercial', 'Detectado en la revisión periódica (normalmente: Editar OP en Comercial).', '', true));
+      }
+    });
+  });
+  var sh = _hojaLineaBase(ss);
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, ENC_LINEA_BASE.length).clearContent();
+  if (filas.length) sh.getRange(2, 1, filas.length, ENC_LINEA_BASE.length).setValues(filas);
+  // Diferencias de fecha de entrega entre áreas (p. ej. OP 4101) → alerta una sola vez por combinación
+  if (registrar) {
+    var props = PropertiesService.getScriptProperties(), vistas = JSON.parse(props.getProperty('DIF_ENTREGA') || '{}');
+    Object.keys(entregasOP).forEach(function(op) {
+      var fechas = Object.keys(entregasOP[op]);
+      if (fechas.length < 2) { delete vistas[op]; return; }
+      var firma = fechas.sort().join('|');
+      if (vistas[op] === firma) return;
+      vistas[op] = firma;
+      eventos.push(_evento('Sistema (revisión)', '', op, fechas.map(function(f) { return entregasOP[op][f].join(', '); }).join(' / '), '', '',
+        'Fecha de entrega', '', fechas.join(' ≠ '), 'Diferencia entre áreas',
+        'Las áreas tienen fechas de entrega distintas. Corregir desde Comercial con Editar OP.', '', true));
+    });
+    props.setProperty('DIF_ENTREGA', JSON.stringify(vistas));
+  }
+  if (eventos.length) _escribirHistorial(ss, eventos);
+  return filas.length;
+}
+
+// ── Vigilancia de ediciones (activador instalable onEdit de cada área) ──
+function _alEditarArea(e) {
+  if (!e || !e.range) return;
+  var sh = e.range.getSheet();
+  if (sh.getName() !== HOJA_CRONO_AREA) return;
+  var r1 = e.range.getRow(), nr = e.range.getNumRows(), c1 = e.range.getColumn(), nc = e.range.getNumColumns();
+  if (r1 + nr - 1 < FILA_INI_AREA) return;
+  var cols = _columnasArea(sh);
+  var tocados = Object.keys(CAMPOS_VIGILADOS).filter(function(k) { return cols[k] && cols[k] >= c1 && cols[k] < c1 + nc; });
+  if (!tocados.length) return;
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (er) {}
+  try {
+    var ssM = SpreadsheetApp.openById(ID_MAESTRA);
+    var areas = JSON.parse(PropertiesService.getScriptProperties().getProperty('AREAS_PROTEGIDAS') || '{}');
+    var area = areas[e.source.getId()] || e.source.getName();
+    var correo = '';
+    try { correo = (e.user && e.user.getEmail && e.user.getEmail()) || ''; } catch (er) {}
+    var usuario = correo ? correo.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, function(l) { return l.toUpperCase(); }) : 'Usuario externo';
+    var autorizado = correo && AUTORIZADOS_FECHAS.map(function(x) { return x.toLowerCase(); }).indexOf(correo.toLowerCase()) !== -1;
+    var unaCelda = (nr === 1 && nc === 1);
+    var r0 = Math.max(r1, FILA_INI_AREA), rN = r1 + nr - 1;
+    var ids = _identidadFilas(sh, cols, area, rN);
+    var base = _leerLineaBase(ssM);
+    var eventos = [], cambiosBase = [];
+    SpreadsheetApp.flush();
+
+    for (var r = r0; r <= rN; r++) {
+      var it = ids[r - FILA_INI_AREA];
+      if (!it || !it.op) continue;
+      var b = base[it.clave], bloq = _bloqueada(b);
+      var celda = function(k) { return sh.getRange(r, cols[k]); };
+      tocados.forEach(function(k) {
+        var campo = CAMPOS_VIGILADOS[k], c = celda(k);
+        var nuevo = c.getValue();
+        var esFecha = (k === 'INI_REAL' || k === 'FIN_REAL' || k === 'ENTREGA' || k === 'INI_PLAN');
+        // valor anterior: e.oldValue (una sola celda) o línea base
+        var ant = unaCelda ? _valorDesdeOld(e.oldValue, esFecha)
+                : (b ? ({ ESTADO: b.estado, INI_REAL: b.iniReal, DUR_REAL: b.durReal, FIN_REAL: b.finReal, ENTREGA: b.entrega })[k] : '');
+        if (ant === undefined) ant = '';
+        if (_txtValor(ant) === _txtValor(nuevo)) return;
+
+        var protegido = false, motivo = '';
+        if (k === 'ENTREGA') { protegido = true; motivo = 'La fecha de entrega es línea base comercial: solo cambia desde Comercial (Editar OP).'; }
+        else if (bloq && (k === 'INI_REAL' || k === 'DUR_REAL' || k === 'FIN_REAL')) { protegido = true; motivo = 'La tarea está Terminado: su fecha fin real es línea base.'; }
+        else if (bloq && k === 'ESTADO' && String(nuevo).trim() !== 'Terminado') { protegido = true; motivo = 'La tarea está Terminado: no se puede sacar de Terminado.'; }
+
+        if (protegido && !autorizado) {
+          // Revertir: fórmula de la línea base si la había; si no, el valor anterior.
+          var fxBase = b ? ({ INI_REAL: b.iniRealFx, DUR_REAL: b.durRealFx, FIN_REAL: b.finRealFx })[k] : '';
+          var valBase = b ? ({ ESTADO: b.estado, INI_REAL: b.iniReal, DUR_REAL: b.durReal, FIN_REAL: b.finReal, ENTREGA: b.entrega })[k] : '';
+          var restaurar = unaCelda ? ant : valBase;
+          var revertido = true;
+          if (fxBase) c.setFormula(fxBase);                                   // fórmula original (p. ej. fin real)
+          else if (unaCelda || b) c.setValue(restaurar === undefined ? '' : restaurar);   // valor anterior (puede ser vacío)
+          else revertido = false;                                             // pegado múltiple sin línea base
+          eventos.push(_evento(usuario, correo, it.op, area, it.sub, it.tarea, campo.nombre, ant, nuevo,
+            revertido ? 'Intento bloqueado' : 'Cambio protegido sin revertir',
+            motivo + (revertido ? ' Se restauró el valor anterior.' : ' No había valor anterior para restaurarlo: revisar.'),
+            _a1(r, cols[k]), true));
+        } else {
+          eventos.push(_evento(usuario, correo, it.op, area, it.sub, it.tarea, campo.nombre, ant, nuevo,
+            protegido ? 'Cambio autorizado' : (k === 'ESTADO' && String(nuevo).trim() === 'Terminado' ? 'Terminación registrada' : 'Cambio permitido'),
+            protegido ? 'Usuario autorizado para corregir fechas protegidas.' : '', _a1(r, cols[k]), campo.notificar || protegido));
+          cambiosBase.push(r);
+        }
+      });
+    }
+    // Las filas que cambiaron legítimamente actualizan su línea base (p. ej. al quedar Terminado)
+    if (cambiosBase.length) { SpreadsheetApp.flush(); _actualizarBaseFilas(ssM, sh, cols, area, ids, cambiosBase, base); }
+    if (eventos.length) _escribirHistorial(ssM, eventos);
+  } finally {
+    try { lock.releaseLock(); } catch (er) {}
+  }
+}
+
+function _actualizarBaseFilas(ssM, sh, cols, area, ids, filas, base) {
+  var shB = _hojaLineaBase(ssM), ahora = new Date(), nuevas = [];
+  var unicas = filas.filter(function(x, i) { return filas.indexOf(x) === i; });
+  unicas.forEach(function(r) {
+    var it = ids[r - FILA_INI_AREA]; if (!it) return;
+    var get = function(k) { return cols[k] ? sh.getRange(r, cols[k]).getValue() : ''; };
+    var getf = function(k) { return cols[k] ? sh.getRange(r, cols[k]).getFormula() : ''; };
+    var b = base[it.clave];
+    var fila = [it.clave, area, it.op, it.sub, it.tarea, get('ESTADO'), get('INI_REAL'), getf('INI_REAL'),
+                get('DUR_REAL'), getf('DUR_REAL'), get('FIN_REAL'), getf('FIN_REAL'),
+                _esFechaValida(get('ENTREGA')) ? get('ENTREGA') : '', ahora];
+    if (b && b.fila) shB.getRange(b.fila, 1, 1, fila.length).setValues([fila]);
+    else nuevas.push(fila);
+  });
+  if (nuevas.length) shB.getRange(shB.getLastRow() + 1, 1, nuevas.length, ENC_LINEA_BASE.length).setValues(nuevas);
+}
+
+function _a1(r, c) {
+  var s = '', n = c;
+  while (n > 0) { var m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+  return s + r;
+}
+
+function _evento(usuario, correo, op, area, sub, tarea, campo, ant, nuevo, tipo, detalle, celda, notificar) {
+  return [new Date(), usuario, correo || '', op, area, sub, tarea, campo, _txtValor(ant), _txtValor(nuevo),
+          tipo, detalle || '', celda || '', notificar ? 'SI' : 'NO', ''];
+}
+
+function _escribirHistorial(ss, eventos) {
+  var sh = _hojaHistorial(ss);
+  sh.getRange(sh.getLastRow() + 1, 1, eventos.length, ENC_HISTORIAL.length).setValues(eventos);
+  sh.getRange(2, 1, Math.max(1, sh.getLastRow() - 1), 1).setNumberFormat('dd/mm/yyyy hh:mm');
+}
+
+// ── Tarea programada (cada 15 min): revisión de línea base + correo resumen ──
+function _tareaProgramadaCambios() {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return;
+  try {
+    var ss = SpreadsheetApp.openById(ID_MAESTRA);
+    _capturarLineaBase(ss, true);
+    _enviarResumenCambios(ss);
+  } finally { lock.releaseLock(); }
+}
+
+function _enviarResumenCambios(ss) {
+  if (!CORREO_CAMBIOS_ACTIVO) return 0;
+  var sh = _hojaHistorial(ss), last = sh.getLastRow();
+  if (last < 2) return 0;
+  var v = sh.getRange(2, 1, last - 1, ENC_HISTORIAL.length).getValues();
+  var pend = [], filas = [];
+  v.forEach(function(r, i) {
+    if (r[13] === 'SI' && !r[14]) {
+      pend.push({ fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : String(r[0]),
+        usuario: r[1], correo: r[2], op: String(r[3]), area: r[4], sub: r[5], tarea: r[6], campo: r[7],
+        anterior: r[8], nuevo: r[9], tipo: r[10], detalle: r[11] });
+      filas.push(i + 2);
+    }
+  });
+  if (!pend.length) return 0;
+  var resp = UrlFetchApp.fetch(URL_NOTIFICAR_CAMBIOS, {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify({ token: TOKEN_CORREO_CAMBIOS, cambios: pend.slice(0, 200) })
+  });
+  var ok = false;
+  try { ok = resp.getResponseCode() === 200 && JSON.parse(resp.getContentText()).ok === true; } catch (e) {}
+  if (!ok) { Logger.log('Correo de cambios no enviado: ' + resp.getResponseCode() + ' ' + resp.getContentText()); return 0; }
+  var ahora = new Date();
+  filas.slice(0, 200).forEach(function(f) { sh.getRange(f, 15).setValue(ahora).setNumberFormat('dd/mm/yyyy hh:mm'); });
+  return Math.min(pend.length, 200);
+}
+
+/** Para probar el correo sin esperar los 15 minutos. */
+function probarCorreoCambios() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  _escribirHistorial(ss, [_evento('Prueba', Session.getEffectiveUser().getEmail(), '0000', 'PRUEBA', '—', 'Prueba de correo',
+    'Fecha fin real', '01/01/2026', '02/01/2026', 'Prueba', 'Correo de prueba del historial de cambios.', '', true)]);
+  var n = _enviarResumenCambios(ss);
+  SpreadsheetApp.getUi().alert(n ? '✅ Correo de prueba enviado.' : '⚠ No se envió. Revisa URL_NOTIFICAR_CAMBIOS, TOKEN y el PHP (Ver > Registros).');
+}
+
+// ── API: historial (solo lectura) ────────────────────────────
+function getDatosHistorial() {
+  var ss = SpreadsheetApp.openById(ID_MAESTRA);
+  var sh = ss.getSheetByName(HOJA_HISTORIAL);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var last = sh.getLastRow(), n = Math.min(1000, last - 1);
+  var v = sh.getRange(last - n + 1, 1, n, ENC_HISTORIAL.length).getValues();
+  return v.reverse().map(function(r) {
+    return { fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : String(r[0]),
+      usuario: String(r[1]), correo: String(r[2]), op: String(r[3]).replace(/\.0$/, ''), area: String(r[4]),
+      sub: String(r[5]), tarea: String(r[6]), campo: String(r[7]), anterior: String(r[8]), nuevo: String(r[9]),
+      tipo: String(r[10]), detalle: String(r[11]) };
+  });
+}
+
+// ── v4: evidencia de avance real por OP|área|subestructura ──
+/** true para cada fila de LOOKER_MAESTRA cuya subestructura tiene evidencia real
+ *  (alguna tarea Terminado/Reproceso o KG avance > 0). Sin evidencia, el
+ *  cumplimiento no se informa (antes salía 100% con fechas copiadas del plan). */
+function _evidenciaPorFila(data) {
+  var ev = {}, claves = [], op = '', sub = '', area = '';
+  for (var i = 1; i < data.length; i++) {
+    var row = data[i];
+    if (row[0]) area = String(row[0]).trim();
+    if (row[2] && String(row[2]).trim().replace(/\.0$/, '') !== op) { op = String(row[2]).trim().replace(/\.0$/, ''); sub = ''; }
+    if (row[11] !== '' && row[11] !== null && row[11] !== undefined) sub = String(row[11]).trim();
+    var k = op + '|' + area + '|' + sub;
+    claves[i] = k;
+    var est = String(row[16] || '').trim();
+    if (est === 'Terminado' || est === 'Reproceso' || (parseFloat(row[19]) || 0) > 0) ev[k] = true;
+  }
+  return claves.map(function(k) { return !!ev[k]; });
 }

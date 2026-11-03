@@ -1,4 +1,11 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.1 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.2 (fusionada)
+//
+// v4.2:
+//  - Línea base: si la tarea "Entrega en negro" ya está Terminado y tiene una
+//    fecha de inicio real válida, la sincronización ya no le cambia el inicio
+//    real ni la duración real (su fecha fin real queda fija). Si está Terminado
+//    pero SIN inicio válido (caso 01/01/1900 → 31.023 días), se sigue corrigiendo
+//    como en v4.1. El KG sigue subiendo como antes.
 //
 // v4.1:
 //  - Una fecha anterior al año 2000 (p. ej. 01/01/1900 de una celda de inicio
@@ -906,11 +913,12 @@ function sincronizarDiarioACronograma() {
         let cambio = false;
         if (real > kgActual) { sh.getRange(r, C.KG_AV).setValue(real); cambio = true; }
         const kgFinal = Math.max(real, kgActual);
-        const usaIniDiario = !!(ini && (!iniActual || ini < iniActual));
+        const lineaBase = actual === 'Terminado' && !!iniActual;   // v4.2: Terminado con fecha real válida = línea base
+        const usaIniDiario = !lineaBase && !!(ini && (!iniActual || ini < iniActual));
         if (usaIniDiario) { sh.getRange(r, C.F_INI_REAL).setValue(ini).setNumberFormat('dd/mm/yyyy'); cambio = true; }
         // La duración solo se calcula con el reporte diario cuando el inicio también sale
         // de él (o no hay duración digitada); si Producción ya tenía fechas propias, se respetan.
-        if (usaIniDiario || durActual <= 0) {
+        if (!lineaBase && (usaIniDiario || durActual <= 0)) {   // v4.2
           const dur = Math.max(1, diasHabiles_(usaIniDiario ? ini : iniActual, fin));
           if (dur !== durActual) { sh.getRange(r, C.DUR_REAL).setValue(dur); cambio = true; }
         }
