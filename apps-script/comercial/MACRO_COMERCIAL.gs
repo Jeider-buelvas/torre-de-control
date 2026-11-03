@@ -1,4 +1,21 @@
 // ============================================================
+//  MACRO_COMERCIAL — v13
+//  v13 (acuerdos de la reunión):
+//   - Las tareas NUEVAS nacen en estado "Abierto" (antes "En pausa", que en las
+//     áreas tipo A sumaba % de aporte sin trabajo real). Las O.P ya existentes
+//     no se tocan.
+//   - Las tareas NUEVAS ya no reciben una fecha de inicio real automática
+//     (antes = fecha de inicio planeada, y las siguientes encadenadas), porque
+//     hacía ver fechas "reales" y 100% de cumplimiento sin avance. Si Comercial
+//     digita inicio/duración real en la hoja O.P, se siguen pasando como antes.
+//     Las siguientes tareas se encadenan solo cuando la anterior tiene fin real.
+//   - Orden de áreas parametrizable en ORDEN_AREAS (Diseño → Dibujo → Compras →
+//     Producción → Galvanizado → Pintura → Logística → Montaje → Administración).
+//     El menú "🔀 Ordenar lista de áreas" acomoda la lista de chequeo de
+//     BASE_CREADOR en ese orden; cada casilla se ubica por su nombre.
+//   - "Extraer Datos al Gantt": las tareas de Comercial ya no aparecen como
+//     Terminado / 100% con fecha fija.
+//
 //  MACRO_COMERCIAL — v12
 //  v12 (auditoría vs. original):
 //   - Recuperado del original: al actualizar la O.P en las áreas se vuelven a
@@ -256,10 +273,11 @@ const AS_FILAS = {
 // v4: solo Administración es área general — Gestión Humana ya no existe como área
 const AREAS_GENERALES = ['Administración'];
 
+// v13: secuencia lógica del proceso acordada en la reunión. Para cambiarla,
+//      basta con reordenar esta lista (y usar el menú "🔀 Ordenar lista de áreas").
 const ORDEN_AREAS = [
-  // v4: 'Gestión Humana' eliminada — su tarea está dentro de Montaje
-  'Administración','Diseño','Dibujo','Compras',
-  'Produccion','Galvanizado','Pintura','Logistica','Montaje'
+  'Diseño','Dibujo','Compras','Produccion',
+  'Galvanizado','Pintura','Logistica','Montaje','Administración'
 ];
 
 // v8: Fecha de entrega al cliente
@@ -302,6 +320,7 @@ function onOpen() {
     .addItem('🔐 Autorizar / probar acceso a las áreas', 'autorizarAreas')
     .addItem('✉️ Probar correo de nueva O.P', 'probarCorreoNuevaOP')
     .addItem('📨 Reenviar correo de una O.P ya creada', 'reenviarCorreoOP')
+    .addItem('🔀 Ordenar lista de áreas (BASE_CREADOR)', 'ordenarListaAreas')
     .addToUi();
 }
 
@@ -1212,7 +1231,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
 
     tSheet.getRange(r, 14).setValue(descTarea);
     tSheet.getRange(r, 15).setValue(responsable);
-    tSheet.getRange(r, 16).setValue('En pausa');
+    tSheet.getRange(r, 16).setValue('Abierto');   // v13: estado inicial real (antes 'En pausa')
 
     // Col Q (%_APORTE_TAREA)
     if (ctx.tipoArea === 'A') {
@@ -1241,9 +1260,11 @@ function _escribirSub(tSheet, ctx, s, subStart) {
     if (fechaIniReal && fechaIniReal instanceof Date && fechaIniReal.getFullYear() > 1900) {
       tSheet.getRange(r, 21).setValue(fechaIniReal).setNumberFormat('dd/mm/yyyy');
     } else if (isFirstSub) {
-      tSheet.getRange(r, 21).setFormula('=' + PL(30) + r);
+      // v13: sin inicio real automático (antes '=' + PL(30) + r, copia del inicio planeado).
+      //      Queda vacío hasta que el área registre cuándo empezó realmente.
     } else {
-      tSheet.getRange(r, 21).setValue('=WORKDAY(W' + (r-1) + ';1;DIAS_FESTIVOS!$A$3:$A$20)');
+      // v13: se encadena solo si la tarea anterior ya tiene fin real (antes daba 01/01/1900 si estaba vacía)
+      tSheet.getRange(r, 21).setValue('=IF(W' + (r-1) + '="";"";WORKDAY(W' + (r-1) + ';1;DIAS_FESTIVOS!$A$3:$A$20))');
     }
 
     if (durReal && typeof durReal === 'number' && durReal > 0) {
@@ -1440,9 +1461,10 @@ function actualizarGanttEnComercial() {
 
   var tareas = [];
   tareas.push(['Comercial','Inicio de Proyecto (COMERCIAL)','','0%','','','']);
-  tareas.push(['Comercial','Revisión y Firma del Contrato','Cliente','Terminado','100%',new Date('2025-12-30'),new Date('2025-12-30')]);
-  tareas.push(['Comercial','Cuenta de Cobro / Gestión de Pólizas','Administración','Terminado','100%',new Date('2025-12-30'),new Date('2025-12-30')]);
-  tareas.push(['Comercial','Recepción de Anticipo','Cliente','Terminado','100%',new Date('2025-12-30'),new Date('2025-12-30')]);
+  // v13: sin estados ni fechas automáticas (antes 'Terminado', 100% y 30/12/2025 fijos)
+  tareas.push(['Comercial','Revisión y Firma del Contrato','Cliente','Abierto',0,'','']);
+  tareas.push(['Comercial','Cuenta de Cobro / Gestión de Pólizas','Administración','Abierto',0,'','']);
+  tareas.push(['Comercial','Recepción de Anticipo','Cliente','Abierto',0,'','']);
 
   var areaNames = Object.keys(IDS_AREAS);
   for (var ai = 0; ai < areaNames.length; ai++) {
@@ -1604,7 +1626,58 @@ function _tieneCampoFecha(form) {
 
 /** Fila real del checkbox de un área (se corre +1 si existe el campo de fecha). */
 function _filaArea(form, area) {
+  // v13: primero se busca la casilla por el NOMBRE del área en la columna B
+  //      (así la lista se puede reordenar); si no se encuentra, fila original.
+  var f = _filaAreaPorNombre(form, area);
+  if (f) return f;
   return AREAS_FILAS[area] + (_tieneCampoFecha(form) ? 1 : 0);
+}
+
+/** v13: fila de la lista de chequeo cuyo texto (col B) corresponde al área, o 0. */
+function _filaAreaPorNombre(form, area) {
+  var r = _rangoListaAreas(form);
+  if (!r) return 0;
+  var et = form.getRange(r.ini, 2, r.fin - r.ini + 1, 1).getValues();
+  var buscado = _norm(area);
+  for (var i = 0; i < et.length; i++) {
+    if (_norm(et[i][0]).replace(/[^A-Z ]/g, '').trim() === buscado) return r.ini + i;
+  }
+  return 0;
+}
+
+/** v13: filas que ocupa la lista de chequeo de áreas (según AREAS_FILAS + corrimiento). */
+function _rangoListaAreas(form) {
+  var filas = Object.keys(AREAS_FILAS).map(function(a) { return AREAS_FILAS[a]; });
+  var d = _tieneCampoFecha(form) ? 1 : 0;
+  return { ini: Math.min.apply(null, filas) + d, fin: Math.max.apply(null, filas) + d };
+}
+
+/**
+ * v13 — Menú "🔀 Ordenar lista de áreas": reescribe los nombres de la lista de
+ * chequeo de BASE_CREADOR en el orden de ORDEN_AREAS y desmarca las casillas.
+ * No toca ninguna otra celda; las casillas se siguen leyendo por nombre.
+ */
+function ordenarListaAreas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var form = ss.getSheetByName('BASE_CREADOR');
+  if (!form) { ui.alert('❌ No se encontró la hoja "BASE_CREADOR".'); return; }
+  if (_opEnEdicion()) { ui.alert('⚠ Hay una O.P en edición. Guarda o cancela la edición antes de ordenar la lista.'); return; }
+  var r = _rangoListaAreas(form), n = r.fin - r.ini + 1;
+  var et = form.getRange(r.ini, 2, n, 1).getValues();
+  // Texto actual de cada área (se conserva tal cual, solo cambia de fila)
+  var texto = {};
+  Object.keys(AREAS_FILAS).forEach(function(a) {
+    for (var i = 0; i < n; i++) {
+      if (_norm(et[i][0]).replace(/[^A-Z ]/g, '').trim() === _norm(a)) { texto[a] = et[i][0]; return; }
+    }
+  });
+  var faltan = Object.keys(AREAS_FILAS).filter(function(a) { return !texto[a]; });
+  if (faltan.length) { ui.alert('❌ No encontré en la lista de chequeo: ' + faltan.join(', ') + '.\nNo se cambió nada.'); return; }
+  var orden = _ordenarAreas(Object.keys(AREAS_FILAS).slice());
+  if (orden.length !== n) { ui.alert('❌ La lista tiene ' + n + ' filas y hay ' + orden.length + ' áreas. No se cambió nada.'); return; }
+  form.getRange(r.ini, 2, n, 1).setValues(orden.map(function(a) { return [texto[a]]; }));
+  form.getRange(r.ini, 3, n, 1).setValue(false);
+  ui.alert('✅ Lista de áreas ordenada:\n' + orden.join(' → '));
 }
 
 /**
