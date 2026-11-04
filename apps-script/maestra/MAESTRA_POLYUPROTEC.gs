@@ -1,4 +1,14 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.3
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.4
+//
+// v4.4 — BITÁCORA DE LA OP (notas, compromisos y bloqueos anotados desde la App):
+//   • Hoja BITACORA_OP (protegida, solo la escribe el script). No se borra ni se
+//     edita: los compromisos/bloqueos se CIERRAN con una nota de cierre.
+//   • doPost: la App escribe a través de bitacora.php (verifica la sesión) con el TOKEN.
+//   • API: "bitacora" en ?tipo=todos y ?tipo=bitacora.
+//   • Correo semanal (lunes 7 a. m.) con compromisos vencidos, por vencer y bloqueos.
+//   • La bitácora NO cambia avance, semáforo ni cumplimiento.
+//
+// v4.3
 //
 // v4.3: ID_COMERCIAL corregido (I mayúscula). Entregas: si una OP aparece repetida en
 //       ENTREGAS_CLIENTE se toma una sola (la que tenga entrega real; si no, la última),
@@ -79,6 +89,10 @@ function onOpen() {
     .addItem('📜 Ver historial de cambios', 'verHistorialCambios')
     .addItem('✉️ Probar correo de cambios', 'probarCorreoCambios')
     .addItem('⛔ Desinstalar protección', 'desinstalarProteccion')
+    .addSeparator()
+    .addItem('📝 Ver bitácora de las OP', 'verBitacora')
+    .addItem('📅 Activar correo semanal de la bitácora (una sola vez)', 'activarCorreoBitacora')
+    .addItem('✉️ Probar correo de la bitácora', 'probarCorreoBitacora')
     .addToUi();
 }
 
@@ -397,6 +411,7 @@ function doGet(e) {
     case 'produccion': output = getDatosProduccion(); break;   // v3
     case 'historial':  output = getDatosHistorial();  break;   // v4
     case 'entregas':   output = getDatosEntregas();   break;   // v4.1
+    case 'bitacora':   output = getDatosBitacora();   break;   // v4.4
     default:      output = getTodosDatos();  break;
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
@@ -411,7 +426,8 @@ function getTodosDatos() {
     tareas: getDatosTareas(),
     produccion: getDatosProduccion(),     // v3
     historial: getDatosHistorial(),       // v4
-    entregas: getDatosEntregas()          // v4.1
+    entregas: getDatosEntregas(),         // v4.1
+    bitacora: getDatosBitacora()          // v4.4
   };
 }
 
@@ -1462,4 +1478,146 @@ function getDatosEntregas() {
       reprog: reprog[op] || [] });
   });
   return out;
+}
+
+
+// ============================================================
+//  v4.4 — BITÁCORA DE LA OP
+// ============================================================
+var HOJA_BITACORA = 'BITACORA_OP';
+var ENC_BITACORA = ['ID','FECHA_HORA','AUTOR','CORREO','OP','AREA','TIPO','DESCRIPCION','RESPONSABLE',
+                    'FECHA_COMPROMISO','ESTADO','FECHA_CIERRE','CERRADO_POR','NOTA_CIERRE'];
+var TIPOS_BITACORA = ['Nota', 'Compromiso', 'Bloqueo'];
+var TOKEN_BITACORA = TOKEN_CORREO_CAMBIOS;   // mismo token que usan los PHP del hosting
+var URL_NOTIFICAR_BITACORA = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_bitacora.php';
+var CORREO_BITACORA_ACTIVO = true;
+
+function _hojaBitacora(ss) {
+  var sh = ss.getSheetByName(HOJA_BITACORA);
+  if (!sh) {
+    sh = ss.insertSheet(HOJA_BITACORA);
+    sh.getRange(1, 1, 1, ENC_BITACORA.length).setValues([ENC_BITACORA])
+      .setFontWeight('bold').setBackground('#2b2b40').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+    sh.getRange('B:B').setNumberFormat('dd/mm/yyyy hh:mm'); sh.getRange('J:J').setNumberFormat('dd/mm/yyyy'); sh.getRange('L:L').setNumberFormat('dd/mm/yyyy hh:mm');
+    _protegerHoja(sh, 'Bitácora de las OP — solo la escribe el script (desde la App)');
+  }
+  return sh;
+}
+
+function verBitacora() { var ss = SpreadsheetApp.getActiveSpreadsheet(); ss.setActiveSheet(_hojaBitacora(ss)); }
+
+/** Recibe las anotaciones desde bitacora.php (hosting). Responde JSON. */
+function doPost(e) {
+  var r;
+  try { r = _bitacoraPost(JSON.parse(e && e.postData ? e.postData.contents : '{}')); }
+  catch (err) { r = { ok: false, error: 'Solicitud inválida: ' + err.message }; }
+  return ContentService.createTextOutput(JSON.stringify(r)).setMimeType(ContentService.MimeType.JSON);
+}
+
+function _bitacoraPost(b) {
+  if (!b || b.token !== TOKEN_BITACORA) return { ok: false, error: 'Token inválido' };
+  var u = b.usuario || {}, correo = String(u.correo || '').trim().toLowerCase(), autor = String(u.nombre || '').trim() || correo;
+  if (!/^[^@\s]+@[^@\s]+$/.test(correo)) return { ok: false, error: 'Usuario sin sesión' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(20000); } catch (er) { return { ok: false, error: 'Ocupado, intenta de nuevo' }; }
+  try {
+    var ss = SpreadsheetApp.openById(ID_MAESTRA), sh = _hojaBitacora(ss);
+    var txt = function(v, max) { return String(v == null ? '' : v).replace(/[\r\n]+/g, ' ').trim().slice(0, max); };
+    if (b.accion === 'agregar') {
+      var d = b.datos || {}, tipo = txt(d.tipo, 20), op = txt(d.op, 20).replace(/\.0$/, ''), desc = txt(d.descripcion, 600);
+      var resp = txt(d.responsable, 80), area = txt(d.area, 40), fc = d.fechaCompromiso ? _fechaISO(d.fechaCompromiso) : null;
+      if (TIPOS_BITACORA.indexOf(tipo) === -1) return { ok: false, error: 'Tipo no válido' };
+      if (!op) return { ok: false, error: 'Falta la OP' };
+      if (desc.length < 3) return { ok: false, error: 'Escribe la descripción' };
+      if (tipo === 'Compromiso' && (!resp || !fc)) return { ok: false, error: 'El compromiso necesita responsable y fecha' };
+      if (d.fechaCompromiso && !fc) return { ok: false, error: 'Fecha de compromiso no válida' };
+      var ahora = new Date();
+      var id = 'B' + Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 900 + 100);
+      var estado = tipo === 'Nota' ? 'Registrada' : 'Abierto';
+      sh.getRange(sh.getLastRow() + 1, 1, 1, ENC_BITACORA.length).setValues([[id, ahora, autor, correo, op, area, tipo, desc, resp, fc || '', estado, '', '', '']]);
+      _escribirHistorial(ss, [_evento(autor, correo, op, area, '', '', 'Bitácora: ' + tipo, '', desc, 'Bitácora', resp ? 'Responsable: ' + resp + (fc ? ' · compromiso ' + _txtValor(fc) : '') : '', '', false)]);
+      return { ok: true, registro: _filaBitacoraJSON([id, ahora, autor, correo, op, area, tipo, desc, resp, fc || '', estado, '', '', '']) };
+    }
+    if (b.accion === 'cerrar') {
+      var idC = txt(b.id, 40), nota = txt(b.nota, 400);
+      if (nota.length < 3) return { ok: false, error: 'Escribe cómo se resolvió' };
+      var last = sh.getLastRow();
+      if (last < 2) return { ok: false, error: 'No existe la anotación' };
+      var ids = sh.getRange(2, 1, last - 1, 1).getValues();
+      for (var i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) !== idC) continue;
+        var fila = sh.getRange(i + 2, 1, 1, ENC_BITACORA.length).getValues()[0];
+        if (fila[6] === 'Nota') return { ok: false, error: 'Las notas no se cierran' };
+        if (fila[10] === 'Cerrado') return { ok: false, error: 'Ya estaba cerrada' };
+        var cierre = new Date();
+        sh.getRange(i + 2, 11, 1, 4).setValues([['Cerrado', cierre, autor + ' <' + correo + '>', nota]]);
+        _escribirHistorial(ss, [_evento(autor, correo, fila[4], fila[5], '', '', 'Bitácora: ' + fila[6] + ' cerrado', 'Abierto', 'Cerrado', 'Bitácora', nota, '', false)]);
+        fila[10] = 'Cerrado'; fila[11] = cierre; fila[12] = autor + ' <' + correo + '>'; fila[13] = nota;
+        return { ok: true, registro: _filaBitacoraJSON(fila) };
+      }
+      return { ok: false, error: 'No existe la anotación' };
+    }
+    return { ok: false, error: 'Acción no válida' };
+  } finally { lock.releaseLock(); }
+}
+
+function _fechaISO(v) {
+  var m = String(v).match(/^(\d{4})-(\d{2})-(\d{2})$/) || null;
+  if (m) { var d = new Date(+m[1], +m[2] - 1, +m[3]); return isNaN(d) ? null : d; }
+  m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) { var d2 = new Date(+m[3], +m[2] - 1, +m[1]); return isNaN(d2) ? null : d2; }
+  return null;
+}
+
+function _filaBitacoraJSON(r) {
+  var tz = Session.getScriptTimeZone();
+  var f = function(v, fmt) { return v instanceof Date ? Utilities.formatDate(v, tz, fmt) : String(v || ''); };
+  return { id: String(r[0]), fecha: f(r[1], 'dd/MM/yyyy HH:mm'), autor: String(r[2]), correo: String(r[3]), op: String(r[4]).replace(/\.0$/, ''),
+           area: String(r[5]), tipo: String(r[6]), descripcion: String(r[7]), responsable: String(r[8]), fechaCompromiso: f(r[9], 'dd/MM/yyyy'),
+           estado: String(r[10]), fechaCierre: f(r[11], 'dd/MM/yyyy HH:mm'), cerradoPor: String(r[12]), notaCierre: String(r[13]) };
+}
+
+function getDatosBitacora() {
+  var ss = SpreadsheetApp.openById(ID_MAESTRA), sh = ss.getSheetByName(HOJA_BITACORA);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, ENC_BITACORA.length).getValues()
+    .filter(function(r) { return String(r[0]).trim(); }).map(_filaBitacoraJSON);
+}
+
+// ── Correo semanal ───────────────────────────────────────────
+function activarCorreoBitacora() {
+  ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_correoSemanalBitacora') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('_correoSemanalBitacora').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(7).create();
+  _hojaBitacora(SpreadsheetApp.getActiveSpreadsheet());
+  SpreadsheetApp.getUi().alert('📅 Correo semanal activado: todos los lunes a las 7 a. m. con los compromisos vencidos, los que vencen en 7 días y los bloqueos abiertos.');
+}
+
+function probarCorreoBitacora() {
+  var r = _correoSemanalBitacora(true);
+  SpreadsheetApp.getUi().alert(r === 'ok' ? '✅ Correo de la bitácora enviado.' : (r === 'vacio' ? 'ℹ️ No hay compromisos ni bloqueos abiertos: no se envió correo.' : '⚠ No se envió: ' + r));
+}
+
+function _correoSemanalBitacora(forzar) {
+  if (!CORREO_BITACORA_ACTIVO && forzar !== true) return 'apagado';
+  var lista = getDatosBitacora().filter(function(b) { return b.estado === 'Abierto'; });
+  var hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  var en7 = new Date(hoy.getTime() + 7 * 86400000);
+  var pd = function(s) { var p = String(s).split('/'); return p.length === 3 ? new Date(+p[2], +p[1] - 1, +p[0]) : null; };
+  var nombres = {};
+  try { getDatosOPs().forEach(function(o) { nombres[o.op] = { nombre: o.nombre, cliente: o.cliente, comercial: o.comercial }; }); } catch (e) {}
+  var conOP = function(b) { var o = nombres[b.op] || {}; b.nombreOP = o.nombre || ''; b.cliente = o.cliente || ''; b.comercial = o.comercial || ''; return b; };
+  var vencidos = [], proximos = [], bloqueos = [];
+  lista.forEach(function(b) {
+    var f = pd(b.fechaCompromiso);
+    if (b.tipo === 'Bloqueo') bloqueos.push(conOP(b));
+    else if (f && f < hoy) { b.dias = Math.round((hoy - f) / 86400000); vencidos.push(conOP(b)); }
+    else if (f && f <= en7) { b.dias = Math.round((f - hoy) / 86400000); proximos.push(conOP(b)); }
+  });
+  if (!vencidos.length && !proximos.length && !bloqueos.length) return 'vacio';
+  var resp = UrlFetchApp.fetch(URL_NOTIFICAR_BITACORA, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    payload: JSON.stringify({ token: TOKEN_BITACORA, vencidos: vencidos, proximos: proximos, bloqueos: bloqueos }) });
+  try { if (resp.getResponseCode() === 200 && JSON.parse(resp.getContentText()).ok) return 'ok'; } catch (e) {}
+  Logger.log('Correo bitácora: ' + resp.getResponseCode() + ' ' + resp.getContentText());
+  return 'error ' + resp.getResponseCode();
 }
