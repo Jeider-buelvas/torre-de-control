@@ -161,9 +161,9 @@ function plantillaNuevaOP($op, $C) {
 
 
     return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-    . '<title>Nueva O.P ' . e($op['op']) . '</title></head>'
+    . '<title>O.P registrada ' . e($op['op']) . '</title></head>'
     . '<body style="margin:0;padding:0;background:#f4f5fb">'
-    . '<div style="display:none;max-height:0;overflow:hidden">Se creó la O.P ' . e($op['op']) . ' — ' . e($op['nombre']) . ' para ' . e($op['cliente']) . '</div>'
+    . '<div style="display:none;max-height:0;overflow:hidden">Se registró la O.P ' . e($op['op']) . ' — ' . e($op['nombre']) . ' para ' . e($op['cliente']) . '</div>'
     . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5fb"><tr><td align="center" style="padding:28px 12px">'
     . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 4px 24px rgba(43,43,64,.08)">'
 
@@ -172,8 +172,8 @@ function plantillaNuevaOP($op, $C) {
     .   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>'
     .   '<td style="font-family:Arial,Helvetica,sans-serif;color:#ffffff">'
     .     '<div style="font-size:12px;letter-spacing:1px;opacity:.9;text-transform:uppercase">🏗️ Torre de Control · Polyuprotec S.A.</div>'
-    .     '<div style="font-size:24px;font-weight:bold;margin-top:8px">🆕 ¡Se creó una nueva O.P!</div>'
-    .     '<div style="font-size:13px;opacity:.9;margin-top:4px">Creada el ' . $ahora . '</div>'
+    .     '<div style="font-size:24px;font-weight:bold;margin-top:8px">🆕 ¡Se registró una nueva O.P!</div>'
+    .     '<div style="font-size:13px;opacity:.9;margin-top:4px">Registrada el ' . $ahora . '</div>'
     .   '</td>'
     .   (!empty($C['_LOGO']) ? '<td align="right" valign="top" width="120"><span style="display:inline-block;background:#ffffff;border-radius:12px;padding:8px 12px;box-shadow:0 4px 14px rgba(0,0,0,.12)"><img src="' . e($C['_LOGO_SRC'] ?? 'cid:logo-polyuprotec') . '" alt="Polyuprotec S.A." width="91" height="45" style="display:block;width:91px;height:45px;border:0"></span></td>' : '')
     .   '</tr></table>'
@@ -196,7 +196,7 @@ function plantillaNuevaOP($op, $C) {
     .   $fila('📍', 'Sede / Ciudad', e($op['sede']))
     .   $fila('🧩', 'Subestructuras por área', e($op['subs']))
     .   $fila('🏁', 'Fecha de entrega al cliente', '<span style="color:' . $fColor . '">' . e($fTxt) . '</span>', $chipEntrega)
-    .   $fila('✍️', 'Creada por', e($op['creador'] ?: $op['comercial']))
+    .   $fila('✍️', 'Registrada por', e($op['creador'] ?: $op['comercial']))
     . '</table></td></tr>'
 
     // Áreas
@@ -218,7 +218,7 @@ function plantillaNuevaOP($op, $C) {
 
     // Pie
     . '<tr><td style="background:#f7f7fc;border-top:1px solid #edeef5;padding:16px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8f9bb3;text-align:center;line-height:1.6">'
-    .   'Este correo se envió automáticamente al crear la O.P en la Torre de Control.<br>'
+    .   'Este correo se envió automáticamente al registrar la O.P en la Torre de Control.<br>'
     .   '<b style="color:#7c5cfc">Polyuprotec S.A.</b> · Sistema de Monitoreo Operativo<br>'
     .   'Desarrollado por <b style="color:#7c5cfc">Jeider Buelvas</b> · Desarrollador Full Stack'
     . '</td></tr>'
@@ -227,7 +227,7 @@ function plantillaNuevaOP($op, $C) {
 }
 
 function textoPlano($op, $C) {
-    return "Se creó una nueva O.P en la Torre de Control\n\n"
+    return "Se registró una nueva O.P en la Torre de Control\n\n"
         . "O.P: {$op['op']} - {$op['nombre']}\nCliente: {$op['cliente']}\nComercial: {$op['comercial']}\n"
         . "Sede: {$op['sede']}\nSubestructuras: {$op['subs']}\nFecha de entrega: {$op['entrega']}\n"
         . "Áreas: " . implode(', ', $op['areas']) . "\n\nTorre de Control: {$C['APP_URL']}\n"
