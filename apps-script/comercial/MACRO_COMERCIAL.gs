@@ -1,4 +1,12 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.3 (rendimiento)
+//  v14.3: Cargar OP para editar, Guardar cambios y Buscar O.P más rápidos.
+//   - El formulario BASE_CREADOR se lee UNA vez por comando (antes la lista de
+//     áreas se releía por cada área) y las casillas se marcan/limpian en bloque.
+//   - La sede de la hoja OP se escribe en una sola llamada.
+//   - La lista de O.P queda en caché (se renueva al crear/editar una OP o con ↻);
+//     Buscar O.P tiene botón ✏️ Editar. Mismo resultado celda por celda que v14.2.
+//
 //  MACRO_COMERCIAL — v14.2
 //  v14.2: menú "🔎 Buscar O.P" (al lado de "🚀 Torre de Control") y función
 //         buscarOP para el botón de BASE_CREADOR: ventana con buscador por número,
@@ -379,10 +387,11 @@ function _leerFormularioOP(form) {
   };
   d.fechaEntrega = d.tieneFecha ? form.getRange(FILA_FECHA_ENTREGA, 3).getValue() : '';
 
-  var areaNames = Object.keys(AREAS_FILAS);
-  for (var a = 0; a < areaNames.length; a++) {
-    if (form.getRange(_filaArea(form, areaNames[a]), 3).getValue() === true) d.areas.push(areaNames[a]);
-  }
+  // v14.3: todas las casillas en una sola lectura
+  var cas = _filasCasillas(form), fMin = Math.min.apply(null, cas.map(function(c) { return c.fila; }));
+  var fMax = Math.max.apply(null, cas.map(function(c) { return c.fila; }));
+  var vC = form.getRange(fMin, 3, fMax - fMin + 1, 1).getValues();
+  cas.forEach(function(c) { if (vC[c.fila - fMin][0] === true) d.areas.push(c.area); });
   _ordenarAreas(d.areas);
 
   var f = [];
@@ -455,6 +464,7 @@ function crearNuevaOP() {
   if (confirm !== ui.Button.YES) return;
 
   _crearHojaOP(ss, d.op, d.nombreOp, d.cliente, d.comercial, d.sede, d.numSubs, 0, d.areas, numAreas, d.fechaEntrega);
+  _invalidarListaOP();   // v14.3
   _limpiarFormulario(form);
 
   var reg = _nuevoRegistro(d.op);
@@ -489,7 +499,7 @@ function cargarOPParaEditar(opParam) {
 
   var op = (typeof opParam === 'string') ? opParam : form.getRange('C3').getValue().toString().trim();
   if (!op || !_esHojaOP(ss.getSheetByName(op))) {
-    var lista = _listarOPs(ss);
+    var lista = _listaOPsBusqueda().map(function(o) { return o.hoja; });   // v14.3: lista en caché
     if (!lista.length) { ui.alert('No hay OPs creadas todavía.'); return; }
     var pr = ui.prompt('✏️ Cargar OP para editar',
       'Escribe el número de la OP que quieres editar.\n\nOPs disponibles:\n' + lista.join(', '),
@@ -502,16 +512,10 @@ function cargarOPParaEditar(opParam) {
 
   var m = _leerMetaOP(ws);
   _limpiarFormulario(form);
-  form.getRange('C3').setValue(m.op);
-  form.getRange('C4').setValue(m.nombreOp);
-  form.getRange('C5').setValue(m.cliente);
-  form.getRange('C6').setValue(m.comercial);
-  form.getRange('C7').setValue(m.sede);
-  form.getRange('C8').setValue(m.numSubs);
+  form.getRange('C3:C8').setValues([[m.op], [m.nombreOp], [m.cliente], [m.comercial], [m.sede], [m.numSubs]]);   // v14.3
   if (_tieneCampoFecha(form) && _esFecha(m.fecha)) form.getRange(FILA_FECHA_ENTREGA, 3).setValue(m.fecha);
-  for (var i = 0; i < m.areas.length; i++) {
-    if (AREAS_FILAS[m.areas[i]]) form.getRange(_filaArea(form, m.areas[i]), 3).setValue(true);
-  }
+  var marcar = m.areas.filter(function(a) { return AREAS_FILAS[a]; }).map(function(a) { return 'C' + _filaArea(form, a); });
+  if (marcar.length) form.getRangeList(marcar).setValue(true);
 
   PropertiesService.getUserProperties().setProperty(PROP_EDICION, m.op);
   _avisoEdicion(form, m.op);
@@ -590,6 +594,7 @@ function guardarCambiosOP() {
 
   if (estructural) ws = _reconstruirHojaOP(ss, ws, d, m);
   else             _actualizarMetaOP(ws, d);
+  _invalidarListaOP();   // v14.3
 
   var reg = _nuevoRegistro(d.op);
   cambios.forEach(function(c) { reg.add('Formulario BASE_CREADOR', '', '', '', c[0], c[1], c[2]); });
@@ -682,10 +687,11 @@ function _actualizarMetaOP(ws, d) {
   ws.getRange(1, COL_META_FECHA).setValue(d.fechaEntrega).setNumberFormat('dd/mm/yyyy');
   var last = ws.getLastRow();
   if (last < 2) return;
-  var colD = ws.getRange(2, 4, last - 1, 1).getValues();
+  var colD = ws.getRange(2, 4, last - 1, 1).getValues(), celdasG = [];
   for (var i = 0; i < colD.length; i++) {
-    if (String(colD[i][0]).trim()) ws.getRange(i + 2, 7).setValue(d.sede);
+    if (String(colD[i][0]).trim()) celdasG.push('G' + (i + 2));
   }
+  if (celdasG.length) ws.getRangeList(celdasG).setValue(d.sede);   // v14.3: una sola llamada
 }
 
 /** Recorre la hoja OP: cb(fila, area, sub, tarea, esInicioSub, valoresFila) */
@@ -1620,13 +1626,8 @@ function _getNombreMes() {
 function _limpiarFormulario(form) {
   var celdas = ['C3','C4','C5','C6','C7','C8'];
   if (_tieneCampoFecha(form)) celdas.push('C' + FILA_FECHA_ENTREGA);   // v8
-  for (var i = 0; i < celdas.length; i++) {
-    form.getRange(celdas[i]).clearContent();
-  }
-  var areaNames = Object.keys(AREAS_FILAS);
-  for (var a = 0; a < areaNames.length; a++) {
-    form.getRange(_filaArea(form, areaNames[a]), 3).setValue(false);
-  }
+  form.getRangeList(celdas).clearContent();   // v14.3: una sola llamada
+  form.getRangeList(_filasCasillas(form).map(function(c) { return 'C' + c.fila; })).setValue(false);
 }
 // ====================== FUNCIÓN AUXILIAR PARA RESUMEN ======================
 
@@ -1676,6 +1677,7 @@ function agregarCampoFechaEntrega() {
   }
 
   form.insertRowAfter(FILA_FECHA_ENTREGA - 1);
+  _olvidarFormInfo();   // v14.3
   var f = FILA_FECHA_ENTREGA;
   form.getRange(f - 1, 2, 1, 3).copyFormatToRange(form, 2, 4, f, f);   // mismo estilo que la fila de arriba
   form.getRange(3, 4).copyTo(form.getRange(f, 4), { formatOnly: true }); // estilo amarillo "Obligatorio"
@@ -1693,7 +1695,37 @@ function agregarCampoFechaEntrega() {
 }
 
 function _tieneCampoFecha(form) {
-  return _norm(form.getRange(FILA_FECHA_ENTREGA, 2).getValue()).indexOf('FECHA DE ENTREGA') !== -1;
+  return _formInfo(form).fecha;   // v14.3: leído una sola vez por ejecución
+}
+
+/**
+ * v14.3 — Lee de una vez la columna B (textos) y C (casillas) de BASE_CREADOR
+ * y lo guarda en memoria durante la ejecución. Antes cada consulta (¿hay campo de
+ * fecha?, ¿en qué fila está cada área?) era una lectura aparte a Google.
+ */
+var _FORM_MEMO = null;
+function _formInfo(form) {
+  if (_FORM_MEMO && _FORM_MEMO.id === form.getSheetId()) return _FORM_MEMO;
+  var hasta = Math.max.apply(null, Object.keys(AREAS_FILAS).map(function(a) { return AREAS_FILAS[a]; })) + 2;
+  var v = form.getRange(1, 2, Math.max(hasta, FILA_FECHA_ENTREGA), 1).getValues();
+  var fecha = _norm(v[FILA_FECHA_ENTREGA - 1][0]).indexOf('FECHA DE ENTREGA') !== -1;
+  var filas = {}, d = fecha ? 1 : 0;
+  var ini = Math.min.apply(null, Object.keys(AREAS_FILAS).map(function(a) { return AREAS_FILAS[a]; })) + d;
+  var fin = Math.max.apply(null, Object.keys(AREAS_FILAS).map(function(a) { return AREAS_FILAS[a]; })) + d;
+  Object.keys(AREAS_FILAS).forEach(function(a) {
+    var buscado = _norm(a);
+    for (var r = ini; r <= fin; r++) {
+      if (_norm(v[r - 1][0]).replace(/[^A-Z ]/g, '').trim() === buscado) { filas[a] = r; return; }
+    }
+  });
+  _FORM_MEMO = { id: form.getSheetId(), fecha: fecha, filas: filas, ini: ini, fin: fin };
+  return _FORM_MEMO;
+}
+function _olvidarFormInfo() { _FORM_MEMO = null; }
+
+/** v14.3: filas de las casillas de todas las áreas (en el orden de AREAS_FILAS). */
+function _filasCasillas(form) {
+  return Object.keys(AREAS_FILAS).map(function(a) { return { area: a, fila: _filaArea(form, a) }; });
 }
 
 /** Fila real del checkbox de un área (se corre +1 si existe el campo de fecha). */
@@ -1707,14 +1739,7 @@ function _filaArea(form, area) {
 
 /** v13: fila de la lista de chequeo cuyo texto (col B) corresponde al área, o 0. */
 function _filaAreaPorNombre(form, area) {
-  var r = _rangoListaAreas(form);
-  if (!r) return 0;
-  var et = form.getRange(r.ini, 2, r.fin - r.ini + 1, 1).getValues();
-  var buscado = _norm(area);
-  for (var i = 0; i < et.length; i++) {
-    if (_norm(et[i][0]).replace(/[^A-Z ]/g, '').trim() === buscado) return r.ini + i;
-  }
-  return 0;
+  return _formInfo(form).filas[area] || 0;   // v14.3: desde la lectura única del formulario
 }
 
 /** v13: filas que ocupa la lista de chequeo de áreas (según AREAS_FILAS + corrimiento). */
@@ -1748,6 +1773,7 @@ function ordenarListaAreas() {
   var orden = _ordenarAreas(Object.keys(AREAS_FILAS).slice());
   if (orden.length !== n) { ui.alert('❌ La lista tiene ' + n + ' filas y hay ' + orden.length + ' áreas. No se cambió nada.'); return; }
   form.getRange(r.ini, 2, n, 1).setValues(orden.map(function(a) { return [texto[a]]; }));
+  _olvidarFormInfo();   // v14.3
   form.getRange(r.ini, 3, n, 1).setValue(false);
   ui.alert('✅ Lista de áreas ordenada:\n' + orden.join(' → '));
 }
@@ -2508,13 +2534,25 @@ function irABaseCreador() {
   if (f) ss.setActiveSheet(f);
 }
 
-/** Lista de OP (solo hojas de OP, sin respaldos) con sus datos generales. */
-function _listaOPsBusqueda() {
+/** Lista de OP (solo hojas de OP, sin respaldos) con sus datos generales. v14.3: en caché. */
+var CLAVE_CACHE_OPS = 'TC_LISTA_OP_v1';
+function _invalidarListaOP() { try { CacheService.getDocumentCache().remove(CLAVE_CACHE_OPS); } catch (e) {} }
+function _listaOPsBusqueda(forzar) {
+  var cache = null;
+  try { cache = CacheService.getDocumentCache(); } catch (e) {}
+  if (cache && !forzar) { var c = cache.get(CLAVE_CACHE_OPS); if (c) { try { return JSON.parse(c); } catch (e) {} } }
+  var lista = _leerListaOPs();
+  if (cache) { try { cache.put(CLAVE_CACHE_OPS, JSON.stringify(lista), 21600); } catch (e) {} }
+  return lista;
+}
+function _leerListaOPs() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), tz = Session.getScriptTimeZone(), out = [];
   ss.getSheets().forEach(function(ws) {
     var n = ws.getName();
-    if (n.indexOf('_respaldo_') !== -1 || !_esHojaOP(ws)) return;
-    var v = ws.getRange(1, 28, 1, 10).getValues()[0];   // AB..AK
+    var mc = ws.getMaxColumns();
+    if (n.indexOf('_respaldo_') !== -1 || mc < 36) return;
+    var v = ws.getRange(1, 28, 1, Math.min(10, mc - 27)).getValues()[0];   // AB..AK (una sola lectura por hoja)
+    if (String(v[8]).trim() === '') return;             // AJ vacía = no es hoja de OP (igual que _esHojaOP)
     out.push({ hoja: n, op: String(v[0] || n).trim(), nombre: String(v[1] || ''), cliente: String(v[2] || ''),
                comercial: String(v[3] || ''), sede: String(v[4] || ''),
                entrega: (v[9] instanceof Date && v[9].getFullYear() > 1900) ? Utilities.formatDate(v[9], tz, 'dd/MM/yyyy') : '' });
@@ -2522,6 +2560,11 @@ function _listaOPsBusqueda() {
   out.sort(function(a, b) { return (Number(b.op) || 0) - (Number(a.op) || 0) || a.op.localeCompare(b.op); });
   return out;
 }
+
+/** Desde la ventana: lista recién leída (botón ↻). */
+function listaOPsFresca() { return _listaOPsBusqueda(true); }
+/** Desde la ventana: carga la OP en el formulario para editarla. */
+function editarDesdeBuscar(hoja) { cargarOPParaEditar(String(hoja)); }
 
 /** Menú / botón: abre la ventana de búsqueda. */
 function buscarOP() {
@@ -2533,7 +2576,7 @@ function buscarOP() {
 /** Llamada desde la ventana: activa la hoja de la OP. */
 function irAHojaOP(hoja) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(hoja);
-  if (!ws) throw new Error('La hoja "' + hoja + '" ya no existe');
+  if (!ws) { _invalidarListaOP(); throw new Error('La hoja "' + hoja + '" ya no existe. Pulsa ↻ para actualizar la lista.'); }
   ss.setActiveSheet(ws);
   ws.setActiveRange(ws.getRange('A1'));
   return true;
@@ -2553,8 +2596,11 @@ function _htmlBuscarOP(lista) {
     '.sb{font-size:11.5px;color:#8f9bb3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
     '.en{font-size:11px;color:#5a5a72;white-space:nowrap;background:#f7f7fc;border-radius:12px;padding:3px 8px}' +
     '.vacio{text-align:center;color:#8f9bb3;padding:40px 10px}mark{background:#ffe08a;color:inherit;border-radius:2px}' +
+    '.ed{border:1px solid #dcdce8;background:#fff;border-radius:14px;padding:4px 10px;font-size:11px;font-weight:bold;color:#7c5cfc;cursor:pointer;white-space:nowrap}.ed:hover{border-color:#7c5cfc;background:#f1edfe}' +
+    '.fila{display:flex;gap:8px;align-items:center}#rf{border:0;background:rgba(255,255,255,.25);color:#fff;border-radius:50%;width:38px;height:38px;font-size:17px;cursor:pointer;flex-shrink:0}' +
     '</style></head><body>' +
-    '<div class="top"><input id="q" placeholder="Número de OP, proyecto, cliente o comercial…" autocomplete="off" autofocus>' +
+    '<div class="top"><div class="fila"><input id="q" placeholder="Número de OP, proyecto, cliente o comercial…" autocomplete="off" autofocus>' +
+    '<button id="rf" title="Actualizar la lista" onclick="refrescar()">↻</button></div>' +
     '<div class="info" id="info"></div></div><div id="lst"></div>' +
     '<script>' +
     'var L=' + JSON.stringify(lista) + ',vis=[],sel=0;' +
@@ -2565,10 +2611,13 @@ function _htmlBuscarOP(lista) {
     'vis=L.filter(function(o){return !q||[o.op,o.nombre,o.cliente,o.comercial,o.sede].some(function(v){return n(v).indexOf(q)!==-1;});});' +
     'if(q)vis.sort(function(a,b){return (n(b.op).indexOf(q)===0)-(n(a.op).indexOf(q)===0);});' +
     'sel=0;document.getElementById("info").textContent=vis.length+" de "+L.length+" O.P · Enter abre la primera · ↑↓ para moverte";' +
-    'document.getElementById("lst").innerHTML=vis.length?vis.map(function(o,i){return \'<div class="it\'+(i===0?" sel":"")+\'" onclick="ir(\'+i+\')"><span class="op">\'+hl(o.op,q)+\'</span><div class="tx"><div class="nm">\'+hl(o.nombre||"—",q)+\'</div><div class="sb">👤 \'+hl(o.cliente||"—",q)+\' · 💼 \'+hl(o.comercial||"—",q)+(o.sede?" · 📍 "+e(o.sede):"")+\'</div></div>\'+(o.entrega?\'<span class="en">🏁 \'+o.entrega+"</span>":"")+"</div>";}).join(""):\'<div class="vacio">No hay O.P que coincidan</div>\';}' +
+    'document.getElementById("lst").innerHTML=vis.length?vis.map(function(o,i){return \'<div class="it\'+(i===0?" sel":"")+\'" onclick="ir(\'+i+\')"><span class="op">\'+hl(o.op,q)+\'</span><div class="tx"><div class="nm">\'+hl(o.nombre||"—",q)+\'</div><div class="sb">👤 \'+hl(o.cliente||"—",q)+\' · 💼 \'+hl(o.comercial||"—",q)+(o.sede?" · 📍 "+e(o.sede):"")+\'</div></div>\'+(o.entrega?\'<span class="en">🏁 \'+o.entrega+"</span>":"")+\'<button class="ed" title="Cargar en el formulario para editar" onclick="event.stopPropagation();editar(\'+i+\')">✏️ Editar</button></div>\';}).join(""):\'<div class="vacio">No hay O.P que coincidan</div>\';}' +
     'function marca(){var it=document.querySelectorAll(".it");it.forEach(function(x,i){x.classList.toggle("sel",i===sel);});if(it[sel])it[sel].scrollIntoView({block:"nearest"});}' +
     'function ir(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Abriendo O.P "+o.op+"…";' +
     'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).irAHojaOP(o.hoja);}' +
+    'function editar(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Cargando O.P "+o.op+" en el formulario…";' +
+    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).editarDesdeBuscar(o.hoja);}' +
+    'function refrescar(){document.getElementById("info").textContent="Actualizando la lista…";google.script.run.withSuccessHandler(function(l){L=l;pinta();}).listaOPsFresca();}' +
     'document.getElementById("q").addEventListener("input",pinta);' +
     'document.getElementById("q").addEventListener("keydown",function(ev){if(ev.key==="Enter"){ev.preventDefault();ir(sel);}else if(ev.key==="ArrowDown"){ev.preventDefault();sel=Math.min(sel+1,vis.length-1);marca();}else if(ev.key==="ArrowUp"){ev.preventDefault();sel=Math.max(sel-1,0);marca();}else if(ev.key==="Escape"){google.script.host.close();}});' +
     'pinta();setTimeout(function(){document.getElementById("q").focus();},100);' +
