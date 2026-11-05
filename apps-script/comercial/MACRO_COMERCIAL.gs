@@ -1,4 +1,9 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.4
+//  v14.4: Buscar O.P — al hacer clic la ventana se cierra enseguida y la hoja se
+//         abre con una sola llamada (sin seleccionar A1). Si la hoja ya no existe,
+//         se avisa con un mensaje en la hoja.
+//
 //  MACRO_COMERCIAL — v14.3 (rendimiento)
 //  v14.3: Cargar OP para editar, Guardar cambios y Buscar O.P más rápidos.
 //   - El formulario BASE_CREADOR se lee UNA vez por comando (antes la lista de
@@ -2576,9 +2581,12 @@ function buscarOP() {
 /** Llamada desde la ventana: activa la hoja de la OP. */
 function irAHojaOP(hoja) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(hoja);
-  if (!ws) { _invalidarListaOP(); throw new Error('La hoja "' + hoja + '" ya no existe. Pulsa ↻ para actualizar la lista.'); }
-  ss.setActiveSheet(ws);
-  ws.setActiveRange(ws.getRange('A1'));
+  if (!ws) {   // v14.4: la ventana ya se cerró → aviso en la hoja
+    _invalidarListaOP();
+    ss.toast('La hoja "' + hoja + '" ya no existe. Abre de nuevo 🔎 Buscar O.P para ver la lista actualizada.', '🔎 Buscar O.P', 6);
+    return false;
+  }
+  ss.setActiveSheet(ws);   // v14.4: una sola llamada
   return true;
 }
 
@@ -2614,7 +2622,7 @@ function _htmlBuscarOP(lista) {
     'document.getElementById("lst").innerHTML=vis.length?vis.map(function(o,i){return \'<div class="it\'+(i===0?" sel":"")+\'" onclick="ir(\'+i+\')"><span class="op">\'+hl(o.op,q)+\'</span><div class="tx"><div class="nm">\'+hl(o.nombre||"—",q)+\'</div><div class="sb">👤 \'+hl(o.cliente||"—",q)+\' · 💼 \'+hl(o.comercial||"—",q)+(o.sede?" · 📍 "+e(o.sede):"")+\'</div></div>\'+(o.entrega?\'<span class="en">🏁 \'+o.entrega+"</span>":"")+\'<button class="ed" title="Cargar en el formulario para editar" onclick="event.stopPropagation();editar(\'+i+\')">✏️ Editar</button></div>\';}).join(""):\'<div class="vacio">No hay O.P que coincidan</div>\';}' +
     'function marca(){var it=document.querySelectorAll(".it");it.forEach(function(x,i){x.classList.toggle("sel",i===sel);});if(it[sel])it[sel].scrollIntoView({block:"nearest"});}' +
     'function ir(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Abriendo O.P "+o.op+"…";' +
-    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).irAHojaOP(o.hoja);}' +
+    'google.script.run.irAHojaOP(o.hoja);setTimeout(function(){google.script.host.close();},350);}' +
     'function editar(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Cargando O.P "+o.op+" en el formulario…";' +
     'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).editarDesdeBuscar(o.hoja);}' +
     'function refrescar(){document.getElementById("info").textContent="Actualizando la lista…";google.script.run.withSuccessHandler(function(l){L=l;pinta();}).listaOPsFresca();}' +
