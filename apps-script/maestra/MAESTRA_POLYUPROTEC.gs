@@ -1,4 +1,6 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.4
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.5
+// v4.5 — el token ya no está en el código: se lee de Propiedades del script
+//        (clave TOKEN_CORREO_CAMBIOS). Sin token no se acepta ninguna anotación. Nada más cambia.
 //
 // v4.4 — BITÁCORA DE LA OP (notas, compromisos y bloqueos anotados desde la App):
 //   • Hoja BITACORA_OP (protegida, solo la escribe el script). No se borra ni se
@@ -995,7 +997,8 @@ var FILA_ENC_AREA    = 5;          // encabezados del Cronograma de cada área
 var FILA_INI_AREA    = 6;          // primera fila de datos
 var CORREO_CAMBIOS_ACTIVO = true;  // false = solo historial, sin correo
 var URL_NOTIFICAR_CAMBIOS = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_cambios.php';
-var TOKEN_CORREO_CAMBIOS  = 'CONFIGURAR_AQUI';   // igual que TOKEN en el PHP
+// v4.5: TOKEN_CORREO_CAMBIOS se guarda en Propiedades del script (igual que 'TOKEN' en config.php del hosting)
+function _tokenCambios() { return PropertiesService.getScriptProperties().getProperty('TOKEN_CORREO_CAMBIOS') || ''; }
 var HOJAS_IMPORT_AREAS = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
 
 var ENC_HISTORIAL = ['FECHA_HORA','USUARIO','CORREO','OP','AREA','SUBESTRUCTURA','TAREA','CAMPO',
@@ -1383,7 +1386,7 @@ function _enviarResumenCambios(ss) {
   if (!pend.length) return 0;
   var resp = UrlFetchApp.fetch(URL_NOTIFICAR_CAMBIOS, {
     method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    payload: JSON.stringify({ token: TOKEN_CORREO_CAMBIOS, cambios: pend.slice(0, 200) })
+    payload: JSON.stringify({ token: _tokenCambios(), cambios: pend.slice(0, 200) })
   });
   var ok = false;
   try { ok = resp.getResponseCode() === 200 && JSON.parse(resp.getContentText()).ok === true; } catch (e) {}
@@ -1488,7 +1491,7 @@ var HOJA_BITACORA = 'BITACORA_OP';
 var ENC_BITACORA = ['ID','FECHA_HORA','AUTOR','CORREO','OP','AREA','TIPO','DESCRIPCION','RESPONSABLE',
                     'FECHA_COMPROMISO','ESTADO','FECHA_CIERRE','CERRADO_POR','NOTA_CIERRE'];
 var TIPOS_BITACORA = ['Nota', 'Compromiso', 'Bloqueo'];
-var TOKEN_BITACORA = TOKEN_CORREO_CAMBIOS;   // mismo token que usan los PHP del hosting
+function _tokenBitacora() { return _tokenCambios(); }   // v4.5 · mismo token que usan los PHP del hosting
 var URL_NOTIFICAR_BITACORA = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_bitacora.php';
 var CORREO_BITACORA_ACTIVO = true;
 
@@ -1516,7 +1519,8 @@ function doPost(e) {
 }
 
 function _bitacoraPost(b) {
-  if (!b || b.token !== TOKEN_BITACORA) return { ok: false, error: 'Token inválido' };
+  var tk = _tokenBitacora();   // v4.5: sin token configurado no se acepta nada
+  if (!b || !tk || b.token !== tk) return { ok: false, error: 'Token inválido' };
   var u = b.usuario || {}, correo = String(u.correo || '').trim().toLowerCase(), autor = String(u.nombre || '').trim() || correo;
   if (!/^[^@\s]+@[^@\s]+$/.test(correo)) return { ok: false, error: 'Usuario sin sesión' };
   var lock = LockService.getScriptLock();
@@ -1616,7 +1620,7 @@ function _correoSemanalBitacora(forzar) {
   });
   if (!vencidos.length && !proximos.length && !bloqueos.length) return 'vacio';
   var resp = UrlFetchApp.fetch(URL_NOTIFICAR_BITACORA, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
-    payload: JSON.stringify({ token: TOKEN_BITACORA, vencidos: vencidos, proximos: proximos, bloqueos: bloqueos }) });
+    payload: JSON.stringify({ token: _tokenBitacora(), vencidos: vencidos, proximos: proximos, bloqueos: bloqueos }) });
   try { if (resp.getResponseCode() === 200 && JSON.parse(resp.getContentText()).ok) return 'ok'; } catch (e) {}
   Logger.log('Correo bitácora: ' + resp.getResponseCode() + ' ' + resp.getContentText());
   return 'error ' + resp.getResponseCode();

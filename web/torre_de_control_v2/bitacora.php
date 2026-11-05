@@ -10,11 +10,12 @@
  *    la hoja BITACORA_OP (no se borra ni se edita: se cierra con nota).
  * ============================================================
  */
+$SECRETOS = require __DIR__ . '/config.php';   // TOKEN y SMTP_PASS: config.php (no se sube a GitHub)
 $CONFIG = [
     // Mismo Web App que usa la App para leer los datos (app.html → WEB_APP_URL)
     'WEB_APP_URL' => 'https://script.google.com/macros/s/AKfycbyWtYmov4ExKuL9Tu5MOaskUinIRhap3sV_nHsu-58wz_xOB107WST8cCQXY834frKAiQ/exec',
     // Igual que TOKEN_CORREO_CAMBIOS en la Maestra
-    'TOKEN'       => 'CONFIGURAR_AQUI',
+    'TOKEN'       => $SECRETOS['TOKEN'],
     'DOMINIO'     => 'polyuprotec.com',
 ];
 

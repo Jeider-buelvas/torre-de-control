@@ -1,5 +1,7 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.5
+//  MACRO_COMERCIAL — v14.6
+//  v14.6 (sobre v14.5): el token del correo ya no está en el código: se lee de
+//         Propiedades del script (clave TOKEN_CORREO). Nada más cambia.
 //  v14.5 (sobre v14.3): Buscar O.P muestra una barra de progreso "Abriendo O.P …"
 //         mientras Google abre la hoja (la ventana se cierra sola al terminar).
 //         La hoja se abre con una sola llamada (sin seleccionar A1).
@@ -70,7 +72,7 @@
 //  v11
 //  v11: al crear una O.P se envía un correo de aviso (detalles + áreas)
 //       desde la cuenta del HOSTING, vía notificar_op.php. Configurar
-//       URL_NOTIFICAR_OP y TOKEN_CORREO más abajo (sección v11).
+//       URL_NOTIFICAR_OP más abajo y TOKEN_CORREO en Propiedades del script (v14.6).
 //
 //  v10
 //  v10: el área Producción apunta a PLANTILLA_LOOKER_PRODUCCION_V2 (pegar su ID en IDS_AREAS).
@@ -2019,20 +2021,23 @@ function autorizarAreas() {
 //  crea la O.P. Los destinatarios se configuran en notificar_op.php.
 // ============================================================
 var URL_NOTIFICAR_OP = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_op.php';
-var TOKEN_CORREO     = 'CONFIGURAR_AQUI';   // igual que 'TOKEN' en notificar_op.php
+// v14.6: TOKEN_CORREO se guarda en Propiedades del script (igual que 'TOKEN' en config.php del hosting)
+function _tokenCorreo() { return PropertiesService.getScriptProperties().getProperty('TOKEN_CORREO') || ''; }
 var CORREO_ACTIVO    = true;                   // false = no enviar correos
 
 /** Envía el aviso. Devuelve un texto corto para mostrar al usuario (o '' si está apagado). */
 function _notificarNuevaOP(d, urlHoja) {
   if (!CORREO_ACTIVO) return '';
   if (URL_NOTIFICAR_OP.indexOf('TU-DOMINIO') !== -1) return 'ℹ️ Correo no enviado: falta configurar URL_NOTIFICAR_OP.';
+  var token = _tokenCorreo();   // v14.6
+  if (!token) return 'ℹ️ Correo no enviado: falta TOKEN_CORREO en Propiedades del script.';
   try {
     var resp = UrlFetchApp.fetch(URL_NOTIFICAR_OP, {
       method: 'post',
       contentType: 'application/json',
       muteHttpExceptions: true,
       payload: JSON.stringify({
-        token:        TOKEN_CORREO,
+        token:        token,
         op:           d.op,
         nombre:       d.nombreOp,
         cliente:      d.cliente,

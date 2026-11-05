@@ -10,16 +10,17 @@
  */
 
 // ======================== CONFIGURACIÓN ========================
+$SECRETOS = require __DIR__ . '/config.php';   // TOKEN y SMTP_PASS: config.php (no se sube a GitHub)
 $CONFIG = [
     // Debe ser EXACTAMENTE el mismo valor de TOKEN_CORREO_CAMBIOS (TOKEN_BITACORA) en la Maestra (v4.4)
-    'TOKEN' => 'CONFIGURAR_AQUI',
+    'TOKEN' => $SECRETOS['TOKEN'],
 
     // Cuenta de correo del hosting (cPanel → Cuentas de correo → "Conectar dispositivos")
     'SMTP_HOST'   => 'torredecontrol.polypro.space',   // servidor SMTP del hosting
     'SMTP_PORT'   => 465,                      // 465 = SSL · 587 = STARTTLS
     'SMTP_SECURE' => 'ssl',                    // 'ssl' (465) o 'tls' (587)
     'SMTP_USER'   => 'notificacion@torredecontrol.polypro.space',
-    'SMTP_PASS'   => 'CONFIGURAR_AQUI',
+    'SMTP_PASS'   => $SECRETOS['SMTP_PASS'],
     // Si dejas SMTP_HOST vacío ('') se usa mail() de PHP (menos confiable, puede caer en spam)
 
     'FROM_EMAIL' => 'notificacion@torredecontrol.polypro.space',
