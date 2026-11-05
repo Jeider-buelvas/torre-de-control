@@ -1,0 +1,8 @@
+# Nadie entra directo a esta carpeta: todo pasa por index.php / ver.php (con sesión)
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

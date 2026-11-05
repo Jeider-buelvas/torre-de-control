@@ -1,0 +1,7 @@
+# Secretos: solo viven en el servidor
+config.php
+**/config.php
+# Respaldos y temporales
+*_respaldo*
+.DS_Store
+Thumbs.db

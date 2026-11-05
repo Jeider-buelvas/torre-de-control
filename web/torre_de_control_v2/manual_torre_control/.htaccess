@@ -1,0 +1,3 @@
+# Sin listado de archivos y la carpeta abre index.php
+Options -Indexes
+DirectoryIndex index.php
