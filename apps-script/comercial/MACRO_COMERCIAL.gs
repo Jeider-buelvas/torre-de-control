@@ -1,8 +1,9 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.4
-//  v14.4: Buscar O.P — al hacer clic la ventana se cierra enseguida y la hoja se
-//         abre con una sola llamada (sin seleccionar A1). Si la hoja ya no existe,
-//         se avisa con un mensaje en la hoja.
+//  MACRO_COMERCIAL — v14.5
+//  v14.5 (sobre v14.3): Buscar O.P muestra una barra de progreso "Abriendo O.P …"
+//         mientras Google abre la hoja (la ventana se cierra sola al terminar).
+//         La hoja se abre con una sola llamada (sin seleccionar A1).
+//         (La v14.4 cerraba la ventana antes de tiempo y Google cancelaba la orden.)
 //
 //  MACRO_COMERCIAL — v14.3 (rendimiento)
 //  v14.3: Cargar OP para editar, Guardar cambios y Buscar O.P más rápidos.
@@ -2581,12 +2582,8 @@ function buscarOP() {
 /** Llamada desde la ventana: activa la hoja de la OP. */
 function irAHojaOP(hoja) {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(hoja);
-  if (!ws) {   // v14.4: la ventana ya se cerró → aviso en la hoja
-    _invalidarListaOP();
-    ss.toast('La hoja "' + hoja + '" ya no existe. Abre de nuevo 🔎 Buscar O.P para ver la lista actualizada.', '🔎 Buscar O.P', 6);
-    return false;
-  }
-  ss.setActiveSheet(ws);   // v14.4: una sola llamada
+  if (!ws) { _invalidarListaOP(); throw new Error('La hoja "' + hoja + '" ya no existe. Pulsa ↻ para actualizar la lista.'); }
+  ss.setActiveSheet(ws);   // v14.5: una sola llamada
   return true;
 }
 
@@ -2605,11 +2602,17 @@ function _htmlBuscarOP(lista) {
     '.en{font-size:11px;color:#5a5a72;white-space:nowrap;background:#f7f7fc;border-radius:12px;padding:3px 8px}' +
     '.vacio{text-align:center;color:#8f9bb3;padding:40px 10px}mark{background:#ffe08a;color:inherit;border-radius:2px}' +
     '.ed{border:1px solid #dcdce8;background:#fff;border-radius:14px;padding:4px 10px;font-size:11px;font-weight:bold;color:#7c5cfc;cursor:pointer;white-space:nowrap}.ed:hover{border-color:#7c5cfc;background:#f1edfe}' +
+    '#carga{position:fixed;inset:0;background:rgba(255,255,255,.88);display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;z-index:9}' +
+    '#carga.on{display:flex}#ctx{font-weight:bold;font-size:15px;color:#2b2b40}#csub{font-size:12px;color:#8f9bb3}' +
+    '.barra{width:70%;height:8px;border-radius:6px;background:#edeef5;overflow:hidden;position:relative}' +
+    '.barra:after{content:"";position:absolute;top:0;left:-40%;width:40%;height:100%;border-radius:6px;background:linear-gradient(100deg,#ee4d9e,#8763e8 55%,#4b6ef5);animation:mv 1.1s ease-in-out infinite}' +
+    '@keyframes mv{0%{left:-40%}100%{left:100%}}' +
     '.fila{display:flex;gap:8px;align-items:center}#rf{border:0;background:rgba(255,255,255,.25);color:#fff;border-radius:50%;width:38px;height:38px;font-size:17px;cursor:pointer;flex-shrink:0}' +
     '</style></head><body>' +
     '<div class="top"><div class="fila"><input id="q" placeholder="Número de OP, proyecto, cliente o comercial…" autocomplete="off" autofocus>' +
     '<button id="rf" title="Actualizar la lista" onclick="refrescar()">↻</button></div>' +
     '<div class="info" id="info"></div></div><div id="lst"></div>' +
+    '<div id="carga"><div id="ctx">Abriendo…</div><div class="barra"></div><div id="csub">Google está abriendo la hoja, espera un momento</div></div>' +
     '<script>' +
     'var L=' + JSON.stringify(lista) + ',vis=[],sel=0;' +
     'function n(s){return String(s||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();}' +
@@ -2621,13 +2624,14 @@ function _htmlBuscarOP(lista) {
     'sel=0;document.getElementById("info").textContent=vis.length+" de "+L.length+" O.P · Enter abre la primera · ↑↓ para moverte";' +
     'document.getElementById("lst").innerHTML=vis.length?vis.map(function(o,i){return \'<div class="it\'+(i===0?" sel":"")+\'" onclick="ir(\'+i+\')"><span class="op">\'+hl(o.op,q)+\'</span><div class="tx"><div class="nm">\'+hl(o.nombre||"—",q)+\'</div><div class="sb">👤 \'+hl(o.cliente||"—",q)+\' · 💼 \'+hl(o.comercial||"—",q)+(o.sede?" · 📍 "+e(o.sede):"")+\'</div></div>\'+(o.entrega?\'<span class="en">🏁 \'+o.entrega+"</span>":"")+\'<button class="ed" title="Cargar en el formulario para editar" onclick="event.stopPropagation();editar(\'+i+\')">✏️ Editar</button></div>\';}).join(""):\'<div class="vacio">No hay O.P que coincidan</div>\';}' +
     'function marca(){var it=document.querySelectorAll(".it");it.forEach(function(x,i){x.classList.toggle("sel",i===sel);});if(it[sel])it[sel].scrollIntoView({block:"nearest"});}' +
-    'function ir(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Abriendo O.P "+o.op+"…";' +
-    'google.script.run.irAHojaOP(o.hoja);setTimeout(function(){google.script.host.close();},350);}' +
-    'function editar(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Cargando O.P "+o.op+" en el formulario…";' +
-    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).editarDesdeBuscar(o.hoja);}' +
+    'function carga(t,sub){var c=document.getElementById("carga");if(!t){c.classList.remove("on");return;}document.getElementById("ctx").textContent=t;document.getElementById("csub").textContent=sub;c.classList.add("on");}' +
+    'function ir(i){var o=vis[i];if(!o)return;carga("Abriendo O.P "+o.op+"…","Google está abriendo la hoja, espera un momento");' +
+    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){carga(null);document.getElementById("info").textContent="❌ "+er.message;}).irAHojaOP(o.hoja);}' +
+    'function editar(i){var o=vis[i];if(!o)return;carga("Cargando O.P "+o.op+" en el formulario…","Se llenan los datos de BASE_CREADOR para editarla");' +
+    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){carga(null);document.getElementById("info").textContent="❌ "+er.message;}).editarDesdeBuscar(o.hoja);}' +
     'function refrescar(){document.getElementById("info").textContent="Actualizando la lista…";google.script.run.withSuccessHandler(function(l){L=l;pinta();}).listaOPsFresca();}' +
     'document.getElementById("q").addEventListener("input",pinta);' +
-    'document.getElementById("q").addEventListener("keydown",function(ev){if(ev.key==="Enter"){ev.preventDefault();ir(sel);}else if(ev.key==="ArrowDown"){ev.preventDefault();sel=Math.min(sel+1,vis.length-1);marca();}else if(ev.key==="ArrowUp"){ev.preventDefault();sel=Math.max(sel-1,0);marca();}else if(ev.key==="Escape"){google.script.host.close();}});' +
+    'document.getElementById("q").addEventListener("keydown",function(ev){if(document.getElementById("carga").classList.contains("on")){ev.preventDefault();return;}if(ev.key==="Enter"){ev.preventDefault();ir(sel);}else if(ev.key==="ArrowDown"){ev.preventDefault();sel=Math.min(sel+1,vis.length-1);marca();}else if(ev.key==="ArrowUp"){ev.preventDefault();sel=Math.max(sel-1,0);marca();}else if(ev.key==="Escape"){google.script.host.close();}});' +
     'pinta();setTimeout(function(){document.getElementById("q").focus();},100);' +
     '</script></body></html>';
 }
