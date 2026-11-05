@@ -1,4 +1,9 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.2
+//  v14.2: menú "🔎 Buscar O.P" (al lado de "🚀 Torre de Control") y función
+//         buscarOP para el botón de BASE_CREADOR: ventana con buscador por número,
+//         proyecto, cliente o comercial; un clic (o Enter) abre la hoja de la OP.
+//
 //  MACRO_COMERCIAL — v14.1
 //  v14.1: "Preparar registro de entregas" no se ejecuta dos veces a la vez (doble
 //         clic) y no toma las hojas de respaldo (…_respaldo_…), para no repetir OP.
@@ -340,6 +345,12 @@ function onOpen() {
     .addItem('🧩 Tareas de la OP (No aplica / nombre)', 'abrirTareasOP')
     .addItem('🚚 Registrar entrega real al cliente', 'registrarEntregaReal')
     .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
+    .addToUi();
+  // v14.2: buscador de hojas de OP
+  SpreadsheetApp.getUi()
+    .createMenu('🔎 Buscar O.P')
+    .addItem('🔎 Buscar O.P…', 'buscarOP')
+    .addItem('🏠 Ir a BASE_CREADOR', 'irABaseCreador')
     .addToUi();
 }
 
@@ -2486,4 +2497,80 @@ function _prepararRegistroEntregas(ss, ui) {
   ui.alert('📅 Registro de entregas', '✅ OP agregadas: ' + nuevas.length + (nuevas.length ? '\n' + nuevas.join(', ') : '') +
     (ya ? '\n\nℹ️ Ya estaban: ' + ya : '') +
     '\n\nLas OP sin fecha de entrega quedan con la fecha vacía: complétala con Editar OP.', ui.ButtonSet.OK);
+}
+
+
+// ============================================================
+//  v14.2 — BUSCAR O.P (ventana con buscador)
+// ============================================================
+function irABaseCreador() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), f = ss.getSheetByName('BASE_CREADOR');
+  if (f) ss.setActiveSheet(f);
+}
+
+/** Lista de OP (solo hojas de OP, sin respaldos) con sus datos generales. */
+function _listaOPsBusqueda() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), tz = Session.getScriptTimeZone(), out = [];
+  ss.getSheets().forEach(function(ws) {
+    var n = ws.getName();
+    if (n.indexOf('_respaldo_') !== -1 || !_esHojaOP(ws)) return;
+    var v = ws.getRange(1, 28, 1, 10).getValues()[0];   // AB..AK
+    out.push({ hoja: n, op: String(v[0] || n).trim(), nombre: String(v[1] || ''), cliente: String(v[2] || ''),
+               comercial: String(v[3] || ''), sede: String(v[4] || ''),
+               entrega: (v[9] instanceof Date && v[9].getFullYear() > 1900) ? Utilities.formatDate(v[9], tz, 'dd/MM/yyyy') : '' });
+  });
+  out.sort(function(a, b) { return (Number(b.op) || 0) - (Number(a.op) || 0) || a.op.localeCompare(b.op); });
+  return out;
+}
+
+/** Menú / botón: abre la ventana de búsqueda. */
+function buscarOP() {
+  var lista = _listaOPsBusqueda();
+  var html = HtmlService.createHtmlOutput(_htmlBuscarOP(lista)).setWidth(560).setHeight(560);
+  SpreadsheetApp.getUi().showModalDialog(html, '🔎 Buscar O.P');
+}
+
+/** Llamada desde la ventana: activa la hoja de la OP. */
+function irAHojaOP(hoja) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ws = ss.getSheetByName(hoja);
+  if (!ws) throw new Error('La hoja "' + hoja + '" ya no existe');
+  ss.setActiveSheet(ws);
+  ws.setActiveRange(ws.getRange('A1'));
+  return true;
+}
+
+function _htmlBuscarOP(lista) {
+  return '<!DOCTYPE html><html><head><base target="_top"><style>' +
+    'body{margin:0;font-family:Arial,sans-serif;color:#2b2b40;font-size:13px}' +
+    '.top{padding:12px 14px 10px;background:linear-gradient(100deg,#ee4d9e,#8763e8 55%,#4b6ef5)}' +
+    '#q{width:100%;box-sizing:border-box;border:0;border-radius:22px;padding:11px 16px;font-size:15px;outline:none;box-shadow:0 4px 14px rgba(0,0,0,.15)}' +
+    '.info{font-size:11px;color:#fff;opacity:.9;margin-top:7px}' +
+    '#lst{height:440px;overflow:auto;padding:8px 10px}' +
+    '.it{display:flex;gap:12px;align-items:center;padding:9px 12px;border:1px solid #edeef5;border-radius:10px;margin-bottom:6px;cursor:pointer;transition:all .12s}' +
+    '.it:hover,.it.sel{border-color:#7c5cfc;background:#f1edfe}' +
+    '.op{font-family:Consolas,Menlo,monospace;font-weight:bold;color:#7c5cfc;font-size:14px;min-width:58px}' +
+    '.tx{flex:1;min-width:0}.nm{font-weight:bold;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.sb{font-size:11.5px;color:#8f9bb3;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '.en{font-size:11px;color:#5a5a72;white-space:nowrap;background:#f7f7fc;border-radius:12px;padding:3px 8px}' +
+    '.vacio{text-align:center;color:#8f9bb3;padding:40px 10px}mark{background:#ffe08a;color:inherit;border-radius:2px}' +
+    '</style></head><body>' +
+    '<div class="top"><input id="q" placeholder="Número de OP, proyecto, cliente o comercial…" autocomplete="off" autofocus>' +
+    '<div class="info" id="info"></div></div><div id="lst"></div>' +
+    '<script>' +
+    'var L=' + JSON.stringify(lista) + ',vis=[],sel=0;' +
+    'function n(s){return String(s||"").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();}' +
+    'function e(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;");}' +
+    'function hl(s,q){s=e(s);if(!q)return s;var i=n(s).indexOf(q);return i<0?s:s.slice(0,i)+"<mark>"+s.slice(i,i+q.length)+"</mark>"+s.slice(i+q.length);}' +
+    'function pinta(){var q=n(document.getElementById("q").value.trim());' +
+    'vis=L.filter(function(o){return !q||[o.op,o.nombre,o.cliente,o.comercial,o.sede].some(function(v){return n(v).indexOf(q)!==-1;});});' +
+    'if(q)vis.sort(function(a,b){return (n(b.op).indexOf(q)===0)-(n(a.op).indexOf(q)===0);});' +
+    'sel=0;document.getElementById("info").textContent=vis.length+" de "+L.length+" O.P · Enter abre la primera · ↑↓ para moverte";' +
+    'document.getElementById("lst").innerHTML=vis.length?vis.map(function(o,i){return \'<div class="it\'+(i===0?" sel":"")+\'" onclick="ir(\'+i+\')"><span class="op">\'+hl(o.op,q)+\'</span><div class="tx"><div class="nm">\'+hl(o.nombre||"—",q)+\'</div><div class="sb">👤 \'+hl(o.cliente||"—",q)+\' · 💼 \'+hl(o.comercial||"—",q)+(o.sede?" · 📍 "+e(o.sede):"")+\'</div></div>\'+(o.entrega?\'<span class="en">🏁 \'+o.entrega+"</span>":"")+"</div>";}).join(""):\'<div class="vacio">No hay O.P que coincidan</div>\';}' +
+    'function marca(){var it=document.querySelectorAll(".it");it.forEach(function(x,i){x.classList.toggle("sel",i===sel);});if(it[sel])it[sel].scrollIntoView({block:"nearest"});}' +
+    'function ir(i){var o=vis[i];if(!o)return;document.getElementById("info").textContent="Abriendo O.P "+o.op+"…";' +
+    'google.script.run.withSuccessHandler(function(){google.script.host.close();}).withFailureHandler(function(er){document.getElementById("info").textContent="❌ "+er.message;}).irAHojaOP(o.hoja);}' +
+    'document.getElementById("q").addEventListener("input",pinta);' +
+    'document.getElementById("q").addEventListener("keydown",function(ev){if(ev.key==="Enter"){ev.preventDefault();ir(sel);}else if(ev.key==="ArrowDown"){ev.preventDefault();sel=Math.min(sel+1,vis.length-1);marca();}else if(ev.key==="ArrowUp"){ev.preventDefault();sel=Math.max(sel-1,0);marca();}else if(ev.key==="Escape"){google.script.host.close();}});' +
+    'pinta();setTimeout(function(){document.getElementById("q").focus();},100);' +
+    '</script></body></html>';
 }
