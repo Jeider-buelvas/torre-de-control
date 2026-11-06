@@ -1,4 +1,16 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.7
+//  v14.7 (solicitud de Producción): el cronograma de Producción queda con 2 tareas
+//         al 50%: "Kg Fabricados" (lo que antes recibía "Entrega en negro") y
+//         "Entrega en negro" (kg entregados en negro). Pesos en 'Assignees and
+//         Status' filas 88-89 del archivo de Producción (las O.P antiguas siguen
+//         usando las filas 45-49 sin cambios).
+//         Menú "🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)":
+//         pasa las O.P NO terminadas a las 2 tareas conservando lo registrado en
+//         la antigua "Entrega en negro" (estado, kg, fechas, observaciones). Las
+//         terminadas quedan como están. Una O.P con la estructura antigua no se
+//         reenvía a las áreas (se avisa) para no descuadrar sus filas.
+//
 //  MACRO_COMERCIAL — v14.6
 //  v14.6 (sobre v14.5): el token del correo ya no está en el código: se lee de
 //         Propiedades del script (clave TOKEN_CORREO). Nada más cambia.
@@ -231,11 +243,9 @@ const TAREAS_AREA = {
     ['Radicación Facturas',    'Jhon Murillo',  0.1427, 0.0714, 0.0]
   ],
   'Produccion': [
-    ['Corte',            'Producción 1', 0.25, 0.10, 0.0],
-    ['Armado',           'Producción 2', 0.25, 0.10, 0.0],
-    ['Soldadura',        'Producción 3', 0.25, 0.10, 0.0],
-    ['Calidad',          'Producción 4', 0.15, 0.07, 0.0],
-    ['Entrega en negro', 'Producción 5', 0.10, 0.05, 0.0]
+    // v14.7: 2 tareas al 50% (antes: Corte, Armado, Soldadura, Calidad, Entrega en negro)
+    ['Kg Fabricados',    'Producción 1', 0.50, 0.25, 0.0],
+    ['Entrega en negro', 'Producción 2', 0.50, 0.25, 0.0]
   ],
   'Galvanizado': [
     ['Recepción Material', 'Sup. Galvanizado', 0.50, 0.20, 0.0],
@@ -289,7 +299,8 @@ const AS_FILAS = {
     'Entrada (Rev. Facturas)': 38, 'Radicación Facturas': 39
   },
   'Produccion': {
-    'Corte': 45, 'Armado': 46, 'Soldadura': 47, 'Calidad': 48, 'Entrega en negro': 49
+    // v14.7: filas nuevas (las O.P antiguas siguen en 45-49: Corte, Armado, Soldadura, Calidad, Entrega en negro)
+    'Kg Fabricados': 88, 'Entrega en negro': 89
   },
   'Galvanizado': { 'Recepción Material': 54, 'Galvanizado': 55 },
   'Pintura': { 'Recepción Material': 61, 'Preparación Superficie': 62, 'Pintura': 63 },
@@ -361,6 +372,8 @@ function onOpen() {
     .addItem('🧩 Tareas de la OP (No aplica / nombre)', 'abrirTareasOP')
     .addItem('🚚 Registrar entrega real al cliente', 'registrarEntregaReal')
     .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
+    .addSeparator()
+    .addItem('🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)', 'migrarProduccionDosTareas')   // v14.7
     .addToUi();
   // v14.2: buscador de hojas de OP
   SpreadsheetApp.getUi()
@@ -762,9 +775,10 @@ function _restaurarManualesOP(ws, datos) {
  * con _crearHojaOP y se le devuelven los datos manuales. Si algo falla, la
  * hoja original vuelve a quedar como estaba.
  */
-function _reconstruirHojaOP(ss, viejo, d, m) {
+function _reconstruirHojaOP(ss, viejo, d, m, ajustar) {
   var metaT = _leerMetaTareas(viejo);   // v14
   var datos = _leerManualesOP(viejo);
+  if (ajustar) ajustar(datos, metaT);   // v14.7: solo lo usa la migración de Producción
   var idx   = viejo.getIndex();
   viejo.setName(d.op + '_respaldo_' + new Date().getTime());
   var nuevo = null;
@@ -874,6 +888,7 @@ function _sincronizarOPConAreas(ss, ws) {
     }
     var datosHoja = _leerDatosHojaOP(ws);
     var metaT = _leerMetaTareas(ws);   // v14
+    if (_produccionAntiguaEnHojaOP(ws, m)) { ui.alert(_MSG_PRODUCCION_ANTIGUA(op)); return; }   // v14.7
 
     // ---------- 1) PLAN: revisar cada cronograma antes de tocar nada ----------
     ss.toast('Revisando los cronogramas de las áreas...', '🔎 OP ' + op, 6);
@@ -888,8 +903,12 @@ function _sincronizarOPConAreas(ss, ws) {
       try {
         it.tSheet = _abrirCronograma(it.id);
         it.blk    = _bloqueOP(it.tSheet, op);
+        if (area === 'Produccion') _asegurarPesosProduccion(it.tSheet.getParent());   // v14.7
         if (!it.blk) {
           it.accion = 'crear';
+        } else if (area === 'Produccion' && !_esBloqueProduccionNuevo(it.tSheet, it.blk)) {   // v14.7
+          it.accion = 'error';
+          it.error  = 'la OP tiene la estructura antigua de Producción (5 tareas). Usa "🔁 Migrar Producción…" (solo O.P no terminadas)';
         } else if (it.blk.len % T !== 0) {
           it.accion = 'error';
           it.error  = 'la OP ocupa ' + it.blk.len + ' filas y no cuadra con ' + T + ' tareas por subestructura (revisar a mano)';
@@ -2116,7 +2135,7 @@ function reenviarCorreoOP() {
 // ------------------------------------------------------------
 var COL_META_TAREAS = 39;                       // hoja OP: col AM = tareas No aplica / nombres
 var ESTADO_NO_APLICA = 'No aplica';
-var NO_RENOMBRAR = { 'Produccion': ['Entrega en negro'] };   // Producción V2 la busca por nombre
+var NO_RENOMBRAR = { 'Produccion': ['Kg Fabricados', 'Entrega en negro'] };   // Producción V2 las busca por nombre (v14.7)
 
 function _leerMetaTareas(ws) {
   _asegurarColumnas(ws, COL_META_TAREAS);
@@ -2161,6 +2180,7 @@ function abrirTareasOP() {
     if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la hoja de esa OP.'); return; }
   }
   if (_opEnEdicion() === ws.getName()) { ui.alert('⚠ La OP ' + ws.getName() + ' está en edición. Guarda o cancela la edición primero.'); return; }
+  if (_produccionAntiguaEnHojaOP(ws, _leerMetaOP(ws))) { ui.alert(_MSG_PRODUCCION_ANTIGUA(ws.getName())); return; }   // v14.7
   var meta = _leerMetaTareas(ws), est = _estructuraTareasOP(ws);
   var datos = { op: ws.getName(), filas: est.map(function(x) {
     return { clave: x.clave, area: x.area, s: x.s, sub: x.sub, original: x.original,
@@ -2639,4 +2659,211 @@ function _htmlBuscarOP(lista) {
     'document.getElementById("q").addEventListener("keydown",function(ev){if(document.getElementById("carga").classList.contains("on")){ev.preventDefault();return;}if(ev.key==="Enter"){ev.preventDefault();ir(sel);}else if(ev.key==="ArrowDown"){ev.preventDefault();sel=Math.min(sel+1,vis.length-1);marca();}else if(ev.key==="ArrowUp"){ev.preventDefault();sel=Math.max(sel-1,0);marca();}else if(ev.key==="Escape"){google.script.host.close();}});' +
     'pinta();setTimeout(function(){document.getElementById("q").focus();},100);' +
     '</script></body></html>';
+}
+
+// ============================================================
+//  v14.7 — PRODUCCIÓN: Kg Fabricados + Entrega en negro (50% / 50%)
+// ============================================================
+var TAREAS_PRODUCCION_ANTIGUAS = ['Corte', 'Armado', 'Soldadura', 'Calidad', 'Entrega en negro'];
+var PESOS_PRODUCCION_FILAS = [   // 'Assignees and Status' del archivo de Producción, filas 87-90
+  ['Producción Tareas (Kg Fabricados / Entrega en negro)', '%', 'Assignees', 'Status'],
+  ['Kg Fabricados',    50, 'Producción 1', ''],
+  ['Entrega en negro', 50, 'Producción 2', ''],
+  ['',                 '=SUM(B88:B89)', '', '']
+];
+
+function _MSG_PRODUCCION_ANTIGUA(op) {
+  return '⚠ La OP ' + op + ' tiene la estructura antigua de Producción (Corte, Armado, Soldadura, Calidad, ' +
+    'Entrega en negro).\n\nSi la OP sigue abierta, ejecuta una vez:\n' +
+    '🚀 Torre de Control > 🔁 Migrar Producción a Kg Fabricados + Entrega en negro.\n\n' +
+    'Las O.P que estaban terminadas al migrar conservan la estructura antigua y no se reenvían a las áreas.';
+}
+
+/** Escribe (una vez) los pesos 50/50 en 'Assignees and Status' del archivo de Producción. */
+function _asegurarPesosProduccion(ssArea) {
+  var sh = ssArea.getSheetByName('Assignees and Status');
+  if (!sh) throw new Error('no existe la hoja "Assignees and Status" en el archivo de Producción');
+  var f = AS_FILAS['Produccion']['Kg Fabricados'] - 1;   // 87
+  if (sh.getMaxRows() < f + 3) sh.insertRowsAfter(sh.getMaxRows(), f + 3 - sh.getMaxRows());
+  var rg = sh.getRange(f, 1, 4, 4), v = rg.getValues();
+  if (_norm(v[1][0]) === _norm('Kg Fabricados') && _norm(v[2][0]) === _norm('Entrega en negro')) return false;
+  var vacio = v.every(function(r) { return r.every(function(x) { return String(x).trim() === ''; }); });
+  if (!vacio) throw new Error('las filas ' + f + ' a ' + (f + 3) + ' de "Assignees and Status" (Producción) no están vacías; revisar a mano');
+  rg.setValues(PESOS_PRODUCCION_FILAS);
+  sh.getRange(f, 1, 1, 4).setFontWeight('bold');
+  return true;
+}
+
+/** true si el bloque de la OP en el Cronograma de Producción ya tiene las 2 tareas nuevas. */
+function _esBloqueProduccionNuevo(tSheet, blk) {
+  var T = TAREAS_AREA['Produccion'].length;
+  if (blk.len % T !== 0) return false;
+  var n = tSheet.getRange(blk.start, 14, blk.len, 1).getValues(), kg = 0;
+  for (var i = 0; i < n.length; i++) if (_norm(n[i][0]) === _norm('Kg Fabricados')) kg++;
+  return kg === blk.len / T;
+}
+
+/** Filas de un área en la hoja de la OP (una por tarea y subestructura). */
+function _filasAreaEnHojaOP(ws, area) {
+  var n = 0;
+  _recorrerHojaOP(ws, function(fila, a) { if (a === area) n++; });
+  return n;
+}
+
+/** true si la hoja de la OP todavía tiene Producción con 5 tareas por subestructura. */
+function _produccionAntiguaEnHojaOP(ws, m) {
+  if (m.areas.indexOf('Produccion') === -1) return false;
+  return _filasAreaEnHojaOP(ws, 'Produccion') !== m.numSubs * TAREAS_AREA['Produccion'].length;
+}
+
+/**
+ * Menú (una vez, se puede repetir): pasa las O.P NO terminadas a Kg Fabricados + Entrega en negro.
+ *  - Hoja de la OP (Comercial): Producción queda con 2 filas por subestructura; lo que tenía la
+ *    antigua "Entrega en negro" (planeado y real digitados) pasa a "Kg Fabricados".
+ *  - Cronograma de Producción: el bloque se crea con las 2 tareas y "Kg Fabricados" recibe el
+ *    ESTADO, KG, inicio y duración reales y OBSERVACIONES de la antigua "Entrega en negro".
+ *    Corte, Armado, Soldadura y Calidad se retiran (copia en "Cronograma_respaldo_migracion").
+ *  - Terminadas (todas sus tareas Terminado o No aplica): no se tocan.
+ *  Si se acaba el tiempo de Google, se vuelve a ejecutar y sigue donde iba.
+ */
+function migrarProduccionDosTareas() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var id = IDS_AREAS['Produccion'];
+  if (!id || id.indexOf('PON_AQUI') !== -1) { ui.alert('❌ El ID del archivo de Producción no está configurado (IDS_AREAS).'); return; }
+  var ok = ui.alert('🔁 Migrar Producción a 2 tareas',
+    'Las O.P NO terminadas pasan a "Kg Fabricados" (50%) + "Entrega en negro" (50%).\n\n' +
+    '• Lo registrado en la antigua "Entrega en negro" pasa a "Kg Fabricados".\n' +
+    '• Se retiran Corte, Armado, Soldadura y Calidad (queda copia del Cronograma de Producción).\n' +
+    '• Las O.P terminadas no se tocan.\n\n' +
+    'Antes de continuar haz una copia de este archivo y del de Producción (Archivo > Hacer una copia).\n\n¿Continuar?',
+    ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('⏳ Otra persona está trabajando con las O.P. Intenta de nuevo en un minuto.'); return; }
+  var t0 = Date.now(), LIMITE = 270000;
+  var r = { migradas: [], terminadas: [], yaListas: [], errores: [], pendientes: [], retiradas: [] };
+  try {
+    var ssP = SpreadsheetApp.openById(id), cron = ssP.getSheetByName('Cronograma');
+    if (!cron) throw new Error('no existe la hoja "Cronograma" en el archivo de Producción');
+    _asegurarPesosProduccion(ssP);
+    if (!ssP.getSheetByName('Cronograma_respaldo_migracion')) {
+      var resp = cron.copyTo(ssP); resp.setName('Cronograma_respaldo_migracion'); resp.hideSheet();
+    }
+    _listarOPs(ss).forEach(function(nombre) {
+      if (Date.now() - t0 > LIMITE) { r.pendientes.push(nombre); return; }
+      var ws = ss.getSheetByName(nombre), m = _leerMetaOP(ws);
+      if (m.areas.indexOf('Produccion') === -1) return;
+      try {
+        var res = _migrarProduccionOP(ss, ws, m, id, cron);
+        r[res.grupo].push(m.op);
+        r.retiradas = r.retiradas.concat(res.retiradas || []);
+      } catch (e) { r.errores.push(m.op + ': ' + e.message); }
+    });
+  } catch (e) {
+    r.errores.push(e.message);
+  } finally {
+    lock.releaseLock();
+  }
+  _invalidarListaOP();
+  var msg = '🔁 Migración de Producción\n';
+  if (r.migradas.length)   msg += '\n✅ Migradas (' + r.migradas.length + '): ' + r.migradas.join(', ');
+  if (r.terminadas.length) msg += '\n🏁 Terminadas, sin cambios (' + r.terminadas.length + '): ' + r.terminadas.join(', ');
+  if (r.yaListas.length)   msg += '\n✔ Ya estaban migradas: ' + r.yaListas.join(', ');
+  if (r.retiradas.length)  msg += '\n\n📦 Tenían datos en las tareas retiradas (quedan en "Cronograma_respaldo_migracion"):\n• ' + r.retiradas.join('\n• ');
+  if (r.pendientes.length) msg += '\n\n⏳ Se acabó el tiempo de Google. Faltan ' + r.pendientes.length + ' O.P: vuelve a ejecutar el menú para continuar.';
+  if (r.errores.length)    msg += '\n\n⚠️ No se migraron:\n' + r.errores.join('\n');
+  Logger.log(msg);
+  ui.alert(msg);
+  return r;
+}
+
+/** Migra UNA OP. Devuelve {grupo: 'migradas'|'terminadas'|'yaListas', retiradas: [...]} */
+function _migrarProduccionOP(ss, ws, m, id, cron) {
+  var T = TAREAS_AREA['Produccion'].length, TA = TAREAS_PRODUCCION_ANTIGUAS.length;
+  var nHoja = _filasAreaEnHojaOP(ws, 'Produccion');
+  var hojaAntigua = nHoja === m.numSubs * TA;
+  if (!hojaAntigua && nHoja !== m.numSubs * T)
+    throw new Error('la hoja de la OP tiene ' + nHoja + ' filas de Producción para ' + m.numSubs + ' subestructura/s (revisar a mano)');
+  var blk = _bloqueOP(cron, m.op);
+  var bloqueAntiguo = !!blk && !_esBloqueProduccionNuevo(cron, blk);
+  if (!hojaAntigua && !bloqueAntiguo) return { grupo: 'yaListas' };
+
+  // 1) Lo que registró Producción en el bloque antiguo
+  var guardado = [], retiradas = [];
+  if (bloqueAntiguo) {
+    if (blk.len % TA !== 0) throw new Error('el bloque de Producción tiene ' + blk.len + ' filas y no cuadra con ' + TA + ' tareas (revisar a mano)');
+    var v = cron.getRange(blk.start, 1, blk.len, 29).getValues();
+    var estados = v.map(function(x) { return String(x[15]).trim(); });
+    var terminada = estados.indexOf('Terminado') !== -1 &&
+      estados.every(function(e) { return e === 'Terminado' || e === ESTADO_NO_APLICA; });
+    if (terminada) return { grupo: 'terminadas' };
+    for (var s = 0; s < blk.len / TA; s++) {
+      var e = v[s * TA + TA - 1];   // antigua "Entrega en negro" = última tarea de la subestructura
+      var ini = e[20] instanceof Date && e[20].getFullYear() >= 2000 ? e[20] : '';
+      guardado.push({ estado: String(e[15]).trim(), kg: e[18], ini: ini, dur: e[21], obs: e[28] });
+      for (var t = 0; t < TA - 1; t++) {
+        var x = v[s * TA + t], est = String(x[15]).trim(), kg = parseFloat(x[18]) || 0, obs = String(x[28]).trim();
+        if (kg > 0 || est === 'Terminado' || est === 'Reproceso' || obs)
+          retiradas.push(m.op + '_' + (s + 1) + ' ' + String(x[13]).trim() + ': ' + (est || '—') + (kg ? ' · ' + kg + ' kg' : '') + (obs ? ' · con observación' : ''));
+      }
+    }
+  }
+
+  // 2) Hoja de la OP en Comercial (Producción con 2 filas por subestructura)
+  if (hojaAntigua) {
+    var d = { op: m.op, nombreOp: m.nombreOp, cliente: m.cliente, comercial: m.comercial, sede: m.sede,
+              numSubs: m.numSubs, areas: m.areas, fechaEntrega: m.fecha };
+    ws = _reconstruirHojaOP(ss, ws, d, m, function(datos, metaT) {
+      var mover = {};
+      Object.keys(datos.filas).forEach(function(k) {
+        var p = k.split('|');
+        if (p[0] !== 'Produccion') return;
+        if (p[2] === 'Entrega en negro') mover[p[0] + '|' + p[1] + '|Kg Fabricados'] = datos.filas[k];
+        delete datos.filas[k];
+      });
+      Object.keys(mover).forEach(function(k) { datos.filas[k] = mover[k]; });
+      var esProd = function(k) { return k.indexOf('Produccion|') === 0; };
+      metaT.na = metaT.na.map(function(k) {
+        if (!esProd(k)) return k;
+        var p = k.split('|');
+        return Number(p[2]) === TA - 1 ? p[0] + '|' + p[1] + '|0' : null;   // antigua Entrega en negro → Kg Fabricados
+      }).filter(function(k) { return k; });
+      Object.keys(metaT.nom).forEach(function(k) { if (esProd(k)) delete metaT.nom[k]; });
+      Object.keys(metaT.ant || {}).forEach(function(k) { if (esProd(k)) delete metaT.ant[k]; });
+    });
+  }
+
+  // 3) Cronograma de Producción: bloque nuevo + datos de la antigua "Entrega en negro" en "Kg Fabricados"
+  if (bloqueAntiguo) {
+    var datosHoja = _leerDatosHojaOP(ws), offset = 0, slice = [];
+    m.areas.forEach(function(area) {
+      var Ta = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
+      var nS = AREAS_GENERALES.indexOf(area) !== -1 ? 1 : m.numSubs;
+      if (area === 'Produccion') slice = datosHoja.slice(offset, offset + nS * Ta);
+      offset += nS * Ta;
+    });
+    var kgTotal = 0;
+    if (ws.getLastRow() >= 2) ws.getRange(2, 6, ws.getLastRow() - 1, 1).getValues().forEach(function(x) {
+      var k = parseFloat(x[0]); if (!isNaN(k) && k > 0) kgTotal += k; });
+    _enviarAPlantillaArea(id, 'Produccion', m.op, m.nombreOp, m.cliente, m.comercial, m.sede,
+                          m.numSubs, m.numAreas, kgTotal, slice, m.fecha, cron);
+    var nb = _bloqueOP(cron, m.op);
+    guardado.forEach(function(g, s) {
+      if (s * T >= nb.len) return;
+      var r = nb.start + s * T;   // fila de "Kg Fabricados"
+      if (g.estado) cron.getRange(r, 16).setValue(g.estado);
+      if (g.kg !== '' && g.kg != null) cron.getRange(r, 19).setValue(g.kg);
+      if (g.ini) cron.getRange(r, 21).setValue(g.ini).setNumberFormat('dd/mm/yyyy');
+      if (g.dur !== '' && g.dur != null) cron.getRange(r, 22).setValue(g.dur);
+      if (String(g.obs).trim()) cron.getRange(r, 29).setValue(g.obs);
+    });
+    var reg = _nuevoRegistro(m.op);
+    _aplicarTareasEnArea(cron, 'Produccion', m.op, _leerMetaTareas(ws), function(area, sub, tarea, campo, antes, despues) {
+      reg.add('Migración Producción', area, sub, tarea, campo, antes, despues);
+    });
+    reg.add('Migración Producción', 'Produccion', '', '', 'TAREAS', TAREAS_PRODUCCION_ANTIGUAS.join(', '),
+            'Kg Fabricados 50% + Entrega en negro 50%');
+    reg.guardar(ss);
+  }
+  return { grupo: 'migradas', retiradas: retiradas };
 }

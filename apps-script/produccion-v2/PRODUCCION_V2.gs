@@ -1,4 +1,17 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.3 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.4 (fusionada)
+//
+// v4.4 (solicitud de Producción — Kg fabricados vs. entrega de material en negro):
+//  - Cada bloque de O.P en las hojas del mes tiene una 4.ª fila
+//    "ENTREGA MATERIAL EN NEGRO" para registrar los kg entregados por día.
+//    NO se suma al TOTAL REAL INF. PRODUCCION (ese total solo suma las filas "OP…");
+//    tiene su propio total abajo: "TOTAL ENTREGA MATERIAL EN NEGRO".
+//  - Menú "➕ Agregar fila ENTREGA MATERIAL EN NEGRO a las OP programadas": la
+//    agrega una sola vez a los bloques que ya existían (no toca kg ni fórmulas).
+//  - Sincronizar diario lleva los kg fabricados a la tarea "Kg Fabricados" (antes
+//    "Entrega en negro") y los kg entregados a la nueva tarea "Entrega en negro".
+//    Misma lógica para las dos (solo sube, Terminado al completar el peso, línea
+//    base, No aplica). Las O.P antiguas que no se migraron (5 tareas) siguen
+//    funcionando como en v4.3.
 //
 // v4.3:
 //  - Si "Entrega en negro" de una subestructura está en "No aplica" (lo marca
@@ -65,7 +78,9 @@ const CONFIG = {
   HOJA_CRONO: 'Cronograma',                 // v3: cronograma estándar del área
   FILA_ENC_CRONO: 5,                        // fila de encabezados del Cronograma
   FILA_INI_CRONO: 6,                        // primera fila de datos del Cronograma
-  TAREA_KG: 'Entrega en negro',             // tarea que recibe los kilos diarios
+  TAREA_KG: 'Kg Fabricados',                // v4.4: tarea que recibe los kilos fabricados diarios
+  TAREA_KG_ANTIGUA: 'Entrega en negro',     // v4.4: O.P sin migrar (5 tareas): ahí van los kg fabricados
+  TAREA_ENTREGA: 'Entrega en negro',        // v4.4: tarea que recibe los kg ENTREGADOS en negro
   // Archivo de donde se copia el Cronograma la primera vez (PLANTILLA_LOOKER_PRODUCCION)
   ID_PLANTILLA_PRODUCCION: '1fPNU8AEwnI591RXr6zfuhDwQ8Ry7u1zqMVkoet6ySyA',
   FILA_INICIO: 3,                 // primera fila de O.P en la hoja del mes
@@ -83,7 +98,8 @@ const CONFIG = {
     linea: '#fabf8f',
     noHabil: '#efefef',
     resumen: '#fff2cc',
-    semana: '#d9d9d9'
+    semana: '#d9d9d9',
+    entrega: '#e2efda'              // v4.4: fila ENTREGA MATERIAL EN NEGRO
   }
 };
 
@@ -101,6 +117,9 @@ const COL = { LINEA: 2, PROYECTO: 3, CLIENTE: 4, COMERCIAL: 5, DESCRIPCION: 6,
   PESO: 7, EMITIDOS: 8, REPORTE: 9, PENDIENTE: 10 };
 
 const ETQ_TOTAL_REAL = 'TOTAL REAL INF. PRODUCCION';
+const ETQ_ENTREGA = 'ENTREGA MATERIAL EN NEGRO';               // v4.4: 4.ª fila de cada bloque de O.P
+const ETQ_TOTAL_ENTREGA = 'TOTAL ENTREGA MATERIAL EN NEGRO';   // v4.4: total propio (no suma al TOTAL REAL)
+const FILA_TOTAL_ENTREGA = 11;                                 // v4.4: fila libre del resumen (s + 11)
 
 // ------------------------------------------------------------
 //  MENÚ
@@ -114,6 +133,7 @@ function onOpen() {
     .addItem('🔁 Actualizar lista de OP del formulario', 'actualizarListasFormulario')
     .addItem('⚙️ Configurar formulario (Año y campos)', 'configurarFormulario')
     .addItem('🧹 Borrar de los meses las OP que no vienen de comercial', 'limpiarOPsSinComercial')
+    .addItem('➕ Agregar fila ENTREGA MATERIAL EN NEGRO a las OP programadas', 'agregarFilaEntregaExistentes')   // v4.4
     .addSeparator()
     .addItem('🔗 Preparar Cronograma (una sola vez)', 'prepararCronograma')
     .addItem('⏱ Activar sincronización automática (cada hora)', 'activarSincronizacionAutomatica')
@@ -338,7 +358,9 @@ function mostrarAyuda() {
     '• Si la hoja del mes (ej. "ENERO 2026") no existe, se crea con todos los días del mes.\n' +
     '• Si ya existe, la O.P se agrega debajo de la última, y el bloque de totales y\n' +
     '  REAL SEMANA / PLANEADO SEMANA / CUMPLIMIENTO queda fijo al final.\n' +
-    '• Una O.P no se repite dos veces en el mismo mes.',
+    '• Una O.P no se repite dos veces en el mismo mes.\n' +
+    '• Kg fabricados del día: fila "OP …". Kg entregados en negro: fila "' + ETQ_ENTREGA + '"\n' +
+    '  (no se suman al TOTAL REAL; tienen su propio total abajo).',
     SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
@@ -619,6 +641,7 @@ function escribirResumen_(sh, lay, sep) {
   sh.getRange(s + R.RSEM, COL.DESCRIPCION, 3, 2).setBorder(true, true, true, true, true, true).setFontWeight('bold');
   sh.getRange(s + R.RSEM, COL.PESO, 3, 1).setNumberFormat('#,##0');
   sh.getRange(s + R.CODIGO, lay.ultimoDia).setFontSize(8).setFontColor('#666666');
+  escribirTotalEntrega_(sh, lay, s);   // v4.4
 }
 
 // ------------------------------------------------------------
@@ -700,6 +723,8 @@ function agregarOP_(sh, f) {
   tabla.setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
   tabla.setBorder(true, true, true, true, null, null, '#000000', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 
+  insertarFilaEntrega_(sh, lay, r);   // v4.4: 4.ª fila ENTREGA MATERIAL EN NEGRO
+
   // Asegura que los totales del resumen sigan cubriendo todas las O.P
   escribirTotales_(sh, lay);
 }
@@ -715,6 +740,107 @@ function escribirTotales_(sh, lay) {
     plan.push(c >= lay.primerDia ? '=SUMIF(' + crit + ',"PLANEADO",' + rg + ')' : '');
   }
   sh.getRange(s, COL.PESO, 2, real.length).setValues([real, plan]);
+  escribirTotalEntrega_(sh, lay, s);   // v4.4
+}
+
+// ============================================================
+//  v4.4 — ENTREGA MATERIAL EN NEGRO (4.ª fila de cada bloque)
+// ============================================================
+/** Inserta y llena la fila ENTREGA MATERIAL EN NEGRO debajo de DIFERENCIA (bloque que empieza en r). */
+function insertarFilaEntrega_(sh, lay, r) {
+  const e = r + 3, L = letra_, D1 = L(lay.primerDia), DN = L(lay.ultimoDia);
+  sh.insertRowsAfter(r + 2, 1);
+  const c0 = COL.LINEA, ancho = lay.colEtiqueta - c0 + 1;
+  const fila = new Array(ancho).fill('');
+  const put = function (col, v) { fila[col - c0] = v; };
+  put(COL.PROYECTO, ETQ_ENTREGA);
+  put(COL.REPORTE, '=SUM(' + D1 + e + ':' + DN + e + ')');        // entregado en el mes
+  for (let d = 0; d < lay.dias; d++) put(lay.primerDia + d, 0);
+  put(lay.colTotal, '=SUM(' + D1 + e + ':' + DN + e + ')');
+  put(lay.colEtiqueta, 'Total Entrega en negro');
+  const rg = sh.getRange(e, c0, 1, ancho);
+  rg.breakApart().clearFormat().setValues([fila]);
+  sh.setRowHeight(e, 21);
+  const bg = new Array(ancho).fill('#ffffff');
+  bg[0] = CONFIG.COLOR.linea;
+  bg[COL.PROYECTO - c0] = CONFIG.COLOR.entrega;
+  lay.info.forEach(function (x, d) { if (!x.laborable) bg[lay.primerDia + d - c0] = CONFIG.COLOR.noHabil; });
+  rg.setBackgrounds([bg]).setVerticalAlignment('middle');
+  sh.getRange(e, COL.PROYECTO).setHorizontalAlignment('center').setFontWeight('bold').setFontSize(9);
+  sh.getRange(e, COL.PESO, 1, lay.colTotal - COL.PESO + 1)
+    .setNumberFormat('#,##0;[Red]-#,##0').setHorizontalAlignment('center');
+  sh.getRange(e, lay.colEtiqueta).setFontColor('#666666').setFontSize(9);
+  // LINEA combinada en las 4 filas y bordes del bloque completo
+  const lin = sh.getRange(r, COL.LINEA, 4, 1);
+  lin.breakApart(); lin.merge().setHorizontalAlignment('center').setVerticalAlignment('middle').setFontSize(9);
+  const tabla = sh.getRange(r, COL.LINEA, 4, lay.colTotal - COL.LINEA + 1);
+  tabla.setBorder(true, true, true, true, true, true, '#000000', SpreadsheetApp.BorderStyle.SOLID);
+  tabla.setBorder(true, true, true, true, null, null, '#000000', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
+}
+
+/** Fila propia del resumen: TOTAL ENTREGA MATERIAL EN NEGRO (no entra al TOTAL REAL). */
+function escribirTotalEntrega_(sh, lay, s) {
+  const f = s + FILA_TOTAL_ENTREGA, ini = CONFIG.FILA_INICIO, sep = s - 1, L = letra_;
+  const crit = '$' + L(COL.PROYECTO) + '$' + ini + ':$' + L(COL.PROYECTO) + '$' + sep;
+  const c0 = COL.PROYECTO, ancho = lay.colEtiqueta - c0 + 1;
+  const fila = new Array(ancho).fill('');
+  fila[0] = ETQ_TOTAL_ENTREGA;
+  const rgI = L(COL.REPORTE) + ini + ':' + L(COL.REPORTE) + sep;
+  fila[COL.REPORTE - c0] = '=SUMIF(' + crit + ',"' + ETQ_ENTREGA + '",' + rgI + ')';
+  for (let c = lay.primerDia; c <= lay.ultimoDia; c++)
+    fila[c - c0] = '=SUMIF(' + crit + ',"' + ETQ_ENTREGA + '",' + L(c) + ini + ':' + L(c) + sep + ')';
+  fila[lay.colTotal - c0] = '=SUM(' + L(lay.primerDia) + f + ':' + L(lay.ultimoDia) + f + ')';
+  fila[lay.colEtiqueta - c0] = 'Total Entrega en negro';
+  if (sh.getMaxRows() < f) sh.insertRowsAfter(sh.getMaxRows(), f - sh.getMaxRows());
+  sh.getRange(f, c0, 1, ancho).setValues([fila]);
+  sh.getRange(f, COL.PROYECTO).setFontWeight('bold').setBackground(CONFIG.COLOR.entrega);
+  sh.getRange(f, COL.PROYECTO, 1, lay.colTotal - COL.PROYECTO + 1).setBorder(true, true, true, true, true, null);
+  sh.getRange(f, COL.REPORTE, 1, lay.colTotal - COL.REPORTE + 1)
+    .setNumberFormat('#,##0;[Red]-#,##0').setHorizontalAlignment('center').setFontWeight('bold');
+  sh.getRange(f, lay.colEtiqueta).setFontColor('#666666').setFontSize(9);
+}
+
+/** Menú (una vez): agrega la fila ENTREGA MATERIAL EN NEGRO a los bloques que ya existían. */
+function agregarFilaEntregaExistentes() {
+  const ss = SpreadsheetApp.getActive();
+  let ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { if (ui) ui.alert('Otra persona está trabajando en el archivo. Intenta de nuevo.'); return; }
+  const detalle = [];
+  let total = 0;
+  try {
+    ss.getSheets().forEach(function (sh) {
+      const m = sh.getName().match(/^([A-Z]+) (\d{4})$/);
+      if (!m || MESES.indexOf(m[1]) < 0) return;
+      let lay, sep;
+      try { lay = layoutDeHoja_(sh); sep = filaResumen_(sh) - 1; } catch (e) { return; }
+      const n = sep - CONFIG.FILA_INICIO;
+      if (n <= 0) return;
+      // se lee también la fila separadora (sep): ahí puede haber un rótulo escrito a mano
+      const v = sh.getRange(CONFIG.FILA_INICIO, COL.PROYECTO, n + 1, 1).getValues()
+        .map(function (x) { return String(x[0]).trim().toUpperCase(); });
+      let agregadas = 0;
+      for (let i = n - 1; i >= 0; i--) {                    // de abajo hacia arriba: las filas de arriba no se corren
+        if (!/^OP\.?\s*\S/.test(v[i])) continue;
+        if (v[i + 1] !== 'PLANEADO' || v[i + 2] !== 'DIFERENCIA') continue;
+        if (v[i + 3] === ETQ_ENTREGA && i + 3 < n) continue;  // ya la tiene
+        // rótulo suelto en la fila separadora (sin datos): se quita y se crea la fila completa
+        if (v[i + 3] === ETQ_ENTREGA && i + 3 === n) sh.getRange(sep, COL.PROYECTO).clearContent();
+        insertarFilaEntrega_(sh, lay, CONFIG.FILA_INICIO + i);
+        agregadas++;
+      }
+      escribirTotales_(sh, lay);                           // también deja el TOTAL ENTREGA del resumen
+      if (agregadas) detalle.push(sh.getName() + ': ' + agregadas);
+      total += agregadas;
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  const msg = total ? '✅ Fila "' + ETQ_ENTREGA + '" agregada a ' + total + ' bloque/s de O.P:\n   ' + detalle.join('\n   ')
+                    : '✅ Todas las O.P programadas ya tienen la fila "' + ETQ_ENTREGA + '".';
+  Logger.log(msg);
+  if (ui) ui.alert(msg);
+  return total;
 }
 
 // ============================================================
@@ -754,6 +880,7 @@ function leerCronograma_(ss) {
   const v = sh.getRange(CONFIG.FILA_INI_CRONO, 1, last - CONFIG.FILA_INI_CRONO + 1, ancho).getValues();
   let op = null, sub = null;
   const tareaKg = _n3(CONFIG.TAREA_KG);
+  const tareaEnt = _n3(CONFIG.TAREA_ENTREGA);   // v4.4
   for (let i = 0; i < v.length; i++) {
     const fila = CONFIG.FILA_INI_CRONO + i, r = v[i];
     const opTxt = String(r[C.OP - 1]).trim().replace(/\.0$/, '');
@@ -765,11 +892,19 @@ function leerCronograma_(ss) {
     if (!op) continue;
     if (String(r[C.SUB - 1]).trim() !== '' || (opTxt && !sub)) {
       sub = { n: op.subs.length + 1, nombre: String(r[C.SUB - 1]).trim() || ('Sub ' + (op.subs.length + 1)),
-              kg: Number(r[C.KG - 1]) || 0, filaKg: null };
+              kg: Number(r[C.KG - 1]) || 0, filaKg: null, filaEnt: null };
       op.subs.push(sub);
     }
     if (sub && _n3(r[C.TAREA - 1]) === tareaKg) sub.filaKg = fila;
+    if (sub && _n3(r[C.TAREA - 1]) === tareaEnt) sub.filaEnt = fila;   // v4.4
   }
+  // v4.4: O.P sin migrar (sin "Kg Fabricados"): los kg fabricados siguen yendo a
+  // su "Entrega en negro" como en v4.3, y no reciben kg entregados.
+  Object.keys(res.ops).forEach(function (k) {
+    res.ops[k].subs.forEach(function (s) {
+      if (!s.filaKg && s.filaEnt) { s.filaKg = s.filaEnt; s.filaEnt = null; s.antigua = true; }
+    });
+  });
   return res;
 }
 
@@ -848,7 +983,7 @@ function leerDiario_(ss) {
       if (!t) continue;
       const tok = t[1], mm = tok.match(/^(.+)_(\d+)$/);
       const key = mm ? mm[1] + '|' + Number(mm[2]) : tok + '|*';
-      const a = agg[key] || (agg[key] = { real: 0, plan: 0, ini: null, fin: null, dias: {} });
+      const a = agg[key] || (agg[key] = { real: 0, plan: 0, ini: null, fin: null, dias: {}, ent: 0, entIni: null, entFin: null });
       for (let d = 0; d < lay.dias; d++) {
         const real = Number(v[i][d0 + d]) || 0;
         const plan = (i + 1 < v.length) ? (Number(v[i + 1][d0 + d]) || 0) : 0;
@@ -859,6 +994,20 @@ function leerDiario_(ss) {
           if (!a.ini || f < a.ini) a.ini = f;
           if (!a.fin || f > a.fin) a.fin = f;
         }
+      }
+      // v4.4: kg ENTREGADOS en negro (fila ENTREGA MATERIAL EN NEGRO del mismo bloque)
+      for (let k = 1; k <= 3 && i + k < v.length; k++) {
+        if (String(v[i + k][0]).trim().toUpperCase() !== ETQ_ENTREGA) continue;
+        for (let d = 0; d < lay.dias; d++) {
+          const ent = Number(v[i + k][d0 + d]) || 0;
+          if (ent > 0) {
+            a.ent += ent;
+            const f = new Date(lay.anio, lay.mes, d + 1);
+            if (!a.entIni || f < a.entIni) a.entIni = f;
+            if (!a.entFin || f > a.entFin) a.entFin = f;
+          }
+        }
+        break;
       }
     }
   });
@@ -887,7 +1036,8 @@ function sincronizarDiarioACronograma() {
     if (!crono.sh) { if (ui) ui.alert('⚠ No existe la hoja "' + CONFIG.HOJA_CRONO + '". Usa "🔗 Preparar Cronograma".'); return; }
     const C = crono.C, sh = crono.sh, diario = leerDiario_(ss);
     let actualizadas = 0, terminadas = 0;
-    const sinFila = [];
+    let actualizadasEnt = 0, terminadasEnt = 0;      // v4.4: tarea "Entrega en negro"
+    const sinFila = [], sinFilaEnt = [];
 
     Object.keys(crono.ops).forEach(function (op) {
       const o = crono.ops[op];
@@ -896,16 +1046,54 @@ function sincronizarDiarioACronograma() {
       o.subs.forEach(function (s) {
         const a = diario[op + '|' + s.n];
         let real = a ? a.real : 0, ini = a ? a.ini : null, fin = a ? a.fin : null;
+        let ent = a ? a.ent : 0, entIni = a ? a.entIni : null, entFin = a ? a.entFin : null;   // v4.4
         if (comp && comp.real > 0) {                   // se reparte según el KG de cada subestructura
           const parte = kgTot > 0 ? s.kg / kgTot : 1 / o.subs.length;
           real += comp.real * parte;
           if (comp.ini && (!ini || comp.ini < ini)) ini = comp.ini;
           if (comp.fin && (!fin || comp.fin > fin)) fin = comp.fin;
         }
+        if (comp && comp.ent > 0) {                    // v4.4: igual para lo entregado en negro
+          const parteE = kgTot > 0 ? s.kg / kgTot : 1 / o.subs.length;
+          ent += comp.ent * parteE;
+          if (comp.entIni && (!entIni || comp.entIni < entIni)) entIni = comp.entIni;
+          if (comp.entFin && (!entFin || comp.entFin > entFin)) entFin = comp.entFin;
+        }
         if (ini && ini.getFullYear() < 2000) ini = null;   // v4.1: fecha < 2000 = vacía
-        if (real <= 0) return;                         // sin reportes: no se toca nada
-        if (!s.filaKg) { sinFila.push(op + '_' + s.n); return; }
-        const r = s.filaKg;
+        if (entIni && entIni.getFullYear() < 2000) entIni = null;   // v4.4
+        // v4.4: la misma lógica de siempre, para "Kg Fabricados" y para "Entrega en negro"
+        const res = sincronizarTarea_(sh, C, s.filaKg, s.kg, real, ini, fin);
+        if (res === 'sinFila') sinFila.push(op + '_' + s.n);
+        else if (res) { if (res.cambio) actualizadas++; if (res.terminada) terminadas++; }
+        if (s.filaEnt) {
+          const resE = sincronizarTarea_(sh, C, s.filaEnt, s.kg, ent, entIni, entFin);
+          if (resE && resE !== 'sinFila') { if (resE.cambio) actualizadasEnt++; if (resE.terminada) terminadasEnt++; }
+        } else if (ent > 0) sinFilaEnt.push(op + '_' + s.n);
+      });
+    });
+
+    const msg = '🔄 Sincronización: ' + actualizadas + ' subestructura/s actualizadas en "' + CONFIG.TAREA_KG + '"' +
+      (terminadas ? ' (' + terminadas + ' terminadas)' : '') +
+      ' · ' + actualizadasEnt + ' en "' + CONFIG.TAREA_ENTREGA + '"' +
+      (terminadasEnt ? ' (' + terminadasEnt + ' terminadas)' : '') +
+      (sinFila.length ? '\n⚠ Sin tarea "' + CONFIG.TAREA_KG + '": ' + sinFila.join(', ') : '') +
+      (sinFilaEnt.length ? '\n⚠ Tienen kg entregados pero no la tarea "' + CONFIG.TAREA_ENTREGA + '" (O.P sin migrar): ' + sinFilaEnt.join(', ') : '');
+    Logger.log(msg);
+    if (ui) ss.toast(msg, '✅ Producción', 8);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * v4.4 — Lleva los kg de UNA tarea del Cronograma (antes era el cuerpo del ciclo,
+ * sin cambios en la lógica). Devuelve null (no hay kg), 'sinFila' o {cambio, terminada}.
+ */
+function sincronizarTarea_(sh, C, filaTarea, kgSub, real, ini, fin) {
+        if (real <= 0) return null;                    // sin reportes: no se toca nada
+        if (!filaTarea) return 'sinFila';
+        const s = { kg: kgSub };
+        const r = filaTarea;
         real = Math.round(real * 100) / 100;
         // v4 — se respeta lo que Producción digitó a mano (comportamiento original):
         //   la sincronización solo SUBE valores, nunca los baja ni los borra.
@@ -914,7 +1102,7 @@ function sincronizarDiarioACronograma() {
         const iniActual = vals[C.F_INI_REAL - 1] instanceof Date && vals[C.F_INI_REAL - 1].getFullYear() >= 2000 ? vals[C.F_INI_REAL - 1] : null; // v4.1
         const durActual = Number(vals[C.DUR_REAL - 1]) || 0;
         const actual = String(vals[C.ESTADO - 1]).trim();
-        if (actual === 'No aplica') return;   // v4.3: la marcó Comercial, no se sincroniza
+        if (actual === 'No aplica') return null;   // v4.3: la marcó Comercial, no se sincroniza
         let cambio = false;
         if (real > kgActual) { sh.getRange(r, C.KG_AV).setValue(real); cambio = true; }
         const kgFinal = Math.max(real, kgActual);
@@ -933,19 +1121,7 @@ function sincronizarDiarioACronograma() {
         if (s.kg > 0 && kgFinal >= s.kg) nuevo = 'Terminado';
         else if (actual === '' || actual === 'En pausa') nuevo = 'Abierto';
         if (nuevo !== actual) { sh.getRange(r, C.ESTADO).setValue(nuevo); cambio = true; }
-        if (nuevo === 'Terminado') terminadas++;
-        if (cambio) actualizadas++;
-      });
-    });
-
-    const msg = '🔄 Sincronización: ' + actualizadas + ' subestructura/s actualizadas en "' + CONFIG.TAREA_KG + '"' +
-      (terminadas ? ' (' + terminadas + ' terminadas)' : '') +
-      (sinFila.length ? '\n⚠ Sin tarea "' + CONFIG.TAREA_KG + '": ' + sinFila.join(', ') : '');
-    Logger.log(msg);
-    if (ui) ss.toast(msg, '✅ Producción', 8);
-  } finally {
-    lock.releaseLock();
-  }
+        return { cambio: cambio, terminada: nuevo === 'Terminado' };
 }
 
 /** Crea (una sola vez) el disparador que sincroniza cada hora. */
@@ -1002,15 +1178,16 @@ function limpiarOPsSinComercial() {
       const t = String(v[i][0]).match(/^\s*OP\.?\s*([^\s·]+)/i);
       if (!t) continue;
       const op = t[1].replace(/_\d+$/, '');
-      if (!ops[op]) borrar.push({ sh: sh, fila: CONFIG.FILA_INICIO + i, txt: sh.getName() + ': ' + String(v[i][0]).trim() });
+      const nFilas = (i + 3 < v.length && String(v[i + 3][0]).trim().toUpperCase() === ETQ_ENTREGA) ? 4 : 3;   // v4.4
+      if (!ops[op]) borrar.push({ sh: sh, fila: CONFIG.FILA_INICIO + i, n: nFilas, txt: sh.getName() + ': ' + String(v[i][0]).trim() });
     }
   });
   if (!borrar.length) { ui.alert('✅ Todas las OP de los meses vienen de comercial.'); return; }
   const r = ui.alert('🧹 Borrar OP que no vienen de comercial',
-    'Se borrarán estos bloques (OP / PLANEADO / DIFERENCIA) con sus kilos:\n\n' +
+    'Se borrarán estos bloques (OP / PLANEADO / DIFERENCIA / ENTREGA EN NEGRO) con sus kilos:\n\n' +
     borrar.map(function (b) { return '• ' + b.txt; }).join('\n') + '\n\n¿Borrar?', ui.ButtonSet.YES_NO);
   if (r !== ui.Button.YES) return;
-  borrar.sort(function (a, b) { return b.fila - a.fila; }).forEach(function (b) { b.sh.deleteRows(b.fila, 3); });
+  borrar.sort(function (a, b) { return b.fila - a.fila; }).forEach(function (b) { b.sh.deleteRows(b.fila, b.n); });   // v4.4: 3 o 4 filas
   const hojas = {};
   borrar.forEach(function (b) { hojas[b.sh.getName()] = b.sh; });
   Object.keys(hojas).forEach(function (k) { try { escribirTotales_(hojas[k], layoutDeHoja_(hojas[k])); } catch (e) {} });
