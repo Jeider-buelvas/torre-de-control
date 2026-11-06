@@ -1,4 +1,12 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.8
+//  v14.8 (dos plantas): Producción tiene un archivo por planta (IDS_PRODUCCION_PLANTA).
+//         La Sede de la OP decide a dónde va: BOGOTÁ → archivo Bogotá, BARRANQUILLA →
+//         archivo Barranquilla, MIXTO → los dos (cada subestructura lleva su planta en la
+//         columna Sede de la sección PRODUCCION de la hoja de la OP). Si cambia la Sede,
+//         la OP se quita del archivo de la otra planta (con confirmación, como siempre).
+//         Mientras el ID de Bogotá diga PON_AQUI, todo sigue en el archivo único (= v14.7).
+//
 //  MACRO_COMERCIAL — v14.7
 //  v14.7 (solicitud de Producción): el cronograma de Producción queda con 2 tareas
 //         al 50%: "Kg Fabricados" (lo que antes recibía "Entrega en negro") y
@@ -205,6 +213,14 @@ const IDS_AREAS = {
   // 'Montaje':    '1yq1S3Iza5gcw5WNWjk4OuSEyeEOdvv65soZg-BOQ3Vk',
   // 'Pintura':    '1Ns34bXdnHlqxjlgVkFdQPmqrf3SrtQg499_YqnFK5PY',
   // 'Produccion': '15Ei3If0mZE02j6YUxPSg-uaQBjtBFZoL4h3Y1PV-Z1E',
+};
+
+// ── v14.8: Producción, un archivo por planta ──────────────────────────────────
+//  Barranquilla = el archivo actual. Bogotá = la copia (pegar su ID; mientras diga
+//  PON_AQUI todo sigue en el archivo único, igual que v14.7).
+var IDS_PRODUCCION_PLANTA = {
+  'BARRANQUILLA': IDS_AREAS['Produccion'],
+  'BOGOTÁ':       'PON_AQUI_ID_PRODUCCION_BOGOTA'
 };
 
 // ── TAREAS POR ÁREA — PLANTILLA_LOOKER_BORRADOR (FINAL) ──────
@@ -709,7 +725,9 @@ function _actualizarMetaOP(ws, d) {
   var last = ws.getLastRow();
   if (last < 2) return;
   var colD = ws.getRange(2, 4, last - 1, 1).getValues(), celdasG = [];
+  var colG = _normPlanta(d.sede) === 'MIXTO' ? ws.getRange(2, 7, last - 1, 1).getValues() : null;   // v14.8
   for (var i = 0; i < colD.length; i++) {
+    if (colG && _esPlanta(colG[i][0])) continue;   // v14.8: MIXTO conserva BOGOTÁ / BARRANQUILLA de cada subestructura
     if (String(colD[i][0]).trim()) celdasG.push('G' + (i + 2));
   }
   if (celdasG.length) ws.getRangeList(celdasG).setValue(d.sede);   // v14.3: una sola llamada
@@ -745,7 +763,7 @@ function _leerManualesOP(ws) {
     var g = area + '|' + s; cont[g] = inicioSub ? 0 : (cont[g] || 0) + 1;
     tarea = _nombreOriginalOP(metaT, area, s, cont[g], tarea);
     filas[area + '|' + s + '|' + tarea] = { I: v[8], J: v[9], Q: v[16], R: v[17], Z: v[25] };
-    if (inicioSub) subs[area + '|' + s] = { E: v[4], F: v[5] };
+    if (inicioSub) subs[area + '|' + s] = { E: v[4], F: v[5], G: v[6] };   // v14.8: + planta (G)
   });
   return { filas: filas, subs: subs };
 }
@@ -763,6 +781,8 @@ function _restaurarManualesOP(ws, datos) {
     if (inicioSub) {
       var sg = datos.subs[area + '|' + s];
       if (sg) ws.getRange(fila, 5, 1, 2).setValues([[sg.E, sg.F]]);
+      // v14.8: en una OP MIXTO se conserva la planta elegida para cada subestructura
+      if (sg && _esPlanta(sg.G) && !_esPlanta(ws.getRange(fila, 7).getValue()) && _normPlanta(ws.getRange(1, 32).getValue()) === 'MIXTO') ws.getRange(fila, 7).setValue(sg.G);
     }
   });
   ws.getRange(2, 9, n, 2).setValues(IJ);
@@ -889,6 +909,9 @@ function _sincronizarOPConAreas(ss, ws) {
     var datosHoja = _leerDatosHojaOP(ws);
     var metaT = _leerMetaTareas(ws);   // v14
     if (_produccionAntiguaEnHojaOP(ws, m)) { ui.alert(_MSG_PRODUCCION_ANTIGUA(op)); return; }   // v14.7
+    var plantasSub = _plantasSubOP(ws, m);                                                       // v14.8
+    var faltaPlanta = _faltaPlantaProduccion(m, plantasSub);
+    if (faltaPlanta) { ui.alert('🏭 Planta de producción', faltaPlanta, ui.ButtonSet.OK); return; }
 
     // ---------- 1) PLAN: revisar cada cronograma antes de tocar nada ----------
     ss.toast('Revisando los cronogramas de las áreas...', '🔎 OP ' + op, 6);
@@ -896,9 +919,14 @@ function _sincronizarOPConAreas(ss, ws) {
     m.areas.forEach(function(area) {
       var T     = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
       var nSubs = AREAS_GENERALES.indexOf(area) !== -1 ? 1 : m.numSubs;
-      var it = { area: area, id: IDS_AREAS[area], T: T, newSubs: nSubs, riesgos: [],
-                 datos: datosHoja.slice(offset, offset + nSubs * T) };
+      var datosArea = datosHoja.slice(offset, offset + nSubs * T);
       offset += nSubs * T;
+      // v14.8: Producción puede ir a uno o dos archivos (según la planta); las demás áreas, a uno
+      var destinos = area === 'Produccion' ? _destinosProduccion(m.sede, plantasSub)
+                                           : [{ id: IDS_AREAS[area], planta: '', etiqueta: area }];
+      destinos.forEach(function(dst) {
+      var it = { area: area, id: dst.id, planta: dst.planta, etiqueta: dst.etiqueta, T: T, newSubs: nSubs, riesgos: [],
+                 datos: datosArea };
       if (!it.id || it.id.indexOf('PON_AQUI') !== -1) { it.accion = 'error'; it.error = 'ID no configurado'; plan.push(it); return; }
       try {
         it.tSheet = _abrirCronograma(it.id);
@@ -920,18 +948,26 @@ function _sincronizarOPConAreas(ss, ws) {
         }
       } catch (e) { it.accion = 'error'; it.error = e.message; }
       plan.push(it);
+      });
     });
 
     var candidatos = (m.enviadas.length ? m.enviadas : Object.keys(IDS_AREAS))
       .filter(function(a) { return m.areas.indexOf(a) === -1; });
-    candidatos.forEach(function(area) {
-      var id = IDS_AREAS[area];
+    // v14.8: si cambió la planta, la OP se quita del archivo de Producción que ya no le corresponde
+    var archivosQuitar = [];
+    candidatos.forEach(function(area) { _archivosArea(area).forEach(function(x) { archivosQuitar.push({ area: area, x: x }); }); });
+    if (m.areas.indexOf('Produccion') !== -1) {
+      var usados = _destinosProduccion(m.sede, plantasSub).map(function(d) { return d.id; });
+      _archivosArea('Produccion').forEach(function(x) { if (usados.indexOf(x.id) === -1) archivosQuitar.push({ area: 'Produccion', x: x }); });
+    }
+    archivosQuitar.forEach(function(q) {
+      var area = q.area, id = q.x.id;
       if (!id || id.indexOf('PON_AQUI') !== -1) return;
       try {
         var tSheet = _abrirCronograma(id), blk = _bloqueOP(tSheet, op);
         if (!blk) return;
         var T = (TAREAS_AREA[area] || TAREAS_AREA['Diseño']).length;
-        plan.push({ area: area, id: id, tSheet: tSheet, blk: blk, T: T, accion: 'eliminar',
+        plan.push({ area: area, id: id, etiqueta: q.x.etiqueta, tSheet: tSheet, blk: blk, T: T, accion: 'eliminar',
                     riesgos: _subsConAvance(tSheet, blk.start, blk.len, T, 0) });
       } catch (_) {}
     });
@@ -957,11 +993,11 @@ function _sincronizarOPConAreas(ss, ws) {
     var lin = ['OP ' + op + ' – "' + m.nombreOp + '"',
                'KG Total: ' + kgTotal.toLocaleString('es-CO') + ' kg  ·  Fecha entrega: ' + _fmtFecha(fechaEntrega), ''];
     if (grupo('crear').length)
-      lin.push('🆕 Se ENVÍA por primera vez a:\n   ' + grupo('crear').map(function(p) { return p.area; }).join(', '));
+      lin.push('🆕 Se ENVÍA por primera vez a:\n   ' + grupo('crear').map(function(p) { return p.etiqueta || p.area; }).join(', '));
     if (grupo('actualizar').length) {
       lin.push('🔄 Se ACTUALIZA (se conserva estado, KG avance, fechas reales y observaciones):');
       grupo('actualizar').forEach(function(p) {
-        var t = '   • ' + p.area;
+        var t = '   • ' + (p.etiqueta || p.area);
         if (p.newSubs > p.oldSubs) t += '  (+' + (p.newSubs - p.oldSubs) + ' subestructura/s nueva/s)';
         if (p.newSubs < p.oldSubs) t += '  (−' + (p.oldSubs - p.newSubs) + ' subestructura/s se borran)';
         if (p.riesgos.length) t += '\n       ⚠️ con avance: ' + p.riesgos.join(', ');
@@ -971,17 +1007,17 @@ function _sincronizarOPConAreas(ss, ws) {
     if (grupo('eliminar').length) {
       lin.push('🗑 Se QUITA la OP de (te pediré confirmar aparte):');
       grupo('eliminar').forEach(function(p) {
-        lin.push('   • ' + p.area + (p.riesgos.length ? '  ⚠️ con avance: ' + p.riesgos.join(', ') : ''));
+        lin.push('   • ' + (p.etiqueta || p.area) + (p.riesgos.length ? '  ⚠️ con avance: ' + p.riesgos.join(', ') : ''));
       });
     }
     if (grupo('error').length)
-      lin.push('❌ No se puede en:\n' + grupo('error').map(function(p) { return '   • ' + p.area + ': ' + p.error; }).join('\n'));
+      lin.push('❌ No se puede en:\n' + grupo('error').map(function(p) { return '   • ' + (p.etiqueta || p.area) + ': ' + p.error; }).join('\n'));
     lin.push('', '¿Continuar?');
     if (ui.alert('📤 Enviar / Actualizar OP en Áreas', lin.join('\n'), ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
 
     grupo('eliminar').forEach(function(p) {
-      var r = ui.alert('🗑 Quitar OP ' + op + ' de ' + p.area,
-        'Se borrarán ' + p.blk.len + ' filas de la OP en el Cronograma de ' + p.area + '.' +
+      var r = ui.alert('🗑 Quitar OP ' + op + ' de ' + (p.etiqueta || p.area),
+        'Se borrarán ' + p.blk.len + ' filas de la OP en el Cronograma de ' + (p.etiqueta || p.area) + '.' +
         (p.riesgos.length ? '\n\n⚠️ Esas filas tienen avance registrado por el área: ' + p.riesgos.join(', ') : '') +
         '\n\n¿Quitarla?', ui.ButtonSet.YES_NO);
       if (r !== ui.Button.YES) p.accion = 'omitir';
@@ -991,24 +1027,27 @@ function _sincronizarOPConAreas(ss, ws) {
     var reg = _nuevoRegistro(op);
     var creadas = [], actualizadas = [], quitadasOk = [], omitidas = [], fallidas = [];
     var trabajo = plan.filter(function(p) { return p.accion !== 'error' && p.accion !== 'omitir'; });
-    grupo('error').forEach(function(p) { fallidas.push(p.area + ': ' + p.error); });
-    grupo('omitir').forEach(function(p) { omitidas.push(p.area); });
+    grupo('error').forEach(function(p) { fallidas.push((p.etiqueta || p.area) + ': ' + p.error); });
+    grupo('omitir').forEach(function(p) { omitidas.push(p.etiqueta || p.area); });
 
     trabajo.forEach(function(p, i) {
-      ss.toast('Área ' + (i + 1) + ' de ' + trabajo.length + '...', '📤 ' + p.area, 4);
-      var origen = 'Cronograma ' + p.area;
+      var nom = p.etiqueta || p.area;   // v14.8: "Produccion · BOGOTÁ" cuando hay dos archivos
+      ss.toast('Área ' + (i + 1) + ' de ' + trabajo.length + '...', '📤 ' + nom, 4);
+      var origen = 'Cronograma ' + nom;
       try {
         if (p.accion === 'crear') {
           _enviarAPlantillaArea(p.id, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
-                                m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega, p.tSheet);
+                                m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega, p.tSheet, plantasSub);   // v14.8
           reg.add(origen, p.area, '', '', 'OP', '', 'enviada (' + p.newSubs + ' subestructura/s)');
           _aplicarTareasEnArea(p.tSheet, p.area, op, metaT, function(area, sub, tarea, campo, antes, despues) {   // v14
             reg.add(origen, area, sub, tarea, campo, antes, despues);
           });
-          creadas.push(p.area);
+          _grisOtraPlanta(p.tSheet, op, p.planta, m.sede, plantasSub, p.T);   // v14.8
+          creadas.push(nom);
         } else if (p.accion === 'actualizar') {
           var ctx = _ctxArea(p.tSheet, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
                              m.numSubs, m.numAreas, kgTotal, p.datos, fechaEntrega);
+          ctx.sedesSub = plantasSub;   // v14.8
           var n = _actualizarOPEnArea(p.tSheet, ctx, p.blk, function(area, sub, tarea, campo, antes, despues) {
             reg.add(origen, area, sub, tarea, campo, antes, despues);
           });
@@ -1016,23 +1055,28 @@ function _sincronizarOPConAreas(ss, ws) {
           n += _aplicarTareasEnArea(p.tSheet, p.area, op, metaT, function(area, sub, tarea, campo, antes, despues) {
             reg.add(origen, area, sub, tarea, campo, antes, despues);
           });
-          actualizadas.push(p.area + (n ? ' (' + n + ' cambio/s)' : ' (sin cambios)'));
+          _grisOtraPlanta(p.tSheet, op, p.planta, m.sede, plantasSub, p.T);   // v14.8
+          actualizadas.push(nom + (n ? ' (' + n + ' cambio/s)' : ' (sin cambios)'));
         } else if (p.accion === 'eliminar') {
           p.tSheet.deleteRows(p.blk.start, p.blk.len);
           reg.add(origen, p.area, '', '', 'OP', 'en cronograma (' + p.blk.len + ' filas)', 'eliminada');
-          quitadasOk.push(p.area);
+          quitadasOk.push(nom);
         }
       } catch (e) {
-        fallidas.push(p.area + ': ' + e.message);
+        fallidas.push(nom + ': ' + e.message);
       }
     });
 
-    // Áreas donde la OP quedó publicada
+    // Áreas donde la OP quedó publicada (v14.8: "Produccion · BOGOTÁ" cuenta como "Produccion")
+    var base = function(a) { return a.split(' (')[0].split(' · ')[0]; };
+    var publicadas = creadas.concat(actualizadas).map(base);
     var enviadas = m.enviadas.slice();
-    creadas.concat(actualizadas.map(function(a) { return a.split(' (')[0]; })).forEach(function(a) {
+    publicadas.forEach(function(a) {
       if (enviadas.indexOf(a) === -1) enviadas.push(a);
     });
-    enviadas = enviadas.filter(function(a) { return quitadasOk.indexOf(a) === -1; });
+    enviadas = enviadas.filter(function(a) {
+      return quitadasOk.map(base).indexOf(a) === -1 || publicadas.indexOf(a) !== -1;
+    });
     ws.getRange(1, COL_META_ENVIADAS).setValue(_ordenarAreas(enviadas).join(','));
     reg.guardar(ss);
 
@@ -1200,6 +1244,7 @@ function _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTot
   ws.setColumnWidth(1, 110); ws.setColumnWidth(2, 80);  ws.setColumnWidth(3, 90);
   ws.setColumnWidth(4, 75);  ws.setColumnWidth(5, 130); ws.setColumnWidth(6, 100);
   ws.setColumnWidth(7, 100); ws.setColumnWidth(8, 170);
+  if (_normPlanta(sede) === 'MIXTO') _prepararPlantasMixto(ws);   // v14.8
   return ws;
 }
 
@@ -1331,7 +1376,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
       tSheet.getRange(r, 11).setValue(nombreSubManual || ('Nombre ' + (s+1)));
       tSheet.getRange(r, 12).setValue(kgSub);
       tSheet.getRange(r, 12).setNumberFormat('#,##0 "kg"');
-      tSheet.getRange(r, 13).setValue(ctx.sede);
+      tSheet.getRange(r, 13).setValue(_sedeSubCtx(ctx, s));   // v14.8: planta de la subestructura
     }
 
     tSheet.getRange(r, 14).setValue(descTarea);
@@ -1442,9 +1487,10 @@ function _cerrarBloqueOP(tSheet, ctx, start, len) {
 }
 
 /** CREA la OP en el cronograma del área (primer envío). */
-function _enviarAPlantillaArea(spreadsheetId, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega, tSheetOpt) {
+function _enviarAPlantillaArea(spreadsheetId, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega, tSheetOpt, sedesSub) {
   var tSheet = tSheetOpt || _abrirCronograma(spreadsheetId);
   var ctx    = _ctxArea(tSheet, area, op, nombreOp, cliente, comercial, sede, numSubs, numAreas, kgTotal, datosHoja, fechaEntrega);
+  ctx.sedesSub = sedesSub || null;   // v14.8
 
   var lastExistingRow = Math.max(tSheet.getLastRow(), FILA_INICIO_CRONO);
   tSheet.getRange(FILA_INICIO_CRONO, 14, lastExistingRow - FILA_INICIO_CRONO + 1, 1).clearDataValidations();
@@ -1522,7 +1568,7 @@ function _actualizarOPEnArea(tSheet, ctx, blk, registrar) {
     var sub = ctx.op + '_' + (s + 1);
     set(i0, 11, (d0 && d0.nombreSub) || ('Nombre ' + (s + 1)), sub, '', 'NOMBRE_SUBESTRUCTURA');
     set(i0, 12, _kgSubCtx(ctx, s), sub, '', 'PESO_KG_SUBESTRUCTURA');
-    set(i0, 13, ctx.sede, sub, '', 'Sede');
+    set(i0, 13, _sedeSubCtx(ctx, s), sub, '', 'Sede');   // v14.8
     for (var t = 0; t < T; t++) {
       var i = i0 + t, d = ctx.datosHoja[i], tarea = ctx.tareas[t][0];
       if (!d) continue;
@@ -1571,22 +1617,25 @@ function actualizarGanttEnComercial() {
   tareas.push(['Comercial','Cuenta de Cobro / Gestión de Pólizas','Administración','Abierto',0,'','']);
   tareas.push(['Comercial','Recepción de Anticipo','Cliente','Abierto',0,'','']);
 
-  var areaNames = Object.keys(IDS_AREAS);
-  for (var ai = 0; ai < areaNames.length; ai++) {
-    var area = areaNames[ai];
-    var id   = IDS_AREAS[area];
+  var fuentes = [];   // v14.8: Producción puede tener un archivo por planta
+  Object.keys(IDS_AREAS).forEach(function(a) { _archivosArea(a).forEach(function(x) { fuentes.push({ area: a, id: x.id, planta: x.planta }); }); });
+  for (var ai = 0; ai < fuentes.length; ai++) {
+    var area = fuentes[ai].area, plantaF = fuentes[ai].planta;
+    var id   = fuentes[ai].id;
     if (!id || id.indexOf('PON_AQUI') !== -1) continue;
     try {
       var data = SpreadsheetApp.openById(id).getSheetByName('Cronograma').getDataRange().getValues();
       // v8: columnas de fechas planeadas por nombre de encabezado (se corren si existe FECHA_ENTREGA_CLIENTE)
       var iIni = _idxEncabezado(data, 'FECHA_INICIO_TAREA_PLANEADO', 29);
       var iFin = _idxEncabezado(data, 'FECHA_FIN_TAREA_PLANEADO', 31);
-      var lastOP = '';
+      var lastOP = '', sedeSub = '';
       for (var i = 1; i < data.length; i++) {
         var r  = data[i];
         var op = r[1] ? r[1] : lastOP;
         if (r[1]) lastOP = r[1];
+        if (String(r[12]).trim()) sedeSub = String(r[12]).trim();   // v14.8: planta de la subestructura (col M)
         if (String(op).trim() !== String(opSeleccionada).trim()) continue;
+        if (plantaF && _esPlanta(sedeSub) && _normPlanta(sedeSub) !== plantaF) continue;   // v14.8: la muestra el archivo de su planta
         var tarea = r[13]; // col N = DESCRIPCION_TAREAS (nueva estructura)
         if (!tarea || tarea.toString().trim() === '') continue;
         // r[14]=Asignado, r[15]=Estado, r[16]=%_aporte, r[29]=FIniPlan(col AD), r[31]=FFinPlan(col AF)
@@ -2014,9 +2063,10 @@ function autorizarAreas() {
   // Sin try/catch a propósito: si falta un permiso, Google detiene aquí y muestra la ventana de autorización
   _verificarPermisoAreas();
   var lineas = [];
-  var nombres = Object.keys(IDS_AREAS);
-  for (var i = 0; i < nombres.length; i++) {
-    var area = nombres[i], id = IDS_AREAS[area];
+  var lista = [];   // v14.8: Producción, un archivo por planta
+  Object.keys(IDS_AREAS).forEach(function(a) { _archivosArea(a).forEach(function(x) { lista.push({ area: x.etiqueta, id: x.id }); }); });
+  for (var i = 0; i < lista.length; i++) {
+    var area = lista[i].area, id = lista[i].id;
     try {
       var archivo = SpreadsheetApp.openById(id);
       var crono   = archivo.getSheetByName('Cronograma');
@@ -2743,18 +2793,23 @@ function migrarProduccionDosTareas() {
   var t0 = Date.now(), LIMITE = 270000;
   var r = { migradas: [], terminadas: [], yaListas: [], errores: [], pendientes: [], retiradas: [] };
   try {
-    var ssP = SpreadsheetApp.openById(id), cron = ssP.getSheetByName('Cronograma');
-    if (!cron) throw new Error('no existe la hoja "Cronograma" en el archivo de Producción');
-    _asegurarPesosProduccion(ssP);
-    if (!ssP.getSheetByName('Cronograma_respaldo_migracion')) {
-      var resp = cron.copyTo(ssP); resp.setName('Cronograma_respaldo_migracion'); resp.hideSheet();
-    }
+    // v14.8: con dos plantas se revisan los dos archivos de Producción
+    var archivos = _archivosArea('Produccion').filter(function(x) { return x.id && x.id.indexOf('PON_AQUI') === -1; }).map(function(x) {
+      var ssP = SpreadsheetApp.openById(x.id), cron = ssP.getSheetByName('Cronograma');
+      if (!cron) throw new Error('no existe la hoja "Cronograma" en el archivo de Producción ' + (x.planta || ''));
+      _asegurarPesosProduccion(ssP);
+      if (!ssP.getSheetByName('Cronograma_respaldo_migracion')) {
+        var resp = cron.copyTo(ssP); resp.setName('Cronograma_respaldo_migracion'); resp.hideSheet();
+      }
+      return { id: x.id, cron: cron };
+    });
     _listarOPs(ss).forEach(function(nombre) {
       if (Date.now() - t0 > LIMITE) { r.pendientes.push(nombre); return; }
       var ws = ss.getSheetByName(nombre), m = _leerMetaOP(ws);
       if (m.areas.indexOf('Produccion') === -1) return;
       try {
-        var res = _migrarProduccionOP(ss, ws, m, id, cron);
+        var dst = archivos.filter(function(a) { return _bloqueOP(a.cron, m.op); })[0] || archivos[0];   // v14.8
+        var res = _migrarProduccionOP(ss, ws, m, dst.id, dst.cron);
         r[res.grupo].push(m.op);
         r.retiradas = r.retiradas.concat(res.retiradas || []);
       } catch (e) { r.errores.push(m.op + ': ' + e.message); }
@@ -2866,4 +2921,89 @@ function _migrarProduccionOP(ss, ws, m, id, cron) {
     reg.guardar(ss);
   }
   return { grupo: 'migradas', retiradas: retiradas };
+}
+
+// ============================================================
+//  v14.8 — DOS PLANTAS (Producción Bogotá / Producción Barranquilla)
+// ============================================================
+function _normPlanta(v) {
+  var n = _norm(v);
+  if (n === 'BOGOTA') return 'BOGOTÁ';
+  if (n === 'BARRANQUILLA') return 'BARRANQUILLA';
+  if (n === 'MIXTO' || n === 'MIXTA') return 'MIXTO';
+  return '';
+}
+function _esPlanta(v) { var p = _normPlanta(v); return p === 'BOGOTÁ' || p === 'BARRANQUILLA'; }
+
+/** true cuando ya hay dos archivos de Producción (el ID de Bogotá está configurado). */
+function _hayDosPlantas() {
+  var b = IDS_PRODUCCION_PLANTA['BOGOTÁ'], q = IDS_PRODUCCION_PLANTA['BARRANQUILLA'];
+  return !!(b && q && b.indexOf('PON_AQUI') === -1 && b !== q);
+}
+
+/** Archivos de un área: [{id, planta, etiqueta}]. Producción con dos plantas → dos archivos. */
+function _archivosArea(area) {
+  if (area === 'Produccion' && _hayDosPlantas())
+    return ['BOGOTÁ', 'BARRANQUILLA'].map(function(p) { return { id: IDS_PRODUCCION_PLANTA[p], planta: p, etiqueta: 'Produccion · ' + p }; });
+  return [{ id: IDS_AREAS[area], planta: '', etiqueta: area }];
+}
+
+/** Archivos de Producción a los que va la OP según su Sede (MIXTO → los de sus subestructuras). */
+function _destinosProduccion(sede, plantasSub) {
+  if (!_hayDosPlantas()) return [{ id: IDS_AREAS['Produccion'], planta: '', etiqueta: 'Produccion' }];
+  var p = _normPlanta(sede), lista = [];
+  if (p === 'MIXTO') (plantasSub || []).forEach(function(x) { x = _normPlanta(x); if (_esPlanta(x) && lista.indexOf(x) === -1) lista.push(x); });
+  else if (_esPlanta(p)) lista.push(p);
+  return ['BOGOTÁ', 'BARRANQUILLA'].filter(function(x) { return lista.indexOf(x) !== -1; })
+    .map(function(x) { return { id: IDS_PRODUCCION_PLANTA[x], planta: x, etiqueta: 'Produccion · ' + x }; });
+}
+
+/** Planta de cada subestructura (índice s): la Sede de la OP, o en MIXTO la columna G de la sección PRODUCCION. */
+function _plantasSubOP(ws, m) {
+  var out = [], p = _normPlanta(m.sede);
+  for (var s = 0; s < m.numSubs; s++) out.push(_esPlanta(p) ? p : '');
+  if (p !== 'MIXTO') return out;
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub, v) {
+    if (area === 'Produccion' && inicioSub && s < out.length) out[s] = _esPlanta(v[6]) ? _normPlanta(v[6]) : '';
+  });
+  return out;
+}
+
+/** Mensaje si falta la planta (o la Sede no es una planta) y la OP va a Producción; '' si está bien. */
+function _faltaPlantaProduccion(m, plantasSub) {
+  if (m.areas.indexOf('Produccion') === -1 || !_hayDosPlantas()) return '';
+  var p = _normPlanta(m.sede);
+  if (!p) return 'La Sede de la OP ' + m.op + ' es "' + m.sede + '".\n\nPara enviarla a Producción la Sede debe ser BOGOTÁ, BARRANQUILLA o MIXTO.';
+  if (p !== 'MIXTO') return '';
+  var falta = [];
+  plantasSub.forEach(function(x, s) { if (!x) falta.push(m.op + '_' + (s + 1)); });
+  return falta.length ? 'La OP ' + m.op + ' es MIXTO. Indica en la hoja de la OP, sección PRODUCCION, columna Sede, ' +
+    'si cada subestructura se fabrica en BOGOTÁ o en BARRANQUILLA.\n\nFalta: ' + falta.join(', ') : '';
+}
+
+/** Planta de la subestructura s para la columna Sede del Cronograma (solo cambia en OP MIXTO). */
+function _sedeSubCtx(ctx, s) {
+  if (ctx.sedesSub && _normPlanta(ctx.sede) === 'MIXTO' && _esPlanta(ctx.sedesSub[s])) return ctx.sedesSub[s];
+  return ctx.sede;
+}
+
+/** OP MIXTO: en el archivo de una planta, las subestructuras de la otra quedan en gris. */
+function _grisOtraPlanta(tSheet, op, planta, sede, plantasSub, T) {
+  if (!planta || _normPlanta(sede) !== 'MIXTO') return;
+  var blk = _bloqueOP(tSheet, op);
+  if (!blk) return;
+  for (var s = 0; s * T < blk.len; s++) {
+    var otra = _esPlanta(plantasSub[s]) && plantasSub[s] !== planta;
+    tSheet.getRange(blk.start + s * T, 1, T, 30).setFontColor(otra ? '#9e9e9e' : null);
+  }
+}
+
+/** OP MIXTO recién creada: lista BOGOTÁ / BARRANQUILLA en la columna Sede de la sección PRODUCCION. */
+function _prepararPlantasMixto(ws) {
+  var regla = SpreadsheetApp.newDataValidation().requireValueInList(['BOGOTÁ', 'BARRANQUILLA'], true).setAllowInvalid(true).build();
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub) {
+    if (area !== 'Produccion' || !inicioSub) return;
+    ws.getRange(fila, 7).setValue('').setDataValidation(regla).setBackground('#fff2cc')
+      .setNote('OP MIXTO: elige la planta que fabrica esta subestructura');
+  });
 }

@@ -55,6 +55,7 @@ class Sheet {
     const fn = n > 0 ? (r => (r >= desde ? r + n : r)) : (r => { const fin = desde - n - 1; if (r >= desde && r <= fin) return null; return r > fin ? r + n : r; });
     const fnR = n > 0 ? ((a, b) => [a >= desde ? a + n : a, b >= desde ? b + n : b]) : ((a, b) => { const fin = desde - n - 1; let a2 = a > fin ? a + n : (a >= desde ? desde : a), b2 = b > fin ? b + n : (b >= desde ? desde - 1 : b); return b2 < a2 ? [null, null] : [a2, b2]; });
     for (const sh of this.ss.sheets) for (const x of sh.cells.values()) if (x.f) x.f = moverFormula(x.f, sh.name, this.name, fn, fnR); }
+  getRangeList(l) { const rs = l.map(a => this.getRange(a)); return { setValue: v => { rs.forEach(r => r.setValue(v)); } }; }
   insertRowsBefore(r, n) { this._moverFilas(r, n); return this._px; } insertRowsAfter(r, n) { this._moverFilas(r + 1, n); return this._px; }
   deleteRows(r, n) { this._moverFilas(r, -n); return this._px; }
   hideSheet() { this.hidden = true; return this._px; }
@@ -65,6 +66,8 @@ class Spreadsheet {
     const px = new Proxy(this, { get: (t, p) => (p in t ? t[p] : (typeof p === 'string' ? (() => px) : undefined)) }); return px; }
   getName() { return this.nombre || this.id; } getId() { return this.id; } getSheets() { return this.sheets.slice(); } getSheetByName(n) { return this.sheets.find(s => s.name === n) || null; }
   toast(m) { this.toasts.push(String(m)); } setActiveSheet(s) { this.activa = s; return s; } getActiveSheet() { return this.activa; }
+  deleteSheet(s) { this.sheets = this.sheets.filter(x => x !== s); }
+  moveActiveSheet(i) { const s = this.activa; this.sheets = this.sheets.filter(x => x !== s); this.sheets.splice(i - 1, 0, s); }
   insertSheet(n) { const s = new Sheet(this, n, null); this.sheets.push(s); this.activa = s; return s; }
   toJSON() { const o = {}; for (const s of this.sheets) { const cells = {}; for (const [k, x] of s.cells) cells[k] = [encV(x.v === undefined ? null : x.v), x.f || null]; o[s.name] = { cells }; } return o; }
 }
@@ -72,9 +75,9 @@ function entorno(archivos, activo, op) {
   op = op || {}; const alertas = [], logs = [], docProps = op.docProps || {};
   const chain = () => { const p = new Proxy(function () {}, { get: (t, k) => (k === 'build' ? () => ({}) : () => p), apply: () => p }); return p; };
   return { G: { SpreadsheetApp: { getActiveSpreadsheet: () => activo, openById: id => archivos[id], getActive: () => activo, getUi: () => { if (op.sinUi) throw new Error('sin UI'); return { alert: (a, b) => { alertas.push(String(b && typeof b === 'string' ? a + ' | ' + b : a)); return 'YES'; }, prompt: () => ({ getSelectedButton: () => 'OK', getResponseText: () => (op.respuesta || '') }), Button: { YES: 'YES', OK: 'OK' }, ButtonSet: {} }; }, newDataValidation: chain, BorderStyle: {} },
-    LockService: { getDocumentLock: () => ({ tryLock: () => true, releaseLock() {} }) }, Session: { getActiveUser: () => ({ getEmail: () => 'x@polyuprotec.com' }), getEffectiveUser: () => ({ getEmail: () => 'x@polyuprotec.com' }), getScriptTimeZone: () => 'America/Bogota' },
+    LockService: { getDocumentLock: () => ({ tryLock: () => true, releaseLock() {} }) }, ScriptApp_: {}, Session: { getActiveUser: () => ({ getEmail: () => 'x@polyuprotec.com' }), getEffectiveUser: () => ({ getEmail: () => 'x@polyuprotec.com' }), getScriptTimeZone: () => 'America/Bogota' },
     Utilities: { formatDate: d => String(d) }, Logger: { log: m => logs.push(String(m)) }, PropertiesService: { getScriptProperties: () => ({ getProperty: () => null }), getUserProperties: () => ({ getProperty: () => null, setProperty() {}, deleteProperty() {} }), getDocumentProperties: () => ({ getProperty: k => (k in docProps ? docProps[k] : null), setProperty: (k, v) => { docProps[k] = v; } }) },
     CacheService: { getDocumentCache: () => ({ get: () => null, put() {}, remove() {} }) }, HtmlService: {}, ScriptApp: {}, UrlFetchApp: {} }, alertas, logs, docProps };
 }
-function cargar(ruta, env, nombres) { const src = fs.readFileSync(ruta, 'utf8') + ';return {' + nombres.map(n => n + ':' + n).join(',') + '};'; return new Function(...Object.keys(env.G), src)(...Object.values(env.G)); }
+function cargar(ruta, env, nombres, extra) { const src = fs.readFileSync(ruta, 'utf8') + '\n' + (extra || '') + ';return {' + nombres.map(n => n + ':(typeof ' + n + "!=='undefined'?" + n + ':undefined)').join(',') + '};'; return new Function(...Object.keys(env.G), src)(...Object.values(env.G)); }
 module.exports = { Spreadsheet, entorno, cargar, colLet };
