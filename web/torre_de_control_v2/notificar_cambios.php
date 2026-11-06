@@ -31,10 +31,14 @@ $CONFIG = [
     'FROM_NAME'  => 'Torre de Control · Polyuprotec',
     'REPLY_TO'   => '',                         // opcional, ej. 'produccion@polyuprotec.com'
 
-    // Siempre reciben el correo
+     // Siempre reciben el correo
     'DESTINATARIOS' => [
-        'todos@polyuprotec.com',
+        //'todos@polyuprotec.com',
+          'jbuelvas@polyuprotec.com',
+          'obeyabarranquilla@polyuprotec.com', 
+          'obeyabogota@polyuprotec.com', 
     ],
+    
     // ¿Enviar copia a quien hizo el cambio bloqueado? (para que sepa que no quedó)
     'COPIA_AL_USUARIO_BLOQUEADO' => true,
 
