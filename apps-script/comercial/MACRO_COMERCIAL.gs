@@ -220,7 +220,7 @@ const IDS_AREAS = {
 //  PON_AQUI todo sigue en el archivo único, igual que v14.7).
 var IDS_PRODUCCION_PLANTA = {
   'BARRANQUILLA': IDS_AREAS['Produccion'],
-  'BOGOTÁ':       'PON_AQUI_ID_PRODUCCION_BOGOTA'
+  'BOGOTÁ':       '1g-xblOWHioFZbxpwlFZFHb60Hwa85q5X3jRSHHYk_X8'   // PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA
 };
 
 // ── TAREAS POR ÁREA — PLANTILLA_LOOKER_BORRADOR (FINAL) ──────

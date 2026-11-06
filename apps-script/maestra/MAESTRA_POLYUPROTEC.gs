@@ -1,4 +1,15 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.5
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.6
+// v4.6 — DOS PLANTAS (Producción Bogotá y Producción Barranquilla, un archivo cada una):
+//   • Hoja de importación PRODUCCION_BOGOTA (menú "🏭 Conectar Producción Bogotá"). La hoja
+//     PRODUCCION sigue siendo el archivo actual (Barranquilla). En LOOKER_MAESTRA las dos
+//     quedan como área PRODUCCION; de cada archivo se toman solo las subestructuras de su
+//     planta (columna Sede), así una OP MIXTO no se duplica.
+//   • Cada tarea trae su planta (Sede por subestructura) y cada OP su lista de plantas
+//     (op.plantas); una OP con subestructuras en las dos plantas sale como MIXTO.
+//   • Producción diaria lee los dos archivos y agrega la columna PLANTA. Si un archivo no
+//     responde, se muestra el otro y se avisa.
+//   • HISTORIAL_CAMBIOS: nueva columna PLANTA (al final). La protección vigila los dos archivos.
+//   • Sin la hoja PRODUCCION_BOGOTA todo funciona exactamente como v4.5.
 // v4.5 — el token ya no está en el código: se lee de Propiedades del script
 //        (clave TOKEN_CORREO_CAMBIOS). Sin token no se acepta ninguna anotación. Nada más cambia.
 //
@@ -86,6 +97,7 @@ function onOpen() {
     .addItem('🏭 Actualizar Producción diaria', 'actualizarProduccionDiaria')
     .addSeparator()
     .addItem('🔧 Ampliar importaciones a A5:AK (una sola vez)', 'ampliarImportaciones')
+    .addItem('🏭 Conectar Producción Bogotá (una sola vez)', 'conectarProduccionBogota')   // v4.6
     .addSeparator()
     .addItem('🛡 Instalar protección (una sola vez)', 'instalarProteccion')
     .addItem('📜 Ver historial de cambios', 'verHistorialCambios')
@@ -133,7 +145,8 @@ function actualizarLookerMaestra() {
   let datos = [header];
 
   const hojas = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO',
-                 'LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION'];
+                 'LOGISTICA','MONTAJE','PRODUCCION',HOJA_PROD_BOGOTA,'ADMINISTRACION'];   // v4.6
+  const plantaDe = _plantasHojasProduccion(ss);   // v4.6: {PRODUCCION: 'BARRANQUILLA', PRODUCCION_BOGOTA: 'BOGOTÁ'} o {}
 
   function parseFecha(valor) {
     if (!valor) return null;
@@ -161,13 +174,16 @@ function actualizarLookerMaestra() {
     if (!sheet) continue;
     const valores = sheet.getDataRange().getValues();
     if (valores.length <= 1) continue;
-    let lastOPHoja = null;
+    let lastOPHoja = null, sedeHoja = '';
+    const iSede = _mapaColumnas(valores[0])['SEDE'];   // v4.6
     for (let i = 1; i < valores.length; i++) {
       const f = valores[i];
       if (!esVacio(f[1])) lastOPHoja = f[1];
+      if (!esVacio(f[iSede])) sedeHoja = f[iSede];   // v4.6
       const op     = lastOPHoja;
       const estado = String(f[15] || '').trim();
       if (!op || !estado) continue;
+      if (_deOtraPlanta(plantaDe[nombreHoja], sedeHoja)) continue;   // v4.6: la cuenta el archivo de su planta
       if (!estadoPorOP[op]) estadoPorOP[op] = 'Sin Iniciar';
       if (estadoPorOP[op] !== 'Terminado') {
         if (!estadoPorOP[op + '_total']) estadoPorOP[op + '_total'] = 0;
@@ -195,7 +211,7 @@ function actualizarLookerMaestra() {
     const valores = sheet.getDataRange().getValues();
     if (valores.length <= 1) continue;
 
-    const area = nombreHoja;
+    const area = nombreHoja === HOJA_PROD_BOGOTA ? 'PRODUCCION' : nombreHoja;   // v4.6: las dos plantas = área PRODUCCION
     const C = _mapaColumnas(valores[0]);   // v2: columnas por nombre de encabezado
     let lFechaEnt = '';
     let lOP='', lNombre='', lCliente='', lComercial='';
@@ -227,6 +243,7 @@ function actualizarLookerMaestra() {
 
       if (!lOP) continue;
       if (esVacio(g('DESCRIPCION_TAREAS'))) continue;
+      if (_deOtraPlanta(plantaDe[nombreHoja], lSede)) continue;   // v4.6: subestructura de la otra planta
 
       const estadoOP = estadoPorOP[lOP] || 'Sin Iniciar';
 
@@ -317,7 +334,8 @@ function actualizarLookerMaestra() {
       `• Galvanizado: ${ss.getSheetByName('GALVANIZADO')?.getLastRow()-1 || 0}\n` +
       `• Logística: ${ss.getSheetByName('LOGISTICA')?.getLastRow()-1 || 0}\n` +
       `• Montaje: ${ss.getSheetByName('MONTAJE')?.getLastRow()-1 || 0}\n` +
-      `• Producción: ${ss.getSheetByName('PRODUCCION')?.getLastRow()-1 || 0}\n` +
+      `• Producción: ${ss.getSheetByName('PRODUCCION')?.getLastRow()-1 || 0}` +
+      (ss.getSheetByName(HOJA_PROD_BOGOTA) ? ` (Barranquilla) · ${ss.getSheetByName(HOJA_PROD_BOGOTA).getLastRow()-1} (Bogotá)` : '') + `\n` +   // v4.6
       `• Administración: ${ss.getSheetByName('ADMINISTRACION')?.getLastRow()-1 || 0}` +
       (msgDiario ? '\n\n' + msgDiario : '')
     );
@@ -476,6 +494,8 @@ function getDatosOPs() {
     if (lastCliente)   opsMap[lastOp].cliente   = lastCliente;
     if (lastComercial) opsMap[lastOp].comercial = lastComercial;
     if (lastSede)      opsMap[lastOp].sede      = lastSede;
+    var plN = _plantaNorm(lastSede);                                  // v4.6: plantas donde se fabrica la OP
+    if (plN && plN !== 'MIXTO') { opsMap[lastOp]._pl = opsMap[lastOp]._pl || {}; opsMap[lastOp]._pl[plN] = true; }
 
     if (row[32] && row[32] instanceof Date) {
       var ffp = _formatFecha(row[32]);
@@ -538,6 +558,11 @@ function getDatosOPs() {
     opsMap[k].semaforo=_getSemaforo(opsMap[k].estado,maxPlanDate,maxRealDate,opsMap[k].avanceReal);
     _semaforoCompleto(opsMap[k], maxPlanDate);   // v4.2: avance vs plan y fecha de entrega
     delete opsMap[k]._debian;
+    // v4.6: plantas de la OP (por la Sede de sus subestructuras); en las dos → MIXTO
+    opsMap[k].plantas = Object.keys(opsMap[k]._pl || {}).sort();
+    if (opsMap[k].plantas.length > 1) opsMap[k].sede = 'MIXTO';
+    else if (opsMap[k].plantas.length === 0 && _plantaNorm(opsMap[k].sede) === 'MIXTO') opsMap[k].sede = 'MIXTO';
+    delete opsMap[k]._pl;
   }
   return Object.values(opsMap);
 }
@@ -821,7 +846,7 @@ function _mapaColumnas(filaEnc) {
  * ya tienen FECHA_ENTREGA_CLIENTE.
  */
 function _ampliarImportacionesSilencioso(ss) {
-  var hojas = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
+  var hojas = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION',HOJA_PROD_BOGOTA,'ADMINISTRACION','RRHH'];
   var ok = [];
   hojas.forEach(function(n) {
     var sh = ss.getSheetByName(n);
@@ -883,10 +908,14 @@ function actualizarProduccionDiaria(silencioso) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var id = _idProduccionV2(ss);
   if (!id) throw new Error('No encontré el ID de PRODUCCION_V2 (revisa la hoja PRODUCCION o ID_PRODUCCION_V2).');
-  var src = SpreadsheetApp.openById(id);
-  var filas = [['FECHA','OP','SUB_ID','SUBESTRUCTURA','PROYECTO','CLIENTE','COMERCIAL','LINEA_LOTE','KG_REAL','KG_PLAN','HOJA']];
-  var hojasLeidas = 0;
-
+  var filas = [['FECHA','OP','SUB_ID','SUBESTRUCTURA','PROYECTO','CLIENTE','COMERCIAL','LINEA_LOTE','KG_REAL','KG_PLAN','HOJA','PLANTA']];   // v4.6: + PLANTA
+  var hojasLeidas = 0, avisos = [];
+  // v4.6: un archivo por planta (si existe la hoja PRODUCCION_BOGOTA); si uno falla se sigue con el otro
+  var plantas = _plantasHojasProduccion(ss), fuentes = [{ id: id, planta: plantas['PRODUCCION'] || '' }];
+  if (plantas[HOJA_PROD_BOGOTA]) fuentes.push({ id: _idDeImportacion(ss.getSheetByName(HOJA_PROD_BOGOTA)), planta: 'BOGOTÁ' });
+  fuentes.forEach(function(fu) {
+  var src;
+  try { src = SpreadsheetApp.openById(fu.id); } catch (e) { avisos.push('⚠ No se pudo leer Producción ' + (fu.planta || '') + ': ' + e.message); return; }
   src.getSheets().forEach(function(sh) {
     var nm = sh.getName().match(/^([A-Z]+) (\d{4})$/);
     if (!nm || MESES_PROD.indexOf(nm[1]) < 0) return;
@@ -914,9 +943,10 @@ function actualizarProduccionDiaria(silencioso) {
       for (var d = 0; d < n; d++) {
         var real = Number(data[i][p + d]) || 0, pl = plan ? (Number(plan[p + d]) || 0) : 0;
         if (!real && !pl) continue;
-        filas.push([fila2[p + d], op, token, subNombre, proyecto, data[i][3], data[i][4], data[i][1], real, pl, sh.getName()]);
+        filas.push([fila2[p + d], op, token, subNombre, proyecto, data[i][3], data[i][4], data[i][1], real, pl, sh.getName(), fu.planta]);
       }
     }
+  });
   });
 
   var dest = ss.getSheetByName(HOJA_DIARIO) || ss.insertSheet(HOJA_DIARIO);
@@ -929,7 +959,7 @@ function actualizarProduccionDiaria(silencioso) {
   }
   dest.setFrozenRows(1);
 
-  var msg = '🏭 Producción diaria: ' + (filas.length - 1) + ' registros de ' + hojasLeidas + ' hoja/s de mes.';
+  var msg = '🏭 Producción diaria: ' + (filas.length - 1) + ' registros de ' + hojasLeidas + ' hoja/s de mes.' + (avisos.length ? '\n' + avisos.join('\n') : '');
   Logger.log(msg);
   if (silencioso !== true) { try { SpreadsheetApp.getUi().alert(msg); } catch (e) {} }
   return msg;
@@ -947,7 +977,8 @@ function getDatosProduccion() {
       fecha: _formatFecha(r[0]), op: String(r[1]).trim().replace(/\.0$/, ''), subId: String(r[2]).trim(),
       sub: String(r[3] || '').trim(), proyecto: String(r[4] || '').trim(), cliente: String(r[5] || '').trim(),
       comercial: String(r[6] || '').trim(), linea: String(r[7] || '').trim(),
-      real: Number(r[8]) || 0, plan: Number(r[9]) || 0
+      real: Number(r[8]) || 0, plan: Number(r[9]) || 0,
+      planta: String(r[11] || '').trim()   // v4.6
     });
   }
   return out;
@@ -999,10 +1030,10 @@ var CORREO_CAMBIOS_ACTIVO = true;  // false = solo historial, sin correo
 var URL_NOTIFICAR_CAMBIOS = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_cambios.php';
 // v4.5: TOKEN_CORREO_CAMBIOS se guarda en Propiedades del script (igual que 'TOKEN' en config.php del hosting)
 function _tokenCambios() { return PropertiesService.getScriptProperties().getProperty('TOKEN_CORREO_CAMBIOS') || ''; }
-var HOJAS_IMPORT_AREAS = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH'];
+var HOJAS_IMPORT_AREAS = ['DISEÑO','DIBUJO','PINTURA','COMPRAS','GALVANIZADO','LOGISTICA','MONTAJE','PRODUCCION','ADMINISTRACION','RRHH','PRODUCCION_BOGOTA'];   // v4.6: + Bogotá
 
 var ENC_HISTORIAL = ['FECHA_HORA','USUARIO','CORREO','OP','AREA','SUBESTRUCTURA','TAREA','CAMPO',
-                     'VALOR_ANTERIOR','VALOR_NUEVO','TIPO','DETALLE','CELDA','NOTIFICAR','NOTIFICADO'];
+                     'VALOR_ANTERIOR','VALOR_NUEVO','TIPO','DETALLE','CELDA','NOTIFICAR','NOTIFICADO','PLANTA'];   // v4.6: + PLANTA
 var ENC_LINEA_BASE = ['CLAVE','AREA','OP','SUB','TAREA','ESTADO','INI_REAL','INI_REAL_FX',
                       'DUR_REAL','DUR_REAL_FX','FIN_REAL','FIN_REAL_FX','ENTREGA','CAPTURA'];
 
@@ -1081,6 +1112,10 @@ function _hojaHistorial(ss) {
     sh.setFrozenRows(1);
     _protegerHoja(sh, 'Historial de cambios — solo lo escribe el script (solo consulta)');
   }
+  // v4.6: historiales anteriores no tienen la columna PLANTA
+  if (sh.getMaxColumns() < ENC_HISTORIAL.length) sh.insertColumnsAfter(sh.getMaxColumns(), ENC_HISTORIAL.length - sh.getMaxColumns());
+  if (String(sh.getRange(1, ENC_HISTORIAL.length).getValue()).trim() !== 'PLANTA')
+    sh.getRange(1, ENC_HISTORIAL.length).setValue('PLANTA').setFontWeight('bold').setBackground('#2b2b40').setFontColor('#ffffff');
   return sh;
 }
 
@@ -1120,6 +1155,7 @@ function _columnasArea(sh) {
   if (vistos['OP']) cols.OP = vistos['OP'];
   if (vistos['NOMBRE_SUBESTRUCTURA']) cols.SUB = vistos['NOMBRE_SUBESTRUCTURA'];
   if (vistos['DESCRIPCION_TAREAS']) cols.TAREA = vistos['DESCRIPCION_TAREAS'];
+  cols.SEDE = vistos['SEDE'] || 13;   // v4.6: planta de la subestructura
   return cols;
 }
 
@@ -1127,16 +1163,17 @@ function _columnasArea(sh) {
 function _identidadFilas(sh, cols, area, hasta) {
   var n = hasta - FILA_INI_AREA + 1;
   if (n <= 0) return [];
-  var w = Math.max(cols.OP, cols.SUB, cols.TAREA);
+  var w = Math.max(cols.OP, cols.SUB, cols.TAREA, cols.SEDE || 0);
   var v = sh.getRange(FILA_INI_AREA, 1, n, w).getValues();
-  var out = [], op = '', sub = '', subN = -1, tN = 0;
+  var out = [], op = '', sub = '', subN = -1, tN = 0, sede = '';
   for (var i = 0; i < n; i++) {
     var vOp = String(v[i][cols.OP - 1]).trim().replace(/\.0$/, '');
     if (vOp) { op = vOp; subN = -1; }
+    if (cols.SEDE && String(v[i][cols.SEDE - 1]).trim()) sede = String(v[i][cols.SEDE - 1]).trim();   // v4.6
     var vSub = String(v[i][cols.SUB - 1]).trim();
     if (vSub) { sub = vSub; subN++; tN = 0; } else { tN++; }
     var tarea = String(v[i][cols.TAREA - 1]).trim();
-    out.push({ op: op, sub: sub, subN: subN, tarea: tarea, tN: tN,
+    out.push({ op: op, sub: sub, subN: subN, tarea: tarea, tN: tN, sede: sede,
                clave: area + '|' + op + '|' + subN + '|' + tN + '|' + tarea });
   }
   return out;
@@ -1216,11 +1253,11 @@ function _capturarLineaBase(ss, registrar) {
       var b = base[it.clave];
       if (registrar && b) {
         if (_bloqueada(b) && _txtValor(b.finReal) !== _txtValor(nueva[10]))
-          eventos.push(_evento('Sistema (sin valor anterior)', '', it.op, area, it.sub, it.tarea, 'Fecha fin real',
-            b.finReal, nueva[10], 'Cambio detectado en revisión', 'El cambio no pasó por la vigilancia (macro, pegado múltiple o archivo sin vigilar).', '', true));
+          eventos.push(_evento('Sistema (sin valor anterior)', '', it.op, _areaVisible(area), it.sub, it.tarea, 'Fecha fin real',
+            b.finReal, nueva[10], 'Cambio detectado en revisión', 'El cambio no pasó por la vigilancia (macro, pegado múltiple o archivo sin vigilar).', '', true, _plantaFila(area, it.sede)));
         if (_txtValor(b.entrega) !== _txtValor(nueva[12]) && _esFechaValida(b.entrega) && !vistosEnt[it.op + '|' + area] && (vistosEnt[it.op + '|' + area] = true))
-          eventos.push(_evento('Sistema (revisión)', '', it.op, area, it.sub, it.tarea, 'Fecha de entrega',
-            b.entrega, nueva[12], 'Cambio de línea base comercial', 'Detectado en la revisión periódica (normalmente: Editar OP en Comercial).', '', true));
+          eventos.push(_evento('Sistema (revisión)', '', it.op, _areaVisible(area), it.sub, it.tarea, 'Fecha de entrega',
+            b.entrega, nueva[12], 'Cambio de línea base comercial', 'Detectado en la revisión periódica (normalmente: Editar OP en Comercial).', '', true, _plantaFila(area, it.sede)));
       }
     });
   });
@@ -1304,14 +1341,14 @@ function _alEditarArea(e) {
           if (fxBase) c.setFormula(fxBase);                                   // fórmula original (p. ej. fin real)
           else if (unaCelda || b) c.setValue(restaurar === undefined ? '' : restaurar);   // valor anterior (puede ser vacío)
           else revertido = false;                                             // pegado múltiple sin línea base
-          eventos.push(_evento(usuario, correo, it.op, area, it.sub, it.tarea, campo.nombre, ant, nuevo,
+          eventos.push(_evento(usuario, correo, it.op, _areaVisible(area), it.sub, it.tarea, campo.nombre, ant, nuevo,
             revertido ? 'Intento bloqueado' : 'Cambio protegido sin revertir',
             motivo + (revertido ? ' Se restauró el valor anterior.' : ' No había valor anterior para restaurarlo: revisar.'),
-            _a1(r, cols[k]), true));
+            _a1(r, cols[k]), true, _plantaFila(area, it.sede)));
         } else {
-          eventos.push(_evento(usuario, correo, it.op, area, it.sub, it.tarea, campo.nombre, ant, nuevo,
+          eventos.push(_evento(usuario, correo, it.op, _areaVisible(area), it.sub, it.tarea, campo.nombre, ant, nuevo,
             protegido ? 'Cambio autorizado' : (k === 'ESTADO' && String(nuevo).trim() === 'Terminado' ? 'Terminación registrada' : 'Cambio permitido'),
-            protegido ? 'Usuario autorizado para corregir fechas protegidas.' : '', _a1(r, cols[k]), campo.notificar || protegido));
+            protegido ? 'Usuario autorizado para corregir fechas protegidas.' : '', _a1(r, cols[k]), campo.notificar || protegido, _plantaFila(area, it.sede)));
           cambiosBase.push(r);
         }
       });
@@ -1347,9 +1384,9 @@ function _a1(r, c) {
   return s + r;
 }
 
-function _evento(usuario, correo, op, area, sub, tarea, campo, ant, nuevo, tipo, detalle, celda, notificar) {
+function _evento(usuario, correo, op, area, sub, tarea, campo, ant, nuevo, tipo, detalle, celda, notificar, planta) {
   return [new Date(), usuario, correo || '', op, area, sub, tarea, campo, _txtValor(ant), _txtValor(nuevo),
-          tipo, detalle || '', celda || '', notificar ? 'SI' : 'NO', ''];
+          tipo, detalle || '', celda || '', notificar ? 'SI' : 'NO', '', planta || ''];   // v4.6: + PLANTA
 }
 
 function _escribirHistorial(ss, eventos) {
@@ -1416,7 +1453,7 @@ function getDatosHistorial() {
     return { fecha: r[0] instanceof Date ? Utilities.formatDate(r[0], Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm') : String(r[0]),
       usuario: String(r[1]), correo: String(r[2]), op: String(r[3]).replace(/\.0$/, ''), area: String(r[4]),
       sub: String(r[5]), tarea: String(r[6]), campo: String(r[7]), anterior: String(r[8]), nuevo: String(r[9]),
-      tipo: String(r[10]), detalle: String(r[11]) };
+      tipo: String(r[10]), detalle: String(r[11]), planta: String(r[15] || '') };   // v4.6
   });
 }
 
@@ -1624,4 +1661,73 @@ function _correoSemanalBitacora(forzar) {
   try { if (resp.getResponseCode() === 200 && JSON.parse(resp.getContentText()).ok) return 'ok'; } catch (e) {}
   Logger.log('Correo bitácora: ' + resp.getResponseCode() + ' ' + resp.getContentText());
   return 'error ' + resp.getResponseCode();
+}
+
+
+// ============================================================
+//  v4.6 — DOS PLANTAS (Producción Bogotá / Producción Barranquilla)
+// ============================================================
+var HOJA_PROD_BOGOTA = 'PRODUCCION_BOGOTA';
+
+function _plantaNorm(v) {
+  var n = _normEnc(v);
+  if (n === 'BOGOTA') return 'BOGOTÁ';
+  if (n === 'BARRANQUILLA') return 'BARRANQUILLA';
+  if (n === 'MIXTO' || n === 'MIXTA') return 'MIXTO';
+  return '';
+}
+
+function _idDeImportacion(sh) {
+  if (!sh) return '';
+  var fx = sh.getRange('A1').getFormula();
+  var m = fx.match(/\/d\/([a-zA-Z0-9_-]{20,})/) || fx.match(/IMPORTRANGE\(\s*"+([a-zA-Z0-9_-]{20,})"/i);
+  return m ? m[1] : '';
+}
+
+/** Planta de cada hoja de importación de Producción. Sin la hoja de Bogotá → {} (como v4.5). */
+function _plantasHojasProduccion(ss) {
+  if (!_idDeImportacion(ss.getSheetByName(HOJA_PROD_BOGOTA))) return {};
+  var out = {}; out['PRODUCCION'] = 'BARRANQUILLA'; out[HOJA_PROD_BOGOTA] = 'BOGOTÁ';
+  return out;
+}
+
+/** true si la fila (sede de su subestructura) es de la otra planta que la hoja de donde viene. */
+function _deOtraPlanta(plantaHoja, sede) {
+  if (!plantaHoja) return false;
+  var s = _plantaNorm(sede);
+  return (s === 'BOGOTÁ' || s === 'BARRANQUILLA') && s !== plantaHoja;
+}
+
+/** Nombre de área que se muestra en el historial: las dos hojas de Producción = PRODUCCION. */
+function _areaVisible(area) { return area === HOJA_PROD_BOGOTA ? 'PRODUCCION' : area; }
+
+/** Planta para el historial: la Sede de la subestructura; si no tiene, la del archivo. */
+function _plantaFila(area, sede) {
+  var s = _plantaNorm(sede);
+  if (s) return s;
+  if (area === HOJA_PROD_BOGOTA) return 'BOGOTÁ';
+  return '';
+}
+
+/** Menú (una vez): crea la hoja PRODUCCION_BOGOTA que importa el Cronograma del archivo de Bogotá. */
+function conectarProduccionBogota() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
+  var actual = _idDeImportacion(ss.getSheetByName(HOJA_PROD_BOGOTA));
+  var r = ui.prompt('🏭 Conectar Producción Bogotá',
+    (actual ? 'Ya está conectado al archivo ' + actual + '.\n\n' : '') +
+    'Pega el ID del archivo PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA\n(lo que va entre /d/ y /edit en su enlace):', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  var id = r.getResponseText().trim().replace(/.*\/d\/([a-zA-Z0-9_-]{20,}).*/, '$1');
+  if (!/^[a-zA-Z0-9_-]{20,}$/.test(id)) { ui.alert('❌ Ese no parece un ID de archivo.'); return; }
+  if (id === _idDeImportacion(ss.getSheetByName('PRODUCCION'))) { ui.alert('❌ Ese es el archivo de Barranquilla (hoja PRODUCCION). Pega el de Bogotá.'); return; }
+  var sh = ss.getSheetByName(HOJA_PROD_BOGOTA);
+  if (!sh) {
+    var base = ss.getSheetByName('PRODUCCION');
+    sh = ss.insertSheet(HOJA_PROD_BOGOTA, base ? base.getIndex() : ss.getSheets().length);
+  }
+  sh.getRange('A1').setFormula('=IMPORTRANGE("' + id + '";"Cronograma!A5:AK")');
+  ui.alert('✅ Producción Bogotá conectada (hoja ' + HOJA_PROD_BOGOTA + ').\n\n' +
+    '1. Abre la hoja ' + HOJA_PROD_BOGOTA + ' y, si aparece "#REF!", pulsa "Permitir acceso".\n' +
+    '2. 🔄 Actualizar LOOKER_MAESTRA.\n' +
+    '3. 🛡 Instalar protección de nuevo, para que también vigile el archivo de Bogotá.');
 }

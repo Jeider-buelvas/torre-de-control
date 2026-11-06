@@ -55,9 +55,13 @@ class Sheet {
     const fn = n > 0 ? (r => (r >= desde ? r + n : r)) : (r => { const fin = desde - n - 1; if (r >= desde && r <= fin) return null; return r > fin ? r + n : r; });
     const fnR = n > 0 ? ((a, b) => [a >= desde ? a + n : a, b >= desde ? b + n : b]) : ((a, b) => { const fin = desde - n - 1; let a2 = a > fin ? a + n : (a >= desde ? desde : a), b2 = b > fin ? b + n : (b >= desde ? desde - 1 : b); return b2 < a2 ? [null, null] : [a2, b2]; });
     for (const sh of this.ss.sheets) for (const x of sh.cells.values()) if (x.f) x.f = moverFormula(x.f, sh.name, this.name, fn, fnR); }
+  getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
   getRangeList(l) { const rs = l.map(a => this.getRange(a)); return { setValue: v => { rs.forEach(r => r.setValue(v)); } }; }
   insertRowsBefore(r, n) { this._moverFilas(r, n); return this._px; } insertRowsAfter(r, n) { this._moverFilas(r + 1, n); return this._px; }
   deleteRows(r, n) { this._moverFilas(r, -n); return this._px; }
+  clearContents() { this.cells = new Map(); return this._px; }
+  clear() { this.cells = new Map(); return this._px; }
+  getFilter() { return null; }
   hideSheet() { this.hidden = true; return this._px; }
   copyTo(ss) { const c = new Sheet(ss, 'Copia de ' + this.name, null); for (const [k, x] of this.cells) c.cells.set(k, { v: x.v, f: x.f }); c.maxR = this.maxR; c.maxC = this.maxC; ss.sheets.push(c); return c; } insertColumnsAfter(c, n) { this.maxC += n; return this._px; }
 }
