@@ -10,7 +10,7 @@ function escenario(dosPlantas,fuente){
   const A={[ID('Dibujo')]:area(ID('Dibujo'),'DIBUJO'),[ID('Galvanizado')]:area(ID('Galvanizado'),'GALV'),[ID('Produccion')]:area(ID('Produccion'),'PRODUCCION_V2_BARRANQUILLA'),IDBOG:area('IDBOG','PRODUCCION_V2_BOGOTA')};
   const COM=new Spreadsheet('COM',{'BASE_CREADOR':{cells:{}}},'COMERCIAL');A.COM=COM;
   const env=entorno(A,COM);
-  const F=cargar(fuente||SRC,env,['_crearHojaOP','_sincronizarOPConAreas','_bloqueOP','_leerMetaOP','_recorrerHojaOP','_actualizarMetaOP','_reconstruirHojaOP','_plantasSubOP'],dosPlantas?"IDS_PRODUCCION_PLANTA['BOGOTÁ']='IDBOG';":'');
+  const F=cargar(fuente||SRC,env,['_crearHojaOP','_sincronizarOPConAreas','_bloqueOP','_leerMetaOP','_recorrerHojaOP','_actualizarMetaOP','_reconstruirHojaOP','_plantasSubOP'],dosPlantas?"IDS_PRODUCCION_PLANTA['BOGOTÁ']='IDBOG';":"if(typeof IDS_PRODUCCION_PLANTA!=='undefined')IDS_PRODUCCION_PLANTA['BOGOTÁ']='PON_AQUI_ID_PRODUCCION_BOGOTA';");
   return {A,COM,env,F};
 }
 const crear=(E,op,sede,nSubs)=>{const ws=E.F._crearHojaOP(E.COM,op,'Proyecto '+op,'Cliente','Luz Mery Alvarez',sede,nSubs,0,['Dibujo','Produccion','Galvanizado'],3,new Date(2026,11,20));

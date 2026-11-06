@@ -2801,14 +2801,16 @@ function migrarProduccionDosTareas() {
       if (!ssP.getSheetByName('Cronograma_respaldo_migracion')) {
         var resp = cron.copyTo(ssP); resp.setName('Cronograma_respaldo_migracion'); resp.hideSheet();
       }
-      return { id: x.id, cron: cron };
+      return { id: x.id, cron: cron, planta: x.planta };
     });
     _listarOPs(ss).forEach(function(nombre) {
       if (Date.now() - t0 > LIMITE) { r.pendientes.push(nombre); return; }
       var ws = ss.getSheetByName(nombre), m = _leerMetaOP(ws);
       if (m.areas.indexOf('Produccion') === -1) return;
       try {
-        var dst = archivos.filter(function(a) { return _bloqueOP(a.cron, m.op); })[0] || archivos[0];   // v14.8
+        // v14.8: el archivo donde está la OP; si está en los dos (antes de separar), el de su planta
+        var conOP = archivos.filter(function(a) { return _bloqueOP(a.cron, m.op); });
+        var dst = conOP.filter(function(a) { return a.planta && a.planta === _normPlanta(m.sede); })[0] || conOP[0] || archivos[0];
         var res = _migrarProduccionOP(ss, ws, m, dst.id, dst.cron);
         r[res.grupo].push(m.op);
         r.retiradas = r.retiradas.concat(res.retiradas || []);
