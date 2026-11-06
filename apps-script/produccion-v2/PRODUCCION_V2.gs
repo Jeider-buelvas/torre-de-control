@@ -1,4 +1,15 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.4 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.5 (fusionada)
+//
+// v4.5 (dos plantas: Bogotá y Barranquilla, cada una con su archivo y el MISMO código):
+//  - Menú "🏭 Planta de este archivo": se indica una vez si el archivo es de BOGOTÁ o
+//    BARRANQUILLA (queda guardado en el archivo; si no, se toma del nombre del archivo).
+//  - Cada subestructura trae su planta en la columna "Sede" del Cronograma (la escribe
+//    Comercial; en una O.P MIXTO cada subestructura tiene la suya). Las subestructuras de
+//    la OTRA planta no aparecen en el formulario, no se programan y no se sincronizan.
+//  - Menú "✂️ Separar por planta (una vez)": deja en el archivo solo las O.P y bloques
+//    diarios de su planta (las O.P MIXTO se conservan). Guarda respaldo de cada hoja.
+//  - Hojas nuevas del mes: título "PRODUCCION <PLANTA>".
+//  - Sin planta configurada, todo funciona exactamente como v4.4.
 //
 // v4.4 (solicitud de Producción — Kg fabricados vs. entrega de material en negro):
 //  - Cada bloque de O.P en las hojas del mes tiene una 4.ª fila
@@ -137,6 +148,9 @@ function onOpen() {
     .addSeparator()
     .addItem('🔗 Preparar Cronograma (una sola vez)', 'prepararCronograma')
     .addItem('⏱ Activar sincronización automática (cada hora)', 'activarSincronizacionAutomatica')
+    .addSeparator()
+    .addItem('🏭 Planta de este archivo…', 'configurarPlanta')            // v4.5
+    .addItem('✂️ Separar por planta (una vez)', 'separarPorPlanta')       // v4.5
     .addItem('❓ Ayuda', 'mostrarAyuda')
     .addToUi();
   try { actualizarListasFormulario(true); } catch (e) {}
@@ -170,7 +184,11 @@ function enviarOP() {
         'Primero comercial debe enviarla a Producción (📤 Enviar / Actualizar OP en Áreas).', ui.ButtonSet.OK);
       return;
     }
-    const subs = subsElegidas_(opC, form.sub);
+    if (!subsPropias_(opC).length) {   // v4.5
+      ui.alert('⚠ OP de otra planta', 'La OP ' + form.op + ' es de la planta ' + opC.subs[0].sede + '.\nSe programa en el archivo de esa planta.', ui.ButtonSet.OK);
+      return;
+    }
+    const subs = subsElegidas_(opC, form.sub).filter(function (s) { return !s.otraPlanta; });   // v4.5
     if (!subs.length) { ui.alert('⚠ No encontré la subestructura "' + form.sub + '" en la OP ' + form.op + '.'); return; }
 
     const creadas = [], agregadas = [], duplicadas = [];
@@ -489,7 +507,7 @@ function construirHojaMes_(ss, anio, mes) {
 
   // --- Fila 1: título + nombre de semanas
   sh.getRange(1, COL.PROYECTO, 1, COL.PENDIENTE - COL.PROYECTO + 1).merge()
-    .setValue(CONFIG.TITULO + ' ' + MESES[mes] + ' ' + anio)
+    .setValue(tituloPlanta_() + ' ' + MESES[mes] + ' ' + anio)   // v4.5
     .setFontSize(18).setFontWeight('bold').setHorizontalAlignment('center')
     .setVerticalAlignment('middle').setBackground(CONFIG.COLOR.titulo)
     .setBorder(true, true, true, true, null, null, '#000000', SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
@@ -861,7 +879,8 @@ function columnasCrono_(sh) {
     OP: col('OP', 2), NOMBRE: col('NOMBRE_OP', 3), CLIENTE: col('CLIENTE', 4), COMERCIAL: col('COMERCIAL', 5),
     SUB: col('NOMBRE_SUBESTRUCTURA', 11), KG: col('PESO_KG_SUBESTRUCTURA', 12), TAREA: col('DESCRIPCION_TAREAS', 14),
     ESTADO: col('ESTADO', 16), KG_AV: col('KG_AVANCE_ACUMULADO', 19),
-    F_INI_REAL: col('FECHA_INICIO_TAREA_REAL', 21), DUR_REAL: col('DURACION_DIAS_TAREAS_REAL', 22)
+    F_INI_REAL: col('FECHA_INICIO_TAREA_REAL', 21), DUR_REAL: col('DURACION_DIAS_TAREAS_REAL', 22),
+    SEDE: col('Sede', 13)   // v4.5: planta de cada subestructura
   };
 }
 
@@ -876,7 +895,7 @@ function leerCronograma_(ss) {
   const C = columnasCrono_(sh); res.C = C;
   const last = sh.getLastRow();
   if (last < CONFIG.FILA_INI_CRONO) return res;
-  const ancho = Math.max(C.OP, C.NOMBRE, C.CLIENTE, C.COMERCIAL, C.SUB, C.KG, C.TAREA);
+  const ancho = Math.max(C.OP, C.NOMBRE, C.CLIENTE, C.COMERCIAL, C.SUB, C.KG, C.TAREA, C.SEDE);
   const v = sh.getRange(CONFIG.FILA_INI_CRONO, 1, last - CONFIG.FILA_INI_CRONO + 1, ancho).getValues();
   let op = null, sub = null;
   const tareaKg = _n3(CONFIG.TAREA_KG);
@@ -892,7 +911,9 @@ function leerCronograma_(ss) {
     if (!op) continue;
     if (String(r[C.SUB - 1]).trim() !== '' || (opTxt && !sub)) {
       sub = { n: op.subs.length + 1, nombre: String(r[C.SUB - 1]).trim() || ('Sub ' + (op.subs.length + 1)),
-              kg: Number(r[C.KG - 1]) || 0, filaKg: null, filaEnt: null };
+              kg: Number(r[C.KG - 1]) || 0, filaKg: null, filaEnt: null,
+              fila: fila, sede: String(r[C.SEDE - 1]).trim() };       // v4.5
+      sub.otraPlanta = esDeOtraPlanta_(sub.sede);                       // v4.5
       op.subs.push(sub);
     }
     if (sub && _n3(r[C.TAREA - 1]) === tareaKg) sub.filaKg = fila;
@@ -923,7 +944,7 @@ function actualizarListasFormulario(silencioso) {
   const ss = SpreadsheetApp.getActive();
   const crono = leerCronograma_(ss);
   const form = leerFormulario_(ss), sh = hojaFormulario_(ss);
-  const ops = Object.keys(crono.ops);
+  const ops = Object.keys(crono.ops).filter(function (k) { return subsPropias_(crono.ops[k]).length; });   // v4.5
   if (form.celdas.op && ops.length) {
     sh.getRange(form.celdas.op.fila, form.celdas.op.col).setDataValidation(
       SpreadsheetApp.newDataValidation().requireValueInList(ops.slice(0, 500), true).setAllowInvalid(true).build());
@@ -939,7 +960,7 @@ function actualizarListasFormulario(silencioso) {
 function listaSubs_(sh, form, opC) {
   if (!form.celdas.sub) return;
   const celda = sh.getRange(form.celdas.sub.fila, form.celdas.sub.col);
-  const items = ['Todas'].concat(opC ? opC.subs.map(function (s) { return opC.op + '_' + s.n + ' · ' + s.nombre; }) : []);
+  const items = ['Todas'].concat(opC ? subsPropias_(opC).map(function (s) { return opC.op + '_' + s.n + ' · ' + s.nombre; }) : []);   // v4.5
   celda.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(items, true).setAllowInvalid(true).build());
 }
 
@@ -952,14 +973,16 @@ function onEdit(e) {
     const sh = e.range.getSheet(), opC = leerCronograma_(ss).ops[form.op];
     listaSubs_(sh, form, opC);
     if (!opC) { ss.toast('La OP ' + form.op + ' no está en el Cronograma (no la ha enviado comercial).', '⚠ Producción', 6); return; }
+    if (!subsPropias_(opC).length) { ss.toast('La OP ' + form.op + ' es de la planta ' + opC.subs[0].sede + '.', '⚠ Producción', 6); return; }   // v4.5
+    const propias = subsPropias_(opC);   // v4.5
     const poner = function (k, v) { const x = form.celdas[k]; if (x) { try { sh.getRange(x.fila, x.col).setValue(v); } catch (_) {} } };
     poner('nombre', opC.nombre);
     poner('cliente', opC.cliente);
     poner('comercial', opC.comercial);
     poner('descripcion', opC.nombre);
-    poner('peso', opC.subs.reduce(function (a, s) { return a + s.kg; }, 0));
+    poner('peso', propias.reduce(function (a, s) { return a + s.kg; }, 0));   // v4.5: solo las de esta planta
     poner('sub', 'Todas');
-    ss.toast('Datos de la OP ' + form.op + ' cargados (' + opC.subs.length + ' subestructura/s).', '✅ Producción', 4);
+    ss.toast('Datos de la OP ' + form.op + ' cargados (' + propias.length + ' subestructura/s).', '✅ Producción', 4);
   } catch (err) { /* nunca bloquear la edición */ }
 }
 
@@ -1044,6 +1067,7 @@ function sincronizarDiarioACronograma() {
       const kgTot = o.subs.reduce(function (a, s) { return a + s.kg; }, 0);
       const comp = diario[op + '|*'];                  // reportes de OP completa (sin _n)
       o.subs.forEach(function (s) {
+        if (s.otraPlanta) return;                      // v4.5: la sincroniza el archivo de su planta
         const a = diario[op + '|' + s.n];
         let real = a ? a.real : 0, ini = a ? a.ini : null, fin = a ? a.fin : null;
         let ent = a ? a.ent : 0, entIni = a ? a.entIni : null, entFin = a ? a.entFin : null;   // v4.4
@@ -1192,4 +1216,174 @@ function limpiarOPsSinComercial() {
   borrar.forEach(function (b) { hojas[b.sh.getName()] = b.sh; });
   Object.keys(hojas).forEach(function (k) { try { escribirTotales_(hojas[k], layoutDeHoja_(hojas[k])); } catch (e) {} });
   ui.alert('✅ Borrados ' + borrar.length + ' bloque/s.');
+}
+
+// ============================================================
+//  v4.5 — DOS PLANTAS: cada archivo trabaja solo su planta
+// ============================================================
+var _PLANTA_MEMO = null;
+
+/** Planta de este archivo: 'BOGOTÁ', 'BARRANQUILLA' o '' (sin configurar = como v4.4). */
+function plantaArchivo_() {
+  if (_PLANTA_MEMO !== null) return _PLANTA_MEMO;
+  let p = '';
+  try { p = PropertiesService.getDocumentProperties().getProperty('PLANTA') || ''; } catch (e) {}
+  if (!p) {
+    let nombre = '';
+    try { nombre = _n3(SpreadsheetApp.getActive().getName()); } catch (e) {}
+    if (nombre.indexOf('BARRANQUILLA') !== -1) p = 'BARRANQUILLA';
+    else if (nombre.indexOf('BOGOTA') !== -1) p = 'BOGOTÁ';
+  }
+  _PLANTA_MEMO = p;
+  return p;
+}
+
+/** true si la sede (de una subestructura) es la OTRA planta. MIXTO o vacío = se trabaja aquí. */
+function esDeOtraPlanta_(sede) {
+  const p = plantaArchivo_();
+  if (!p) return false;
+  const s = _n3(sede);
+  return (s === 'BOGOTA' || s === 'BARRANQUILLA') && s !== _n3(p);
+}
+
+function subsPropias_(opC) { return opC ? opC.subs.filter(function (s) { return !s.otraPlanta; }) : []; }
+
+function tituloPlanta_() {
+  const p = plantaArchivo_();
+  return p ? 'PRODUCCION ' + p.normalize('NFD').replace(/[̀-ͯ]/g, '') : CONFIG.TITULO;
+}
+
+/** Menú: indica (una vez) la planta de este archivo. */
+function configurarPlanta() {
+  const ui = SpreadsheetApp.getUi();
+  const actual = plantaArchivo_();
+  const r = ui.prompt('🏭 Planta de este archivo',
+    'Planta actual: ' + (actual || '(sin configurar: trabaja todas las O.P)') +
+    '\n\nEscribe BOGOTA o BARRANQUILLA:', ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const v = _n3(r.getResponseText());
+  const p = v === 'BOGOTA' ? 'BOGOTÁ' : (v === 'BARRANQUILLA' ? 'BARRANQUILLA' : '');
+  if (!p) { ui.alert('❌ Escribe BOGOTA o BARRANQUILLA.'); return; }
+  PropertiesService.getDocumentProperties().setProperty('PLANTA', p);
+  _PLANTA_MEMO = p;
+  try { actualizarListasFormulario(true); } catch (e) {}
+  ui.alert('✅ Este archivo quedó como planta ' + p + '.\n\nSi todavía tiene O.P de la otra planta, usa "✂️ Separar por planta".');
+}
+
+/**
+ * Menú (una vez): deja en este archivo solo lo de su planta.
+ *  - Cronograma: se quitan las O.P cuyas subestructuras son TODAS de la otra planta.
+ *    Las O.P MIXTO se conservan completas (las subestructuras de la otra planta quedan en gris).
+ *  - Hojas del mes: se quitan los bloques (OP / PLANEADO / DIFERENCIA / ENTREGA) de las
+ *    subestructuras de la otra planta.
+ *  - Antes de cambiar una hoja se guarda su respaldo oculto "RESPALDO_SEP · <hoja>".
+ */
+function separarPorPlanta() {
+  const ss = SpreadsheetApp.getActive();
+  let ui = null; try { ui = SpreadsheetApp.getUi(); } catch (e) {}
+  const p = plantaArchivo_();
+  if (!p) { if (ui) ui.alert('❌ Primero indica la planta de este archivo (🏭 Planta de este archivo…).'); return; }
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { if (ui) ui.alert('Otra persona está trabajando en el archivo. Intenta de nuevo.'); return; }
+  const r = { opsQuitadas: [], mixtas: [], bloques: [], hojas: [] };
+  try {
+    const crono = leerCronograma_(ss), sh = crono.sh;
+    if (!sh) { if (ui) ui.alert('⚠ No existe la hoja "' + CONFIG.HOJA_CRONO + '".'); return; }
+    const C = crono.C;
+    const deOtra = function (o) { return o.subs.length && o.subs.every(function (s) { return s.otraPlanta; }); };
+    Object.keys(crono.ops).forEach(function (k) {
+      const o = crono.ops[k];
+      if (deOtra(o)) r.opsQuitadas.push(k);
+      else if (o.subs.some(function (s) { return s.otraPlanta; })) r.mixtas.push(k);
+    });
+    // --- qué bloques diarios sobran (antes de tocar nada)
+    const porHoja = [];
+    ss.getSheets().forEach(function (h) {
+      const m = h.getName().match(/^([A-Z]+) (\d{4})$/);
+      if (!m || MESES.indexOf(m[1]) < 0) return;
+      let sep; try { sep = filaResumen_(h) - 1; } catch (e) { return; }
+      const n = sep - CONFIG.FILA_INICIO;
+      if (n <= 0) return;
+      const v = h.getRange(CONFIG.FILA_INICIO, COL.PROYECTO, n, 1).getValues();
+      const quitar = [];
+      for (let i = 0; i < v.length; i++) {
+        const tk = String(v[i][0]).match(/^\s*OP\.?\s*([^\s·]+)/i);
+        if (!tk) continue;
+        const mm = tk[1].match(/^(.+)_(\d+)$/), opK = mm ? mm[1] : tk[1], o = crono.ops[opK];
+        if (!o) continue;                                   // O.P que no está en el Cronograma: no se toca
+        const sub = mm ? o.subs[Number(mm[2]) - 1] : null;
+        const otra = mm ? !!(sub && sub.otraPlanta) : deOtra(o);
+        if (!otra) continue;
+        const nF = (i + 3 < v.length && String(v[i + 3][0]).trim().toUpperCase() === ETQ_ENTREGA) ? 4 : 3;
+        quitar.push({ fila: CONFIG.FILA_INICIO + i, n: nF, txt: String(v[i][0]).trim() });
+      }
+      if (quitar.length) porHoja.push({ h: h, quitar: quitar });
+    });
+    // --- filas del Cronograma por O.P
+    const filasOP = [];
+    if (r.opsQuitadas.length) {
+      const last = sh.getLastRow();
+      const colOp = sh.getRange(CONFIG.FILA_INI_CRONO, C.OP, last - CONFIG.FILA_INI_CRONO + 1, 1).getValues();
+      const inicios = [];
+      colOp.forEach(function (x, i) { const o = String(x[0]).trim().replace(/\.0$/, ''); if (o) inicios.push({ op: o, fila: CONFIG.FILA_INI_CRONO + i }); });
+      inicios.forEach(function (x, i) {
+        if (r.opsQuitadas.indexOf(x.op) === -1) return;
+        const fin = i + 1 < inicios.length ? inicios[i + 1].fila - 1 : last;
+        filasOP.push({ fila: x.fila, n: fin - x.fila + 1 });
+      });
+    }
+    if (!filasOP.length && !porHoja.length && !r.mixtas.length) {
+      if (ui) ui.alert('✅ Este archivo ya tiene solo O.P de la planta ' + p + '.');
+      return r;
+    }
+    if (ui) {
+      const ok = ui.alert('✂️ Separar por planta (' + p + ')',
+        'Se quitarán de este archivo:\n• ' + r.opsQuitadas.length + ' O.P de la otra planta en el Cronograma\n• ' +
+        porHoja.reduce(function (a, x) { return a + x.quitar.length; }, 0) + ' bloque/s diarios de subestructuras de la otra planta\n\n' +
+        'Las O.P MIXTO se conservan (' + r.mixtas.length + '). Antes se guarda un respaldo de cada hoja.\n\n¿Continuar?',
+        ui.ButtonSet.YES_NO);
+      if (ok !== ui.Button.YES) return;
+    }
+    const respaldo = function (h) {
+      const nom = 'RESPALDO_SEP · ' + h.getName();
+      if (ss.getSheetByName(nom)) return;
+      const c = h.copyTo(ss); c.setName(nom); c.hideSheet();
+    };
+    // --- Cronograma
+    if (filasOP.length) {
+      respaldo(sh);
+      filasOP.sort(function (a, b) { return b.fila - a.fila; }).forEach(function (x) { sh.deleteRows(x.fila, x.n); });
+      r.hojas.push(CONFIG.HOJA_CRONO);
+    }
+    // --- subestructuras de la otra planta en O.P MIXTO: en gris
+    if (r.mixtas.length) {
+      const c2 = leerCronograma_(ss);
+      r.mixtas.forEach(function (k) {
+        const o = c2.ops[k]; if (!o) return;
+        o.subs.forEach(function (s, i) {
+          if (!s.otraPlanta) return;
+          const fin = i + 1 < o.subs.length ? o.subs[i + 1].fila - 1 : (s.filaEnt || s.filaKg || s.fila);
+          c2.sh.getRange(s.fila, 1, fin - s.fila + 1, Math.min(c2.sh.getLastColumn(), 30)).setFontColor('#9e9e9e');
+        });
+      });
+    }
+    // --- hojas del mes
+    porHoja.forEach(function (x) {
+      respaldo(x.h);
+      x.quitar.sort(function (a, b) { return b.fila - a.fila; }).forEach(function (q) { x.h.deleteRows(q.fila, q.n); r.bloques.push(x.h.getName() + ': ' + q.txt); });
+      try { escribirTotales_(x.h, layoutDeHoja_(x.h)); } catch (e) {}
+      r.hojas.push(x.h.getName());
+    });
+  } finally {
+    lock.releaseLock();
+  }
+  try { actualizarListasFormulario(true); } catch (e) {}
+  const msg = '✂️ Separación lista — planta ' + p +
+    '\n\n🗑 O.P quitadas del Cronograma (' + r.opsQuitadas.length + '): ' + (r.opsQuitadas.join(', ') || '—') +
+    '\n🗑 Bloques diarios quitados: ' + r.bloques.length +
+    (r.mixtas.length ? '\n🔀 O.P MIXTO conservadas: ' + r.mixtas.join(', ') : '') +
+    (r.hojas.length ? '\n\n📦 Respaldo oculto de: ' + r.hojas.join(', ') : '');
+  Logger.log(msg);
+  if (ui) ui.alert(msg);
+  return r;
 }
