@@ -421,7 +421,7 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="modal-header">
       <div class="modal-title-wrap">
         <div class="modal-icon" style="--mc:var(--grad-2)">📝</div>
-        <div><div class="modal-title" id="bitTitle">Tareas de la O.P</div><div class="modal-sub" id="bitSub">—</div></div>
+        <div><div class="modal-title" id="bitTitle">Tareas de la O.P.</div><div class="modal-sub" id="bitSub">—</div></div>
       </div>
       <button class="modal-close" onclick="cerrarBitacora()" aria-label="Cerrar">✕</button>
     </div>
@@ -844,8 +844,8 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="alert-list" id="alertEntregas"><div class="empty">Sin alertas de entrega</div></div>
   </div>
   <div class="card" style="margin-bottom:16px">
-    <div class="card-title"><span>📝 Tareas de la O.P: compromisos vencidos y bloqueos</span>
-      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en Tareas de la O.P · se cierran desde la tarjeta</span></div>
+    <div class="card-title"><span>📝 Tareas de la O.P. · compromisos vencidos y bloqueos</span>
+      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en las Tareas de la O.P. · se cierran desde la tarjeta</span></div>
     <div class="alert-list" id="alertBitacora"><div class="empty">Sin pendientes</div></div>
   </div>
   <div class="card">
@@ -989,7 +989,7 @@ async function cargarDatos(){
     state.tareas=(data.tareas||[]).map(function(t){t.op=String(t.op).replace(/\.0$/,'');return t;});
     state.tareas=normalizarDatosGrupo(state.tareas);
     state.produccion=(data.produccion||[]).map(function(r){r.op=String(r.op).replace(/\.0$/,'');return r;});
-    state.historial=data.historial||[];   // Maestra v4 (solo consulta)
+    state.historial=(data.historial||[]).map(histNombreTareas);   // Maestra v4 (solo consulta) · «Bitácora» se muestra como «Tareas de la O.P.»
     state.entregas=data.entregas||null;   // Maestra v4.1 (desde Comercial)
     state.bitacora=(data.bitacora||[]).map(function(b){b.op=String(b.op).replace(/\.0$/,'');return b;});   // Maestra v4.4
     var ts=data.timestamp?new Date(data.timestamp).toLocaleString('es-CO'):'Ahora';
@@ -2819,7 +2819,7 @@ function bitDeOP(op){return (state.bitacora||[]).filter(function(b){return Strin
 function bitVencido(b){if(b.estado!=='Abierto'||!b.fechaCompromiso)return false;var d=parseD(b.fechaCompromiso),h=new Date();h.setHours(0,0,0,0);return d&&d<h;}
 function bitBotonHtml(op){
   var ab=bitDeOP(op.op).filter(function(b){return b.estado==='Abierto';}),venc=ab.filter(bitVencido).length;
-  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Tareas de la O.P'+
+  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Tareas de la O.P.'+
     (ab.length?' <span class="n'+(venc?' v':'')+'">'+ab.length+' abierto'+(ab.length===1?'':'s')+(venc?' · '+venc+' vencido'+(venc===1?'':'s'):'')+'</span>':'')+'</button>';
 }
 function abrirBitacora(op){bitOpActual=String(op);renderBitacoraModal();document.getElementById('bitOverlay').classList.add('active');}
@@ -2843,7 +2843,7 @@ function renderBitacoraModal(){
   if(!bitOpActual)return;
   var op=state.ops.find(function(o){return String(o.op)===bitOpActual;})||{op:bitOpActual,areas:[]};
   var lista=bitDeOP(bitOpActual).slice().sort(function(a,b){var r=function(x){return x.estado==='Abierto'?(bitVencido(x)?0:1):2;};return r(a)-r(b)||String(b.id).localeCompare(String(a.id));});
-  document.getElementById('bitTitle').textContent='Tareas de la O.P '+bitOpActual;
+  document.getElementById('bitTitle').textContent='Tareas de la O.P. '+bitOpActual;
   document.getElementById('bitSub').textContent=[op.nombre,op.cliente].filter(Boolean).join(' · ')||'—';
   var areas=ordenarAreas(op.areas||[]).map(function(a){return '<option>'+esc(a)+'</option>';}).join('');
   var form='<div class="bit-form">'+
@@ -2909,7 +2909,9 @@ var histFiltrados=[],histPage=1,HIST_PAGE=20;
 var HIST_ESTILO={'Intento bloqueado':['⛔','var(--red)','var(--tint-red)'],'Cambio protegido sin revertir':['⛔','var(--red)','var(--tint-red)'],
   'Terminación registrada':['✅','var(--green)','var(--tint-green)'],'Diferencia entre áreas':['⚠','var(--yellow)','var(--tint-yellow)'],
   'Cambio de línea base comercial':['🏁','var(--grad-1)','var(--tint-accent)'],'Cambio autorizado':['🔑','var(--grad-3)','var(--tint-accent)'],
-  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Bitácora':['📝','var(--grad-2)','var(--tint-accent)']};
+  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Tareas de la O.P.':['📝','var(--grad-2)','var(--tint-accent)']};
+/* Registros anteriores guardados como «Bitácora»: se muestran con el nombre nuevo (solo presentación). */
+function histNombreTareas(h){if(h){['tipo','campo'].forEach(function(k){if(typeof h[k]==='string')h[k]=h[k].replace(/^Bit[aá]cora\b/i,'Tareas de la O.P.');});}return h;}
 function renderHistorial(){
   var sel=document.getElementById('histTipo');if(!sel)return;
   var cur=sel.value,tipos=[...new Set((state.historial||[]).map(function(h){return h.tipo;}).filter(Boolean))].sort();

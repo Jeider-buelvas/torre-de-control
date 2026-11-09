@@ -1,4 +1,10 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.6
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.7
+// v4.7 — NOMBRE: la "Bitácora" pasa a llamarse "Tareas de la O.P." en lo que ve el usuario
+//   (menús, mensajes y los registros NUEVOS del historial: TIPO "Tareas de la O.P.").
+//   Nombres internos sin cambios (hoja BITACORA_OP, funciones, bitacora.php). Los
+//   registros anteriores no se tocan; la App los muestra con el nombre nuevo.
+//
+// (v4.6)
 // v4.6 — DOS PLANTAS (Producción Bogotá y Producción Barranquilla, un archivo cada una):
 //   • Hoja de importación PRODUCCION_BOGOTA (menú "🏭 Conectar Producción Bogotá"). La hoja
 //     PRODUCCION sigue siendo el archivo actual (Barranquilla). En LOOKER_MAESTRA las dos
@@ -104,9 +110,9 @@ function onOpen() {
     .addItem('✉️ Probar correo de cambios', 'probarCorreoCambios')
     .addItem('⛔ Desinstalar protección', 'desinstalarProteccion')
     .addSeparator()
-    .addItem('📝 Ver bitácora de las OP', 'verBitacora')
-    .addItem('📅 Activar correo semanal de la bitácora (una sola vez)', 'activarCorreoBitacora')
-    .addItem('✉️ Probar correo de la bitácora', 'probarCorreoBitacora')
+    .addItem('📝 Ver Tareas de la O.P.', 'verBitacora')
+    .addItem('📅 Activar correo semanal de Tareas de la O.P. (una sola vez)', 'activarCorreoBitacora')
+    .addItem('✉️ Probar correo de Tareas de la O.P.', 'probarCorreoBitacora')
     .addToUi();
 }
 
@@ -1540,7 +1546,7 @@ function _hojaBitacora(ss) {
       .setFontWeight('bold').setBackground('#2b2b40').setFontColor('#ffffff');
     sh.setFrozenRows(1);
     sh.getRange('B:B').setNumberFormat('dd/mm/yyyy hh:mm'); sh.getRange('J:J').setNumberFormat('dd/mm/yyyy'); sh.getRange('L:L').setNumberFormat('dd/mm/yyyy hh:mm');
-    _protegerHoja(sh, 'Bitácora de las OP — solo la escribe el script (desde la App)');
+    _protegerHoja(sh, 'Tareas de la O.P. — solo la escribe el script (desde la App)');
   }
   return sh;
 }
@@ -1577,7 +1583,7 @@ function _bitacoraPost(b) {
       var id = 'B' + Utilities.formatDate(ahora, Session.getScriptTimeZone(), 'yyyyMMddHHmmss') + Math.floor(Math.random() * 900 + 100);
       var estado = tipo === 'Nota' ? 'Registrada' : 'Abierto';
       sh.getRange(sh.getLastRow() + 1, 1, 1, ENC_BITACORA.length).setValues([[id, ahora, autor, correo, op, area, tipo, desc, resp, fc || '', estado, '', '', '']]);
-      _escribirHistorial(ss, [_evento(autor, correo, op, area, '', '', 'Bitácora: ' + tipo, '', desc, 'Bitácora', resp ? 'Responsable: ' + resp + (fc ? ' · compromiso ' + _txtValor(fc) : '') : '', '', false)]);
+      _escribirHistorial(ss, [_evento(autor, correo, op, area, '', '', 'Tareas de la O.P.: ' + tipo, '', desc, 'Tareas de la O.P.', resp ? 'Responsable: ' + resp + (fc ? ' · compromiso ' + _txtValor(fc) : '') : '', '', false)]);
       return { ok: true, registro: _filaBitacoraJSON([id, ahora, autor, correo, op, area, tipo, desc, resp, fc || '', estado, '', '', '']) };
     }
     if (b.accion === 'cerrar') {
@@ -1593,7 +1599,7 @@ function _bitacoraPost(b) {
         if (fila[10] === 'Cerrado') return { ok: false, error: 'Ya estaba cerrada' };
         var cierre = new Date();
         sh.getRange(i + 2, 11, 1, 4).setValues([['Cerrado', cierre, autor + ' <' + correo + '>', nota]]);
-        _escribirHistorial(ss, [_evento(autor, correo, fila[4], fila[5], '', '', 'Bitácora: ' + fila[6] + ' cerrado', 'Abierto', 'Cerrado', 'Bitácora', nota, '', false)]);
+        _escribirHistorial(ss, [_evento(autor, correo, fila[4], fila[5], '', '', 'Tareas de la O.P.: ' + fila[6] + ' cerrado', 'Abierto', 'Cerrado', 'Tareas de la O.P.', nota, '', false)]);
         fila[10] = 'Cerrado'; fila[11] = cierre; fila[12] = autor + ' <' + correo + '>'; fila[13] = nota;
         return { ok: true, registro: _filaBitacoraJSON(fila) };
       }
@@ -1636,7 +1642,7 @@ function activarCorreoBitacora() {
 
 function probarCorreoBitacora() {
   var r = _correoSemanalBitacora(true);
-  SpreadsheetApp.getUi().alert(r === 'ok' ? '✅ Correo de la bitácora enviado.' : (r === 'vacio' ? 'ℹ️ No hay compromisos ni bloqueos abiertos: no se envió correo.' : '⚠ No se envió: ' + r));
+  SpreadsheetApp.getUi().alert(r === 'ok' ? '✅ Correo de Tareas de la O.P. enviado.' : (r === 'vacio' ? 'ℹ️ No hay compromisos ni bloqueos abiertos: no se envió correo.' : '⚠ No se envió: ' + r));
 }
 
 function _correoSemanalBitacora(forzar) {

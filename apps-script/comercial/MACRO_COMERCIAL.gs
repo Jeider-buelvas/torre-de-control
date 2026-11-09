@@ -14,8 +14,11 @@
 //         ni reciben % de la subestructura.
 //           • Áreas: SUMIF por ESTADO <> "No aplica" (se ajusta solo al marcar/desmarcar).
 //           • Hoja de la OP (Comercial): se reescriben L/N y T/V de la subestructura
-//             al guardar "Tareas de la OP". Sin tareas No aplica, todo igual que antes.
+//             al guardar "🧩 Ajustar tareas del cronograma". Sin tareas No aplica, todo igual que antes.
 //         El menú 🩹 también aplica esto a las OP y áreas existentes.
+//         Etiqueta: el menú "🧩 Tareas de la OP" pasa a "🧩 Ajustar tareas del cronograma
+//         (No aplica / nombre)" para no confundirlo con "Tareas de la O.P." de la App
+//         (antes Bitácora). Misma función, sin cambios de lógica.
 //
 //  MACRO_COMERCIAL — v14.8
 //  v14.8 (dos plantas): Producción tiene un archivo por planta (IDS_PRODUCCION_PLANTA).
@@ -403,7 +406,7 @@ function onOpen() {
     .addItem('📨 Reenviar correo de una O.P ya creada', 'reenviarCorreoOP')
     .addItem('🔀 Ordenar lista de áreas (BASE_CREADOR)', 'ordenarListaAreas')
     .addSeparator()
-    .addItem('🧩 Tareas de la OP (No aplica / nombre)', 'abrirTareasOP')
+    .addItem('🧩 Ajustar tareas del cronograma (No aplica / nombre)', 'abrirTareasOP')   // v14.9: etiqueta distinta de «Tareas de la O.P.» de la App
     .addItem('🚚 Registrar entrega real al cliente', 'registrarEntregaReal')
     .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
     .addSeparator()
@@ -2263,7 +2266,7 @@ function abrirTareasOP() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
   var ws = ss.getActiveSheet();
   if (!_esHojaOP(ws)) {
-    var pr = ui.prompt('🧩 Tareas de la OP', 'Escribe el número de la OP (o abre su hoja antes de usar el menú):', ui.ButtonSet.OK_CANCEL);
+    var pr = ui.prompt('🧩 Ajustar tareas del cronograma', 'Escribe el número de la OP (o abre su hoja antes de usar el menú):', ui.ButtonSet.OK_CANCEL);
     if (pr.getSelectedButton() !== ui.Button.OK) return;
     ws = ss.getSheetByName(pr.getResponseText().trim());
     if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la hoja de esa OP.'); return; }
@@ -2277,7 +2280,7 @@ function abrirTareasOP() {
              fijo: (NO_RENOMBRAR[x.area] || []).indexOf(x.original) !== -1 };
   }) };
   var html = HtmlService.createHtmlOutput(_htmlTareasOP(datos)).setWidth(760).setHeight(600);
-  ui.showModalDialog(html, '🧩 Tareas de la OP ' + datos.op);
+  ui.showModalDialog(html, '🧩 Ajustar tareas del cronograma · OP ' + datos.op);
 }
 
 function _htmlTareasOP(datos) {
