@@ -1449,10 +1449,10 @@ function _escribirSub(tSheet, ctx, s, subStart) {
 
     tSheet.getRange(r, 23).setValue('=IF(OR(U' + r + '="";V' + r + '=0);"";WORKDAY.INTL(U' + r + ';V' + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
 
-    tSheet.getRange(r, 26).setFormula('=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,V' + r + '*Y$' + subStart + ')');   // v14.9
+    tSheet.getRange(r, 26).setValue(_fx(tSheet, '=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,V' + r + '*Y$' + subStart + ')'));   // v14.9
     if (tIdx === 0) tSheet.getRange(r, 27).setFormula('=Z' + r);
     else            tSheet.getRange(r, 27).setFormula('=AA' + (r-1) + '+Z' + r);
-    tSheet.getRange(r, 28).setFormula('=IFERROR(' + PL(33) + r + '/X' + r + ',"")');   // v14.9
+    tSheet.getRange(r, 28).setValue(_fx(tSheet, '=IFERROR(' + PL(33) + r + '/X' + r + ',"")'));   // v14.9
     tSheet.getRange(r, 28).setNumberFormat('0.00%');
 
     if (fechaIniPlan && fechaIniPlan instanceof Date && fechaIniPlan.getFullYear() > 1900) {
@@ -1463,7 +1463,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
     }
     tSheet.getRange(r, P(32)).setValue('=IF(OR(' + PL(30) + r + '="";' + PL(31) + r + '=0);"";WORKDAY.INTL(' + PL(30) + r + ';' + PL(31) + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
 
-    tSheet.getRange(r, P(35)).setFormula('=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,' + PL(31) + r + '*' + PL(34) + '$' + subStart + ')');   // v14.9
+    tSheet.getRange(r, P(35)).setValue(_fx(tSheet, '=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,' + PL(31) + r + '*' + PL(34) + '$' + subStart + ')'));   // v14.9
     if (isFirstSub) tSheet.getRange(r, P(36)).setFormula('=' + PL(35) + r);
     else            tSheet.getRange(r, P(36)).setFormula('=' + PL(36) + (r-1) + '+' + PL(35) + r);
   }
@@ -1757,19 +1757,19 @@ function setSubSummaryFormulas(sheet, startRow, taskCount, k) {
     return 'SUMIF(P' + startRow + ':P' + endRow + ',"<>' + ESTADO_NO_APLICA + '",' + col + startRow + ':' + col + endRow + ')';
   };
   sheet.getRange(startRow, 24)
-       .setFormula('=' + noAplica('V'));
+       .setValue(_fx(sheet, '=' + noAplica('V')));
 
   // % TAREA REAL
   sheet.getRange(startRow, 25)
-       .setFormula('=IFERROR(100%/' + noAplica('V') + ',0)');   // v14.9
+       .setValue(_fx(sheet, '=IFERROR(100%/' + noAplica('V') + ',0)'));   // v14.9
 
   // DURACIÓN PLANEADA
   sheet.getRange(startRow, 33 + k)
-       .setFormula('=' + noAplica(AE));
+       .setValue(_fx(sheet, '=' + noAplica(AE)));
 
   // % TAREA PLANEADA
   sheet.getRange(startRow, 34 + k)
-       .setFormula('=IFERROR(100%/' + noAplica(AE) + ',0)');   // v14.9
+       .setValue(_fx(sheet, '=IFERROR(100%/' + noAplica(AE) + ',0)'));   // v14.9
 }
 // ===========================================================================
 
@@ -2406,7 +2406,12 @@ function _sumasNoAplicaOP(ws, meta) {
   if (!orden.length) return;
   var last = ws.getLastRow();
   var fx = ws.getRange(1, 1, last, 22).getFormulas();
-  var f = function(fila, col) { return fx[fila - 1][col - 1]; };
+  var f = function(fila, col) { return String(fx[fila - 1][col - 1]).replace(/;/g, ','); };   // comparar sin importar el separador
+  var crudo = function(fila, col) { return fx[fila - 1][col - 1]; };
+  var escribir = function(fila, col, formula) {   // con el separador del archivo
+    var final = _fx(ws, formula);
+    if (crudo(fila, col) !== final) ws.getRange(fila, col).setValue(final);
+  };
   // [col total, col duración, col %, col % por tarea]: planeado L/J/M/N y real T/R/U/V
   var juegos = [[12, 'J', 'M', 14], [20, 'R', 'U', 22]];
   orden.forEach(function(g) {
@@ -2418,11 +2423,11 @@ function _sumasNoAplicaOP(ws, meta) {
       var tocado = f(ini, colTot).indexOf(')-SUM(') !== -1 ||
                    G.filas.some(function(r) { return f(r, colTarea) === '=IF(' + D + r + '="","",0)'; });
       if (!G.na.length && !tocado) return;   // nunca tuvo No aplica: no se toca
-      if (f(ini, colTot) !== totNuevo) ws.getRange(ini, colTot).setFormula(totNuevo);
+      escribir(ini, colTot, totNuevo);
       G.filas.forEach(function(r) {
         var orig = '=IF(' + D + r + '="","",' + D + r + '*' + PCT + '$' + ini + ')';
         var desea = G.na.indexOf(r) !== -1 ? '=IF(' + D + r + '="","",0)' : orig;
-        if (f(r, colTarea) !== desea) ws.getRange(r, colTarea).setFormula(desea);
+        escribir(r, colTarea, desea);
       });
     });
   });
@@ -2871,15 +2876,53 @@ function _colNumero(letras) {
   for (var i = 0; i < letras.length; i++) n = n * 26 + (letras.charCodeAt(i) - 64);
   return n;
 }
+/**
+ * v14.9 — Separador de argumentos del archivo (';' si el idioma usa coma decimal, como
+ * los archivos de las áreas; ',' si no). Se prueba una sola vez por archivo y ejecución
+ * con una hoja temporal. Las fórmulas se escriben con setValue, igual que el código
+ * original escribía en las áreas las fórmulas con ';'.
+ */
+var _SEP_MEMO = {};
+function _sepArchivo(ss) {
+  var id = ss.getId();
+  if (_SEP_MEMO[id]) return _SEP_MEMO[id];
+  var sep = ';', tmp = null;
+  try {
+    tmp = ss.insertSheet('_prueba_separador_' + Date.now());
+    tmp.getRange(1, 1).setValue('=SUM(1;2)');
+    SpreadsheetApp.flush();
+    sep = (tmp.getRange(1, 1).getValue() === 3) ? ';' : ',';
+  } catch (e) {
+  } finally {
+    try { if (tmp) ss.deleteSheet(tmp); } catch (e2) {}
+  }
+  return (_SEP_MEMO[id] = sep);
+}
+/** Fórmula escrita con comas (sin comas dentro de textos) → con el separador del archivo. */
+function _fx(hoja, f) {
+  return _sepArchivo(hoja.getParent()) === ';' ? f.replace(/,/g, ';') : f;
+}
+
 var COLS_DURACION_AREA = ['V', 'AE', 'AF'];   // duración real (V) y planeada (AE, o AF con FECHA_ENTREGA_CLIENTE)
 function _esColDuracion(l) { return COLS_DURACION_AREA.indexOf(String(l).toUpperCase()) !== -1; }
 function _sumifNoAplica(col, a, b) {
   return 'SUMIF(P' + a + ':P' + b + ',"<>' + ESTADO_NO_APLICA + '",' + col + a + ':' + col + b + ')';
 }
 /** fila / col: celda donde está la fórmula (1-based). Devuelve la fórmula nueva o null. */
-function _reglaFormulaArea(f, fila, col) {
+function _reglaFormulaArea(f, fila, col, sep) {
   if (!f) return null;
   var m;
+  // Fórmulas de v14.9 escritas con ',' en un archivo que usa ';' (quedaron en #ERROR!): se reescriben
+  if (sep === ';' && f.indexOf(',') !== -1 && (
+      /^=IF\(W\d+="","",WORKDAY\(W\d+,1,DIAS_FESTIVOS!\$?A\$?\d+:\$?A\$?\d+\)\)$/i.test(f) ||
+      /^=IFERROR\(100%\/SUM(?:IF)?\([^;]*\),0\)$/i.test(f) ||
+      /^=SUMIF\(P\d+:P\d+,"<>No aplica",[A-Z]+\d+:[A-Z]+\d+\)$/i.test(f) ||
+      /^=IF\(P\d+="No aplica",0,[A-Z]+\d+\*[A-Z]+\$\d+\)$/i.test(f) ||
+      /^=IFERROR\([A-Z]+\d+\/X\d+,""\)$/i.test(f))) {
+    var mm = f.match(/^=IFERROR\(100%\/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\),0\)$/i);   // la primera versión, sin SUMIF
+    if (mm && mm[1] === mm[3] && _esColDuracion(mm[1])) return '=IFERROR(100%/' + _sumifNoAplica(mm[1], mm[2], mm[4]) + ',0)';
+    return f;
+  }
   // % TAREA (real y planeada): =100%/SUM(V9:V11)  o ya envuelta en IFERROR(…,0)
   if ((m = f.match(/^=(?:IFERROR\()?100%\/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)(?:,0\))?$/i)) && m[1] === m[3] && _esColDuracion(m[1]))
     return '=IFERROR(100%/' + _sumifNoAplica(m[1], m[2], m[4]) + ',0)';
@@ -2897,22 +2940,26 @@ function _reglaFormulaArea(f, fila, col) {
   return null;
 }
 
-/** Corrige un Cronograma. Escribe por tramos de celdas con fórmula (nunca sobre valores). */
+/**
+ * Corrige un Cronograma. Escribe SOLO las celdas que cambian (tramos seguidos de celdas
+ * que cambian), con setValues y el separador del archivo. Nunca toca valores.
+ */
 function _repararCronogramaArea(cron) {
-  var rango = cron.getDataRange(), forms = rango.getFormulas();
+  var sep = _sepArchivo(cron.getParent());
+  var forms = cron.getDataRange().getFormulas();
   var filas = forms.length, cols = filas ? forms[0].length : 0, total = 0;
+  var conv = function(f) { return sep === ';' ? f.replace(/,/g, ';') : f; };
   for (var c = 0; c < cols; c++) {
     var r = 0;
     while (r < filas) {
-      if (!forms[r][c]) { r++; continue; }
-      var ini = r, tramo = [], cambia = false;
-      while (r < filas && forms[r][c]) {
-        var nueva = _reglaFormulaArea(forms[r][c], r + 1, c + 1);
-        if (nueva) { cambia = true; total++; }
-        tramo.push([nueva || forms[r][c]]);
-        r++;
+      var nueva = _reglaFormulaArea(forms[r][c], r + 1, c + 1, sep);
+      if (!nueva) { r++; continue; }
+      var ini = r, tramo = [];
+      while (r < filas && nueva) {
+        tramo.push([conv(nueva)]); total++; r++;
+        nueva = r < filas ? _reglaFormulaArea(forms[r][c], r + 1, c + 1, sep) : null;
       }
-      if (cambia) cron.getRange(ini + 1, c + 1, tramo.length, 1).setFormulas(tramo);
+      cron.getRange(ini + 1, c + 1, tramo.length, 1).setValues(tramo);
     }
   }
   return total;
