@@ -10,6 +10,12 @@
 //         No toca valores escritos por las áreas. Se puede correr varias veces.
 //         Editar OP: si el comercial guardado ya no está en la lista de C6, la OP
 //         se carga completa igual y C6 queda vacío con un aviso para escogerlo.
+//         Tareas "No aplica": sus días ya no cuentan en TOTAL_DIAS (planeado y real)
+//         ni reciben % de la subestructura.
+//           • Áreas: SUMIF por ESTADO <> "No aplica" (se ajusta solo al marcar/desmarcar).
+//           • Hoja de la OP (Comercial): se reescriben L/N y T/V de la subestructura
+//             al guardar "Tareas de la OP". Sin tareas No aplica, todo igual que antes.
+//         El menú 🩹 también aplica esto a las OP y áreas existentes.
 //
 //  MACRO_COMERCIAL — v14.8
 //  v14.8 (dos plantas): Producción tiene un archivo por planta (IDS_PRODUCCION_PLANTA).
@@ -402,7 +408,7 @@ function onOpen() {
     .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
     .addSeparator()
     .addItem('🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)', 'migrarProduccionDosTareas')   // v14.7
-    .addItem('🩹 Quitar #DIV/0! y 01/01/1900 en áreas (una vez)', 'repararFormulasAreas')   // v14.9
+    .addItem('🩹 Corregir fórmulas: #DIV/0!, 01/01/1900 y días No aplica', 'repararFormulasAreas')   // v14.9
     .addToUi();
   // v14.2: buscador de hojas de OP
   SpreadsheetApp.getUi()
@@ -1443,7 +1449,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
 
     tSheet.getRange(r, 23).setValue('=IF(OR(U' + r + '="";V' + r + '=0);"";WORKDAY.INTL(U' + r + ';V' + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
 
-    tSheet.getRange(r, 26).setFormula('=V' + r + '*Y$' + subStart);
+    tSheet.getRange(r, 26).setFormula('=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,V' + r + '*Y$' + subStart + ')');   // v14.9
     if (tIdx === 0) tSheet.getRange(r, 27).setFormula('=Z' + r);
     else            tSheet.getRange(r, 27).setFormula('=AA' + (r-1) + '+Z' + r);
     tSheet.getRange(r, 28).setFormula('=IFERROR(' + PL(33) + r + '/X' + r + ',"")');   // v14.9
@@ -1457,7 +1463,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
     }
     tSheet.getRange(r, P(32)).setValue('=IF(OR(' + PL(30) + r + '="";' + PL(31) + r + '=0);"";WORKDAY.INTL(' + PL(30) + r + ';' + PL(31) + r + '-1;1;DIAS_FESTIVOS!$A$3:$A$20))');
 
-    tSheet.getRange(r, P(35)).setFormula('=' + PL(31) + r + '*' + PL(34) + '$' + subStart);
+    tSheet.getRange(r, P(35)).setFormula('=IF(P' + r + '="' + ESTADO_NO_APLICA + '",0,' + PL(31) + r + '*' + PL(34) + '$' + subStart + ')');   // v14.9
     if (isFirstSub) tSheet.getRange(r, P(36)).setFormula('=' + PL(35) + r);
     else            tSheet.getRange(r, P(36)).setFormula('=' + PL(36) + (r-1) + '+' + PL(35) + r);
   }
@@ -1747,20 +1753,23 @@ function setSubSummaryFormulas(sheet, startRow, taskCount, k) {
        .setFormula('=SUM(Q' + startRow + ':Q' + endRow + ')');
 
   // DURACIÓN REAL
+  var noAplica = function(col) {   // v14.9: sin los días de las tareas "No aplica" (ESTADO, col P)
+    return 'SUMIF(P' + startRow + ':P' + endRow + ',"<>' + ESTADO_NO_APLICA + '",' + col + startRow + ':' + col + endRow + ')';
+  };
   sheet.getRange(startRow, 24)
-       .setFormula('=SUM(V' + startRow + ':V' + endRow + ')');
+       .setFormula('=' + noAplica('V'));
 
   // % TAREA REAL
   sheet.getRange(startRow, 25)
-       .setFormula('=IFERROR(100%/SUM(V' + startRow + ':V' + endRow + '),0)');   // v14.9
+       .setFormula('=IFERROR(100%/' + noAplica('V') + ',0)');   // v14.9
 
   // DURACIÓN PLANEADA
   sheet.getRange(startRow, 33 + k)
-       .setFormula('=SUM(' + AE + startRow + ':' + AE + endRow + ')');
+       .setFormula('=' + noAplica(AE));
 
   // % TAREA PLANEADA
   sheet.getRange(startRow, 34 + k)
-       .setFormula('=IFERROR(100%/SUM(' + AE + startRow + ':' + AE + endRow + '),0)');   // v14.9
+       .setFormula('=IFERROR(100%/' + noAplica(AE) + ',0)');   // v14.9
 }
 // ===========================================================================
 
@@ -2375,6 +2384,48 @@ function _formatoTareasOP(ws) {
     var nota = esNA ? 'No aplica en esta OP' : (meta.nom[clave] ? 'Nombre original: ' + original : '');
     if (nota || c.getNote()) c.setNote(nota);
   });
+  _sumasNoAplicaOP(ws, meta);   // v14.9
+}
+
+/**
+ * v14.9 — Hoja de la OP: los días de las tareas "No aplica" no suman en TOTAL_DIAS
+ * (L planeado, T real) y esas tareas no reciben % (N, V = 0).
+ * Solo toca subestructuras con tareas No aplica, o que las tuvieron (para devolver
+ * la fórmula original). Las demás quedan exactamente igual.
+ */
+function _sumasNoAplicaOP(ws, meta) {
+  meta = meta || _leerMetaTareas(ws);
+  var grupos = {}, orden = [], cont = {};
+  _recorrerHojaOP(ws, function(fila, area, s, tarea, inicioSub) {
+    var g = area + '|' + s;
+    cont[g] = inicioSub ? 0 : (cont[g] || 0) + 1;
+    if (!grupos[g]) { grupos[g] = { ini: fila, filas: [], na: [] }; orden.push(g); }
+    grupos[g].filas.push(fila);
+    if (meta.na.indexOf(g + '|' + cont[g]) !== -1) grupos[g].na.push(fila);
+  });
+  if (!orden.length) return;
+  var last = ws.getLastRow();
+  var fx = ws.getRange(1, 1, last, 22).getFormulas();
+  var f = function(fila, col) { return fx[fila - 1][col - 1]; };
+  // [col total, col duración, col %, col % por tarea]: planeado L/J/M/N y real T/R/U/V
+  var juegos = [[12, 'J', 'M', 14], [20, 'R', 'U', 22]];
+  orden.forEach(function(g) {
+    var G = grupos[g], ini = G.ini, fin = G.filas[G.filas.length - 1];
+    juegos.forEach(function(j) {
+      var colTot = j[0], D = j[1], PCT = j[2], colTarea = j[3];
+      var totOrig = '=SUM(' + D + ini + ':' + D + fin + ')';
+      var totNuevo = G.na.length ? totOrig + '-SUM(' + G.na.map(function(r) { return D + r; }).join(',') + ')' : totOrig;
+      var tocado = f(ini, colTot).indexOf(')-SUM(') !== -1 ||
+                   G.filas.some(function(r) { return f(r, colTarea) === '=IF(' + D + r + '="","",0)'; });
+      if (!G.na.length && !tocado) return;   // nunca tuvo No aplica: no se toca
+      if (f(ini, colTot) !== totNuevo) ws.getRange(ini, colTot).setFormula(totNuevo);
+      G.filas.forEach(function(r) {
+        var orig = '=IF(' + D + r + '="","",' + D + r + '*' + PCT + '$' + ini + ')';
+        var desea = G.na.indexOf(r) !== -1 ? '=IF(' + D + r + '="","",0)' : orig;
+        if (f(r, colTarea) !== desea) ws.getRange(r, colTarea).setFormula(desea);
+      });
+    });
+  });
 }
 
 /** Nombre original de una fila de la hoja OP (si se renombró en esta OP). */
@@ -2815,11 +2866,30 @@ function _produccionAntiguaEnHojaOP(ws, m) {
 //  Valores escritos a mano no se tocan. Lo ya corregido no vuelve a coincidir,
 //  así que se puede ejecutar las veces que haga falta.
 // ============================================================
-function _reglaFormulaArea(f) {
+function _colNumero(letras) {
+  var n = 0; letras = String(letras).toUpperCase();
+  for (var i = 0; i < letras.length; i++) n = n * 26 + (letras.charCodeAt(i) - 64);
+  return n;
+}
+var COLS_DURACION_AREA = ['V', 'AE', 'AF'];   // duración real (V) y planeada (AE, o AF con FECHA_ENTREGA_CLIENTE)
+function _esColDuracion(l) { return COLS_DURACION_AREA.indexOf(String(l).toUpperCase()) !== -1; }
+function _sumifNoAplica(col, a, b) {
+  return 'SUMIF(P' + a + ':P' + b + ',"<>' + ESTADO_NO_APLICA + '",' + col + a + ':' + col + b + ')';
+}
+/** fila / col: celda donde está la fórmula (1-based). Devuelve la fórmula nueva o null. */
+function _reglaFormulaArea(f, fila, col) {
   if (!f) return null;
   var m;
-  if ((m = f.match(/^=100%\/SUM\(([A-Z]+\d+:[A-Z]+\d+)\)$/i)))
-    return '=IFERROR(100%/SUM(' + m[1] + '),0)';
+  // % TAREA (real y planeada): =100%/SUM(V9:V11)  o ya envuelta en IFERROR(…,0)
+  if ((m = f.match(/^=(?:IFERROR\()?100%\/SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)(?:,0\))?$/i)) && m[1] === m[3] && _esColDuracion(m[1]))
+    return '=IFERROR(100%/' + _sumifNoAplica(m[1], m[2], m[4]) + ',0)';
+  // TOTAL DÍAS (real X = SUM(V), planeado = SUM(duración planeada)): la celda está 2 columnas a la derecha
+  if ((m = f.match(/^=SUM\(([A-Z]+)(\d+):([A-Z]+)(\d+)\)$/i)) && m[1] === m[3] && Number(m[2]) === fila &&
+      col === _colNumero(m[1]) + 2 && _esColDuracion(m[1]))
+    return '=' + _sumifNoAplica(m[1], m[2], m[4]);
+  // % por tarea: =V9*Y$9  → 0 si la tarea es "No aplica"
+  if ((m = f.match(/^=([A-Z]+)(\d+)\*([A-Z]+)\$(\d+)$/i)) && Number(m[2]) === fila)
+    return '=IF(P' + fila + '="' + ESTADO_NO_APLICA + '",0,' + f.slice(1) + ')';
   if ((m = f.match(/^=([A-Z]+)(\d+)\/X(\d+)$/i)) && m[2] === m[3])
     return '=IFERROR(' + m[1] + m[2] + '/X' + m[3] + ',"")';
   if ((m = f.match(/^=WORKDAY\(W(\d+)\s*[,;]\s*1\s*[,;]\s*(DIAS_FESTIVOS!\$?A\$?\d+:\$?A\$?\d+)\)$/i)))
@@ -2837,7 +2907,7 @@ function _repararCronogramaArea(cron) {
       if (!forms[r][c]) { r++; continue; }
       var ini = r, tramo = [], cambia = false;
       while (r < filas && forms[r][c]) {
-        var nueva = _reglaFormulaArea(forms[r][c]);
+        var nueva = _reglaFormulaArea(forms[r][c], r + 1, c + 1);
         if (nueva) { cambia = true; total++; }
         tramo.push([nueva || forms[r][c]]);
         r++;
@@ -2850,8 +2920,9 @@ function _repararCronogramaArea(cron) {
 
 function repararFormulasAreas() {
   var ui = SpreadsheetApp.getUi();
-  var ok = ui.alert('🩹 Quitar #DIV/0! y 01/01/1900 en las áreas',
-    'Se revisa la hoja "Cronograma" de cada área y se cambian solo estas fórmulas:\n\n' +
+  var ok = ui.alert('🩹 Corregir fórmulas de las OP y las áreas',
+    'Se revisan las hojas de las OP y la hoja "Cronograma" de cada área. Solo cambian estas fórmulas:\n\n' +
+    '• TOTAL DÍAS (planeado y real): sin los días de las tareas "No aplica".\n' +
     '• % TAREA REAL / PLANEADA: muestra 0,00% en vez de #DIV/0! mientras no hay días.\n' +
     '• Columna AB: queda vacía en vez de #DIV/0!.\n' +
     '• FECHA_INICIO_TAREA_REAL antigua: queda vacía en vez de 01/01/1900 hasta que la tarea anterior tenga fin real.\n\n' +
@@ -2859,6 +2930,15 @@ function repararFormulasAreas() {
     ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
   var t0 = Date.now(), LIMITE = 270000, lineas = [], pendientes = [];
+  // Hojas de las OP (Comercial): solo las que tienen tareas No aplica
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), conNA = [];
+  _listarOPs(ss).forEach(function(nombre) {
+    try {
+      var ws = ss.getSheetByName(nombre), meta = _leerMetaTareas(ws);
+      if (meta.na.length) { _sumasNoAplicaOP(ws, meta); conNA.push(nombre); }
+    } catch (e) { lineas.push('❌ OP ' + nombre + ': ' + e.message); }
+  });
+  lineas.push('✅ Hojas de OP con tareas No aplica' + (conNA.length ? ' (' + conNA.length + '): ' + conNA.join(', ') : ': ninguna'));
   var lista = [];
   Object.keys(IDS_AREAS).forEach(function(a) { _archivosArea(a).forEach(function(x) { lista.push(x); }); });
   lista.forEach(function(x) {
