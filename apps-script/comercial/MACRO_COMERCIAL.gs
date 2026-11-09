@@ -1,4 +1,16 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.9
+//  v14.9: sin #DIV/0! en el cronograma de las áreas mientras no hay datos reales.
+//         • % TAREA REAL (col Y) y % TAREA PLANEADA: SI.ERROR(…;0) → muestra 0,00%.
+//         • Col AB (planeado / X): SI.ERROR(…;"") → vacía hasta que haya datos.
+//         Con datos reales el resultado es idéntico al de antes.
+//         Menú "🩹 Quitar #DIV/0! y 01/01/1900 en áreas (una vez)": corrige esas
+//         fórmulas en las OP ya enviadas y cambia el encadenado antiguo de
+//         FECHA_INICIO_TAREA_REAL (anterior a v13, daba 01/01/1900) por el actual.
+//         No toca valores escritos por las áreas. Se puede correr varias veces.
+//         Editar OP: si el comercial guardado ya no está en la lista de C6, la OP
+//         se carga completa igual y C6 queda vacío con un aviso para escogerlo.
+//
 //  MACRO_COMERCIAL — v14.8
 //  v14.8 (dos plantas): Producción tiene un archivo por planta (IDS_PRODUCCION_PLANTA).
 //         La Sede de la OP decide a dónde va: BOGOTÁ → archivo Bogotá, BARRANQUILLA →
@@ -390,6 +402,7 @@ function onOpen() {
     .addItem('📅 Preparar registro de entregas (una sola vez)', 'prepararRegistroEntregas')
     .addSeparator()
     .addItem('🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)', 'migrarProduccionDosTareas')   // v14.7
+    .addItem('🩹 Quitar #DIV/0! y 01/01/1900 en áreas (una vez)', 'repararFormulasAreas')   // v14.9
     .addToUi();
   // v14.2: buscador de hojas de OP
   SpreadsheetApp.getUi()
@@ -549,7 +562,10 @@ function cargarOPParaEditar(opParam) {
 
   var m = _leerMetaOP(ws);
   _limpiarFormulario(form);
-  form.getRange('C3:C8').setValues([[m.op], [m.nombreOp], [m.cliente], [m.comercial], [m.sede], [m.numSubs]]);   // v14.3
+  // v14.9: si el comercial guardado ya no está en la lista de C6, Google rechaza la escritura y
+  //        la carga se cortaba. Ahora se carga todo y C6 queda vacío con aviso.
+  var comercialFuera = !_valorPermitidoEnLista(form.getRange('C6'), m.comercial);
+  form.getRange('C3:C8').setValues([[m.op], [m.nombreOp], [m.cliente], [comercialFuera ? '' : m.comercial], [m.sede], [m.numSubs]]);   // v14.3
   if (_tieneCampoFecha(form) && _esFecha(m.fecha)) form.getRange(FILA_FECHA_ENTREGA, 3).setValue(m.fecha);
   var marcar = m.areas.filter(function(a) { return AREAS_FILAS[a]; }).map(function(a) { return 'C' + _filaArea(form, a); });
   if (marcar.length) form.getRangeList(marcar).setValue(true);
@@ -558,6 +574,10 @@ function cargarOPParaEditar(opParam) {
   _avisoEdicion(form, m.op);
   ss.setActiveSheet(form);
 
+  if (comercialFuera)
+    ui.alert('⚠️ Comercial fuera de la lista',
+      'La OP ' + m.op + ' tiene guardado el comercial "' + m.comercial + '", que ya no está en la lista de C6.\n\n' +
+      'Escoge el comercial correcto en C6 antes de guardar.', ui.ButtonSet.OK);
   ui.alert('✏️ OP ' + m.op + ' cargada para editar',
     'Corrige lo que necesites y pulsa el botón "Crear Nueva OP" (en modo edición guarda los cambios).\n\n' +
     '• No cambies el número de OP.\n' +
@@ -1426,7 +1446,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
     tSheet.getRange(r, 26).setFormula('=V' + r + '*Y$' + subStart);
     if (tIdx === 0) tSheet.getRange(r, 27).setFormula('=Z' + r);
     else            tSheet.getRange(r, 27).setFormula('=AA' + (r-1) + '+Z' + r);
-    tSheet.getRange(r, 28).setFormula('=' + PL(33) + r + '/X' + r);
+    tSheet.getRange(r, 28).setFormula('=IFERROR(' + PL(33) + r + '/X' + r + ',"")');   // v14.9
     tSheet.getRange(r, 28).setNumberFormat('0.00%');
 
     if (fechaIniPlan && fechaIniPlan instanceof Date && fechaIniPlan.getFullYear() > 1900) {
@@ -1705,6 +1725,16 @@ function _limpiarFormulario(form) {
   form.getRangeList(celdas).clearContent();   // v14.3: una sola llamada
   form.getRangeList(_filasCasillas(form).map(function(c) { return 'C' + c.fila; })).setValue(false);
 }
+
+/** v14.9: ¿el valor cabe en la lista desplegable de la celda? (sin lista o lista de rango → true) */
+function _valorPermitidoEnLista(celda, valor) {
+  var v = String(valor == null ? '' : valor).trim();
+  if (!v) return true;
+  var dv = celda.getDataValidation();
+  if (!dv || dv.getCriteriaType() !== SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) return true;
+  var lista = dv.getCriteriaValues()[0] || [];
+  return lista.some(function(x) { return String(x).trim() === v; });
+}
 // ====================== FUNCIÓN AUXILIAR PARA RESUMEN ======================
 
 function setSubSummaryFormulas(sheet, startRow, taskCount, k) {
@@ -1722,7 +1752,7 @@ function setSubSummaryFormulas(sheet, startRow, taskCount, k) {
 
   // % TAREA REAL
   sheet.getRange(startRow, 25)
-       .setFormula('=100%/SUM(V' + startRow + ':V' + endRow + ')');
+       .setFormula('=IFERROR(100%/SUM(V' + startRow + ':V' + endRow + '),0)');   // v14.9
 
   // DURACIÓN PLANEADA
   sheet.getRange(startRow, 33 + k)
@@ -1730,7 +1760,7 @@ function setSubSummaryFormulas(sheet, startRow, taskCount, k) {
 
   // % TAREA PLANEADA
   sheet.getRange(startRow, 34 + k)
-       .setFormula('=100%/SUM(' + AE + startRow + ':' + AE + endRow + ')');
+       .setFormula('=IFERROR(100%/SUM(' + AE + startRow + ':' + AE + endRow + '),0)');   // v14.9
 }
 // ===========================================================================
 
@@ -2776,6 +2806,79 @@ function _produccionAntiguaEnHojaOP(ws, m) {
  *  - Terminadas (todas sus tareas Terminado o No aplica): no se tocan.
  *  Si se acaba el tiempo de Google, se vuelve a ejecutar y sigue donde iba.
  */
+// ============================================================
+//  v14.9 — QUITAR #DIV/0! Y 01/01/1900 EN LOS CRONOGRAMAS DE LAS ÁREAS
+//  Solo cambia fórmulas con la forma exacta que escribía el Comercial:
+//    =100%/SUM(V9:V11)                → =IFERROR(100%/SUM(V9:V11),0)
+//    =AH9/X9                          → =IFERROR(AH9/X9,"")
+//    =WORKDAY(W9,1,DIAS_FESTIVOS!…)   → =IF(W9="","",WORKDAY(W9,1,DIAS_FESTIVOS!…))
+//  Valores escritos a mano no se tocan. Lo ya corregido no vuelve a coincidir,
+//  así que se puede ejecutar las veces que haga falta.
+// ============================================================
+function _reglaFormulaArea(f) {
+  if (!f) return null;
+  var m;
+  if ((m = f.match(/^=100%\/SUM\(([A-Z]+\d+:[A-Z]+\d+)\)$/i)))
+    return '=IFERROR(100%/SUM(' + m[1] + '),0)';
+  if ((m = f.match(/^=([A-Z]+)(\d+)\/X(\d+)$/i)) && m[2] === m[3])
+    return '=IFERROR(' + m[1] + m[2] + '/X' + m[3] + ',"")';
+  if ((m = f.match(/^=WORKDAY\(W(\d+)\s*[,;]\s*1\s*[,;]\s*(DIAS_FESTIVOS!\$?A\$?\d+:\$?A\$?\d+)\)$/i)))
+    return '=IF(W' + m[1] + '="","",WORKDAY(W' + m[1] + ',1,' + m[2] + '))';
+  return null;
+}
+
+/** Corrige un Cronograma. Escribe por tramos de celdas con fórmula (nunca sobre valores). */
+function _repararCronogramaArea(cron) {
+  var rango = cron.getDataRange(), forms = rango.getFormulas();
+  var filas = forms.length, cols = filas ? forms[0].length : 0, total = 0;
+  for (var c = 0; c < cols; c++) {
+    var r = 0;
+    while (r < filas) {
+      if (!forms[r][c]) { r++; continue; }
+      var ini = r, tramo = [], cambia = false;
+      while (r < filas && forms[r][c]) {
+        var nueva = _reglaFormulaArea(forms[r][c]);
+        if (nueva) { cambia = true; total++; }
+        tramo.push([nueva || forms[r][c]]);
+        r++;
+      }
+      if (cambia) cron.getRange(ini + 1, c + 1, tramo.length, 1).setFormulas(tramo);
+    }
+  }
+  return total;
+}
+
+function repararFormulasAreas() {
+  var ui = SpreadsheetApp.getUi();
+  var ok = ui.alert('🩹 Quitar #DIV/0! y 01/01/1900 en las áreas',
+    'Se revisa la hoja "Cronograma" de cada área y se cambian solo estas fórmulas:\n\n' +
+    '• % TAREA REAL / PLANEADA: muestra 0,00% en vez de #DIV/0! mientras no hay días.\n' +
+    '• Columna AB: queda vacía en vez de #DIV/0!.\n' +
+    '• FECHA_INICIO_TAREA_REAL antigua: queda vacía en vez de 01/01/1900 hasta que la tarea anterior tenga fin real.\n\n' +
+    'Fechas, kg, estados y observaciones de las áreas no se tocan. Con datos reales el resultado es el mismo.\n\n¿Continuar?',
+    ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  var t0 = Date.now(), LIMITE = 270000, lineas = [], pendientes = [];
+  var lista = [];
+  Object.keys(IDS_AREAS).forEach(function(a) { _archivosArea(a).forEach(function(x) { lista.push(x); }); });
+  lista.forEach(function(x) {
+    if (!x.id || x.id.indexOf('PON_AQUI') !== -1) return;
+    if (Date.now() - t0 > LIMITE) { pendientes.push(x.etiqueta); return; }
+    try {
+      var cron = SpreadsheetApp.openById(x.id).getSheetByName('Cronograma');
+      if (!cron) { lineas.push('⚠️ ' + x.etiqueta + ': no tiene hoja "Cronograma"'); return; }
+      var n = _repararCronogramaArea(cron);
+      SpreadsheetApp.flush();
+      lineas.push((n ? '✅ ' : '✔ ') + x.etiqueta + ': ' + (n ? n + ' fórmulas corregidas' : 'nada que corregir'));
+    } catch (e) {
+      lineas.push('❌ ' + x.etiqueta + ': ' + (_esErrorAccesoArchivo(e.message) ? 'sin acceso de Editor con ' + _usuario() : e.message));
+    }
+  });
+  var msg = lineas.join('\n');
+  if (pendientes.length) msg += '\n\n⏳ Se acabó el tiempo de Google. Faltan: ' + pendientes.join(', ') + '. Vuelve a ejecutar el menú para continuar.';
+  ui.alert('🩹 Fórmulas de las áreas', msg, ui.ButtonSet.OK);
+}
+
 function migrarProduccionDosTareas() {
   var ss = SpreadsheetApp.getActiveSpreadsheet(), ui = SpreadsheetApp.getUi();
   var id = IDS_AREAS['Produccion'];
