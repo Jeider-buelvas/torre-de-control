@@ -421,7 +421,7 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="modal-header">
       <div class="modal-title-wrap">
         <div class="modal-icon" style="--mc:var(--grad-2)">📝</div>
-        <div><div class="modal-title" id="bitTitle">Bitácora</div><div class="modal-sub" id="bitSub">—</div></div>
+        <div><div class="modal-title" id="bitTitle">Tareas de la O.P</div><div class="modal-sub" id="bitSub">—</div></div>
       </div>
       <button class="modal-close" onclick="cerrarBitacora()" aria-label="Cerrar">✕</button>
     </div>
@@ -844,8 +844,8 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="alert-list" id="alertEntregas"><div class="empty">Sin alertas de entrega</div></div>
   </div>
   <div class="card" style="margin-bottom:16px">
-    <div class="card-title"><span>📝 Bitácora: compromisos vencidos y bloqueos</span>
-      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en la bitácora de cada OP · se cierran desde la tarjeta</span></div>
+    <div class="card-title"><span>📝 Tareas de la O.P: compromisos vencidos y bloqueos</span>
+      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en Tareas de la O.P · se cierran desde la tarjeta</span></div>
     <div class="alert-list" id="alertBitacora"><div class="empty">Sin pendientes</div></div>
   </div>
   <div class="card">
@@ -2819,7 +2819,7 @@ function bitDeOP(op){return (state.bitacora||[]).filter(function(b){return Strin
 function bitVencido(b){if(b.estado!=='Abierto'||!b.fechaCompromiso)return false;var d=parseD(b.fechaCompromiso),h=new Date();h.setHours(0,0,0,0);return d&&d<h;}
 function bitBotonHtml(op){
   var ab=bitDeOP(op.op).filter(function(b){return b.estado==='Abierto';}),venc=ab.filter(bitVencido).length;
-  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Bitácora'+
+  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Tareas de la O.P'+
     (ab.length?' <span class="n'+(venc?' v':'')+'">'+ab.length+' abierto'+(ab.length===1?'':'s')+(venc?' · '+venc+' vencido'+(venc===1?'':'s'):'')+'</span>':'')+'</button>';
 }
 function abrirBitacora(op){bitOpActual=String(op);renderBitacoraModal();document.getElementById('bitOverlay').classList.add('active');}
@@ -2843,7 +2843,7 @@ function renderBitacoraModal(){
   if(!bitOpActual)return;
   var op=state.ops.find(function(o){return String(o.op)===bitOpActual;})||{op:bitOpActual,areas:[]};
   var lista=bitDeOP(bitOpActual).slice().sort(function(a,b){var r=function(x){return x.estado==='Abierto'?(bitVencido(x)?0:1):2;};return r(a)-r(b)||String(b.id).localeCompare(String(a.id));});
-  document.getElementById('bitTitle').textContent='Bitácora · OP '+bitOpActual;
+  document.getElementById('bitTitle').textContent='Tareas de la O.P '+bitOpActual;
   document.getElementById('bitSub').textContent=[op.nombre,op.cliente].filter(Boolean).join(' · ')||'—';
   var areas=ordenarAreas(op.areas||[]).map(function(a){return '<option>'+esc(a)+'</option>';}).join('');
   var form='<div class="bit-form">'+
