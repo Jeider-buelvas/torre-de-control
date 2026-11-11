@@ -1,4 +1,11 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.10
+//  v14.10: si un área deja un FILTRO activo en su Cronograma, Google no deja combinar
+//          celdas ("No se pueden combinar celdas en una fila filtrada") y el envío fallaba.
+//          Ahora, al enviar/actualizar o migrar una OP, se guardan los criterios del
+//          filtro de esa hoja, se sueltan mientras se escribe y se vuelven a poner igual
+//          al terminar (también si algo falla). Nada más cambia.
+//
 //  MACRO_COMERCIAL — v14.9
 //  v14.9: sin #DIV/0! en el cronograma de las áreas mientras no hay datos reales.
 //         • % TAREA REAL (col Y) y % TAREA PLANEADA: SI.ERROR(…;0) → muestra 0,00%.
@@ -1063,6 +1070,7 @@ function _sincronizarOPConAreas(ss, ws) {
       var nom = p.etiqueta || p.area;   // v14.8: "Produccion · BOGOTÁ" cuando hay dos archivos
       ss.toast('Área ' + (i + 1) + ' de ' + trabajo.length + '...', '📤 ' + nom, 4);
       var origen = 'Cronograma ' + nom;
+      var restaurarFiltro = _soltarFiltro(p.tSheet);   // v14.10
       try {
         if (p.accion === 'crear') {
           _enviarAPlantillaArea(p.id, p.area, op, m.nombreOp, m.cliente, m.comercial, m.sede,
@@ -1093,6 +1101,8 @@ function _sincronizarOPConAreas(ss, ws) {
         }
       } catch (e) {
         fallidas.push(nom + ': ' + e.message);
+      } finally {
+        restaurarFiltro();   // v14.10: el filtro del área queda como estaba
       }
     });
 
@@ -1282,6 +1292,31 @@ function _crearHojaOP(ss, op, nombreOp, cliente, comercial, sede, numSubs, kgTot
 //  v9: dividido en piezas reutilizables para poder CREAR y ACTUALIZAR
 //      con exactamente las mismas fórmulas de antes.
 // ============================================================
+
+/**
+ * v14.10 — Suelta el filtro de la hoja (si oculta filas) y devuelve una función que lo
+ * vuelve a poner con los mismos criterios. Sin filtro o sin criterios: no hace nada.
+ */
+function _soltarFiltro(sh) {
+  var nada = function() {};
+  var f = null;
+  try { f = sh && sh.getFilter(); } catch (e) { return nada; }
+  if (!f) return nada;
+  var r = f.getRange(), c0 = r.getColumn(), n = r.getNumColumns(), crit = {};
+  for (var c = c0; c < c0 + n; c++) {
+    var k = f.getColumnFilterCriteria(c);
+    if (k) crit[c] = k;
+  }
+  var cols = Object.keys(crit);
+  if (!cols.length) return nada;
+  cols.forEach(function(c) { f.removeColumnFilterCriteria(Number(c)); });
+  return function() {
+    try {
+      var f2 = sh.getFilter();
+      if (f2) cols.forEach(function(c) { f2.setColumnFilterCriteria(Number(c), crit[c]); });
+    } catch (e) { Logger.log('No se pudo restaurar el filtro de ' + sh.getName() + ': ' + e.message); }
+  };
+}
 
 function _abrirCronograma(spreadsheetId) {
   var tSheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName('Cronograma');
@@ -3044,7 +3079,8 @@ function migrarProduccionDosTareas() {
         // v14.8: el archivo donde está la OP; si está en los dos (antes de separar), el de su planta
         var conOP = archivos.filter(function(a) { return _bloqueOP(a.cron, m.op); });
         var dst = conOP.filter(function(a) { return a.planta && a.planta === _normPlanta(m.sede); })[0] || conOP[0] || archivos[0];
-        var res = _migrarProduccionOP(ss, ws, m, dst.id, dst.cron);
+        var restaurarFiltro = _soltarFiltro(dst.cron);   // v14.10
+        try { var res = _migrarProduccionOP(ss, ws, m, dst.id, dst.cron); } finally { restaurarFiltro(); }
         r[res.grupo].push(m.op);
         r.retiradas = r.retiradas.concat(res.retiradas || []);
       } catch (e) { r.errores.push(m.op + ': ' + e.message); }
