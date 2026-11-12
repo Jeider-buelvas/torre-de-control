@@ -89,6 +89,10 @@ main{position:relative;z-index:1;padding:24px 28px;max-width:1600px;margin:0 aut
 .section-title{font-family:'Poppins',sans-serif;font-weight:700;font-size:20px;letter-spacing:0;color:var(--text);margin-bottom:4px;}
 .section-sub{font-size:13px;color:var(--muted);margin-bottom:20px;}
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:24px;}
+/* Vista Ejecutiva: 6 tarjetas en filas parejas (6 · 3 · 2 por fila) */
+.kpi-grid-6{grid-template-columns:repeat(6,minmax(0,1fr));}
+@media(max-width:1500px){.kpi-grid-6{grid-template-columns:repeat(3,minmax(0,1fr));}}
+@media(max-width:600px){.kpi-grid-6{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden;transition:transform .2s,box-shadow .2s;box-shadow:var(--card-shadow);cursor:pointer;display:flex;align-items:center;gap:14px;}
 .kpi:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(43,43,64,.1);}
 .kpi:active{transform:translateY(-1px);}
@@ -591,12 +595,10 @@ footer b{color:var(--accent);font-weight:600;}
   <div class="section-title">VISTA EJECUTIVA</div>
   <div class="section-sub">Estado general de todos los proyectos activos — haz clic en una tarjeta para ver el detalle</div>
   <div class="resumen-band" id="resumenBand"></div>
-  <div class="kpi-grid">
+  <div class="kpi-grid kpi-grid-6">
     <div class="kpi" style="--kpi-color:var(--accent)" onclick="openKpiModal('total')"><div class="kpi-icon">📁</div><div class="kpi-body"><div class="kpi-label">Total Proyectos</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-desc">OPs registradas</div></div></div>
     <div class="kpi" style="--kpi-color:var(--green)" onclick="openKpiModal('terminados')"><div class="kpi-icon">✅</div><div class="kpi-body"><div class="kpi-label">Terminados</div><div class="kpi-value" id="kpiTerminados">—</div><div class="kpi-desc">OPs completadas</div></div></div>
-    <div class="kpi" style="--kpi-color:var(--yellow)" onclick="openKpiModal('progreso')"><div class="kpi-icon">⏳</div><div class="kpi-body"><div class="kpi-label">En Progreso</div><div class="kpi-value" id="kpiProgreso">—</div><div class="kpi-desc">OPs activas</div></div></div>
-    <div class="kpi" style="--kpi-color:var(--red)" onclick="openKpiModal('riesgo')"><div class="kpi-icon">⚠️</div><div class="kpi-body"><div class="kpi-label">En Riesgo</div><div class="kpi-value" id="kpiRiesgo">—</div><div class="kpi-desc">Semáforo rojo</div></div></div>
-    <div class="kpi" style="--kpi-color:var(--accent)" onclick="openKpiModal('cumplimiento')"><div class="kpi-icon">🎯</div><div class="kpi-body"><div class="kpi-label">Cumplimiento Prom.</div><div class="kpi-value" id="kpiCumplimiento">—</div><div class="kpi-desc">vs cronograma</div></div></div>
+    <div class="kpi" style="--kpi-color:var(--accent)" onclick="openKpiModal('cumplimiento')"><div class="kpi-icon">🎯</div><div class="kpi-body"><div class="kpi-label">Cumplimiento Prom.</div><div class="kpi-value" id="kpiCumplimiento">—</div><div class="kpi-desc" id="kpiCumplDesc">vs cronograma</div></div></div>
     <div class="kpi" style="--kpi-color:var(--red)" onclick="openKpiModal('desviados')"><div class="kpi-icon">📉</div><div class="kpi-body"><div class="kpi-label">Procesos Desviados</div><div class="kpi-value" id="kpiDesviados">—</div><div class="kpi-desc">Cumplimiento &lt; 90%</div></div></div>
     <div class="kpi" style="--kpi-color:var(--grad-1)" onclick="openKpiModal('entregas')"><div class="kpi-icon">🏁</div><div class="kpi-body"><div class="kpi-label">Entregas próximas</div><div class="kpi-value" id="kpiEntregas">—</div><div class="kpi-desc" id="kpiEntregasDesc">próximos 15 días</div></div></div>
     <div class="kpi" style="--kpi-color:var(--green)" onclick="openKpiModal('kg')"><div class="kpi-icon">⚖️</div><div class="kpi-body"><div class="kpi-label">KG Total Activos</div><div class="kpi-value" id="kpiKgTotal">—</div><div class="kpi-desc">Suma subestructuras</div></div></div>
@@ -1258,12 +1260,13 @@ function openKpiModal(tipo){
   }
 
   else if(tipo==='cumplimiento'){
+    if(currentOP==='all'){openModal({icon:'🎯',color:'var(--accent)',title:'Cumplimiento Promedio',sub:'Se calcula por O.P.',items:[],emptyMsg:'Escoge una O.P. en el filtro "OP" de arriba para ver su cumplimiento.'});return;}
     var seen={},items=[];
     tareas.forEach(function(t){
       var key=(t.area||'')+'|'+(t.subEstructura||'')+'|'+t.op;
       if(!seen[key]&&cN(t.cumplimiento)>0){
         seen[key]=true;
-        var c=cN(t.cumplimiento);
+        var c=Math.min(100,cN(t.cumplimiento));   // tope de 100% por tarea
         items.push({
           dotColor:c>=90?'var(--green)':c>=70?'var(--yellow)':'var(--red)',
           title:(t.area||'—')+' — '+(t.subEstructura||'—'),
@@ -1532,8 +1535,8 @@ function renderEjecutiva(){
   var risk=ops.filter(function(o){return o.semaforo==='rojo';}).length;
   var avg=ops.length?Math.round(ops.reduce(function(s,o){return s+(o.avanceReal||0);},0)/ops.length):0;
 
-  // Cumplimiento promedio (no dividir/0)
-  var cumplArr=tareas.filter(function(t){return cN(t.cumplimiento)>0;}).map(function(t){return cN(t.cumplimiento);});
+  // Cumplimiento promedio (no dividir/0) · solo con una O.P. filtrada y con tope de 100% por tarea
+  var cumplArr=tareas.filter(function(t){return cN(t.cumplimiento)>0;}).map(function(t){return Math.min(100,cN(t.cumplimiento));});
   var cumplProm=cumplArr.length?Math.round(cumplArr.reduce(function(s,v){return s+v;},0)/cumplArr.length):0;
 
   var desv=calcDesviados().filter(function(d){return d.cumpl<0.90;});
@@ -1547,9 +1550,9 @@ function renderEjecutiva(){
 
   document.getElementById('kpiTotal').textContent=ops.length;
   document.getElementById('kpiTerminados').textContent=term;
-  document.getElementById('kpiProgreso').textContent=prog;
-  document.getElementById('kpiRiesgo').textContent=risk;
-  document.getElementById('kpiCumplimiento').textContent=cumplProm+'%';
+  // «En progreso» y «En riesgo» se quitaron: repetían «OP activas» y «OP en riesgo» de la banda de resumen
+  document.getElementById('kpiCumplimiento').textContent=currentOP==='all'?'—':(cumplArr.length?cumplProm+'%':'—');
+  document.getElementById('kpiCumplDesc').textContent=currentOP==='all'?'Filtra una O.P. para verlo':(cumplArr.length?'O.P. '+currentOP+' vs cronograma':'Sin tareas terminadas para medir');
   document.getElementById('kpiDesviados').textContent=desv.length;
   document.getElementById('kpiKgTotal').textContent=kgTotal>0?fmtKg(kgTotal)+' kg':'—';
   var prox=ops.filter(function(o){var i=entregaInfo(o);return o.estado!=='Terminado'&&i.n!==null&&i.n<=15;});
@@ -2892,7 +2895,8 @@ function renderBitacoraModal(){
   var form='<div class="bit-form">'+
     '<select id="bitTipo" onchange="bitTipoCambio()"><option>Nota</option><option>Compromiso</option><option>Bloqueo</option></select>'+
     '<select id="bitArea"><option value="">Área (opcional)</option>'+areas+'</select>'+
-    '<input id="bitResp" placeholder="Responsable" maxlength="80">'+
+    '<input id="bitResp" placeholder="Responsable" maxlength="120" list="bitRespLista" autocomplete="off" oninput="bitRespAviso()">'+
+    '<datalist id="bitRespLista">'+bitDirectorio().map(function(p){return '<option value="'+esc(p.nombre+' <'+p.correo+'>').replace(/"/g,'&quot;')+'">';}).join('')+'</datalist>'+
     '<input id="bitFecha" type="date" title="Fecha compromiso">'+
     '<textarea id="bitDesc" placeholder="Escribe la nota, el compromiso o lo que está bloqueando el avance…" maxlength="600"></textarea>'+
     '<div class="bit-acc"><span class="bit-msg" id="bitMsg">Nota: información · Compromiso: responsable y fecha · Bloqueo: algo que frena el avance</span><button class="bit-save" id="bitGuardar" onclick="bitGuardar()">💾 Guardar</button></div></div>';
@@ -2900,6 +2904,28 @@ function renderBitacoraModal(){
   var ab=lista.filter(function(b){return b.estado==='Abierto';}).length;
   document.getElementById('bitCount').textContent=lista.length+' anotaci'+(lista.length===1?'ón':'ones')+(ab?' · '+ab+' abierta'+(ab===1?'':'s'):'');
   bitTipoCambio();
+}
+// Personas conocidas (correo @polyuprotec.com): quienes han entrado a la Torre, el Historial y las Tareas de la O.P.
+function bitDirectorio(){
+  var m={},add=function(c,n){c=String(c||'').trim().toLowerCase();if(!/@polyuprotec\.com$/.test(c))return;n=String(n||'').trim();if(!m[c]||(m[c]===c&&n))m[c]=n&&n.indexOf('@')===-1?n:(m[c]||c);};
+  (PRES.datos&&PRES.datos.directorio||[]).forEach(function(u){add(u.correo,u.nombre);});
+  (PRES.datos&&PRES.datos.hoy||[]).forEach(function(u){add(u.correo,u.nombre);});
+  (state.historial||[]).forEach(function(h){add(h.correo,h.usuario);});
+  (state.bitacora||[]).forEach(function(b){add(b.correo,b.autor);});
+  return Object.keys(m).map(function(c){return {correo:c,nombre:m[c]===c?c.split('@')[0]:m[c]};}).sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
+}
+// "Nombre <correo>" · "correo" · "Nombre" → {nombre, correo}
+function bitLeerResp(txt){
+  txt=String(txt||'').trim();var m=txt.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);var correo=m?m[0].toLowerCase():'';
+  var nombre=txt.replace(/<[^>]*>/g,'').replace(correo,'').replace(/[<>()]/g,'').trim();
+  if(correo&&!nombre){var p=bitDirectorio().find(function(x){return x.correo===correo;});nombre=p?p.nombre:correo;}
+  if(!correo&&nombre){var q=bitDirectorio().filter(function(x){return x.nombre.toLowerCase()===nombre.toLowerCase();});if(q.length===1)correo=q[0].correo;}
+  return {nombre:nombre.slice(0,80),correo:correo};
+}
+function bitRespAviso(){
+  var r=bitLeerResp(document.getElementById('bitResp').value),msg=document.getElementById('bitMsg');if(!msg)return;
+  if(!document.getElementById('bitResp').value.trim()){bitTipoCambio();msg.textContent='Nota: información · Compromiso: responsable y fecha · Bloqueo: algo que frena el avance';return;}
+  msg.textContent=r.correo?(/@polyuprotec\.com$/.test(r.correo)?'📧 Se enviará un correo a '+r.correo+' (con copia para ti)':'❌ Solo correos @polyuprotec.com'):'⚠ Sin correo: se guarda, pero no se notificará. Escoge a la persona de la lista o escribe su correo';
 }
 function bitTipoCambio(){var t=document.getElementById('bitTipo');if(!t)return;var req=t.value==='Compromiso';
   document.getElementById('bitResp').placeholder='Responsable'+(req?' (obligatorio)':'');document.getElementById('bitFecha').title='Fecha compromiso'+(req?' (obligatoria)':'');}
@@ -2910,16 +2936,23 @@ function bitPost(cuerpo){
 }
 function bitGuardar(){
   var d={op:bitOpActual,tipo:document.getElementById('bitTipo').value,area:document.getElementById('bitArea').value,
-    responsable:document.getElementById('bitResp').value.trim(),fechaCompromiso:document.getElementById('bitFecha').value,descripcion:document.getElementById('bitDesc').value.trim()};
+    responsable:'',fechaCompromiso:document.getElementById('bitFecha').value,descripcion:document.getElementById('bitDesc').value.trim()};
+  var rsp=bitLeerResp(document.getElementById('bitResp').value);d.responsable=rsp.nombre;d.responsableCorreo=rsp.correo;
   var msg=document.getElementById('bitMsg'),btn=document.getElementById('bitGuardar');
   if(d.descripcion.length<3){msg.textContent='❌ Escribe la descripción';return;}
   if(d.tipo==='Compromiso'&&(!d.responsable||!d.fechaCompromiso)){msg.textContent='❌ El compromiso necesita responsable y fecha';return;}
-  btn.disabled=true;msg.textContent='Guardando…';
-  bitPost({accion:'agregar',datos:d}).then(function(r){
+  if(d.responsableCorreo&&!/@polyuprotec\.com$/.test(d.responsableCorreo)){msg.textContent='❌ Solo correos @polyuprotec.com';return;}
+  btn.disabled=true;msg.textContent=d.responsableCorreo?'Guardando y enviando el correo…':'Guardando…';
+  var o=opPorNumero(bitOpActual)||{},ei=o.op?entregaInfo(o):{},pl=plantasOP(o);
+  var ctx={nombre:o.nombre||'',cliente:o.cliente||'',comercial:o.op?(comercialOP(o)||''):'',planta:pl.length>1?'MIXTO':(pl[0]||''),entrega:ei&&ei.d?fmtDMY(ei.d):(o.fechaEntregaCliente||'')};
+  bitPost({accion:'agregar',datos:d,contexto:ctx}).then(function(r){
     btn.disabled=false;
     if(!r.ok){msg.textContent='❌ '+(r.error||'No se pudo guardar');return;}
     state.bitacora.push(r.registro);renderBitacoraModal();bitRefrescarVistas();
-    document.getElementById('bitMsg').textContent='✅ Guardado';
+    var c=r.correo,txt='✅ Guardado';
+    if(c)txt+=c.enviado?' · 📧 correo enviado a '+c.para+(c.copia?' (copia a '+c.copia+')':''):' · ⚠ no se pudo enviar el correo'+(c.error?': '+c.error:'');
+    else if(!d.responsableCorreo&&d.responsable)txt+=' · sin correo del responsable (no se notificó)';
+    document.getElementById('bitMsg').textContent=txt;
   });
 }
 function bitMostrarCierre(id){var f=document.getElementById('bitc-'+id);if(f){f.style.display='flex';f.querySelector('input').focus();}}

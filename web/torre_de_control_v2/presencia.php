@@ -98,6 +98,19 @@ unset($u);
 foreach ($U as $mail => $u) if (!$u['tabs']) unset($U[$mail]);
 unset($U);
 
+// Directorio permanente de quienes han usado la Torre (para el campo Responsable de Tareas de la O.P.)
+$fd = @fopen("$dir/usuarios.json", 'c+');
+$directorio = [];
+if ($fd) {
+    flock($fd, LOCK_EX);
+    $us = json_decode(stream_get_contents($fd) ?: '{}', true);
+    if (!is_array($us)) $us = [];
+    if (!$sale) $us[$correo] = ['nombre' => $nombre, 'ultimo' => $ahora];
+    ftruncate($fd, 0); rewind($fd); fwrite($fd, json_encode($us, JSON_UNESCAPED_UNICODE)); fflush($fd);
+    flock($fd, LOCK_UN); fclose($fd);
+    foreach ($us as $m => $x) $directorio[] = ['correo' => $m, 'nombre' => $x['nombre'] ?? $m];
+}
+
 ftruncate($fp, 0); rewind($fp);
 fwrite($fp, json_encode($db, JSON_UNESCAPED_UNICODE));
 fflush($fp); flock($fp, LOCK_UN); fclose($fp);
@@ -110,4 +123,4 @@ $hoyLista = [];
 foreach ($db['hoy'] as $mail => $h) $hoyLista[] = ['correo' => $mail, 'nombre' => $h['nombre'], 'primero' => (int)$h['primero'], 'ultimo' => (int)$h['ultimo']];
 usort($hoyLista, function ($a, $b) { return $b['ultimo'] <=> $a['ultimo']; });
 
-salir(200, ['ok' => true, 'ahora' => $ahora, 'enLinea' => $enLinea, 'hoy' => $hoyLista]);
+salir(200, ['ok' => true, 'ahora' => $ahora, 'enLinea' => $enLinea, 'hoy' => $hoyLista, 'directorio' => $directorio]);
