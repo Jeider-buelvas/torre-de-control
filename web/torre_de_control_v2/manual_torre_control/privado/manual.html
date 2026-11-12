@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Manual Torre de Control v3.1 · Polyuprotec S.A.</title>
+<title>Manual Torre de Control v3.2 · Polyuprotec S.A.</title>
 <meta name="robots" content="noindex, nofollow">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -86,20 +86,19 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <body>
 <button class="menu" aria-label="Índice" onclick="document.querySelector('.side').classList.toggle('open')">☰</button>
 <aside class="side">
-  <div class="brand"><img src="ver.php?f=logo.png" alt="Polyuprotec"><div><b>Torre de Control</b><span>Manual v3.1</span></div></div>
+  <div class="brand"><img src="ver.php?f=logo.png" alt="Polyuprotec"><div><b>Torre de Control</b><span>Manual v3.2</span></div></div>
   <nav><a href="#presentacion" class="l2">Presentación</a><a href="#1-antecedentes-del-proyecto" class="l2">1. Antecedentes del proyecto</a><a href="#2-arquitectura-y-componentes" class="l2">2. Arquitectura y componentes</a><a href="#3-roles-y-responsabilidades" class="l2">3. Roles y responsabilidades</a><a href="#4-ciclo-de-vida-de-una-op" class="l2">4. Ciclo de vida de una OP</a><a href="#5-manual-de-usuario-comercial" class="l2">5. Manual de usuario — Comercial</a><a href="#6-manual-de-usuario-areas-y-produccion-v2" class="l2">6. Manual de usuario — Áreas y Producción V2</a><a href="#7-manual-de-usuario-app-web-torre-de-control" class="l2">7. Manual de usuario — App web Torre de Control</a><a href="#8-indicadores-y-reglas-de-calculo" class="l2">8. Indicadores y reglas de cálculo</a><a href="#9-control-de-datos-proteccion-trazabilidad-y-notificaciones" class="l2">9. Control de datos, protección, trazabilidad y notificaciones</a><a href="#10-administracion-instalacion-despliegue-y-mantenimiento" class="l2">10. Administración, instalación, despliegue y mantenimiento</a><a href="#11-solucion-de-problemas-frecuentes" class="l2">11. Solución de problemas frecuentes</a><a href="#12-insumos-para-procedimientos-internos" class="l2">12. Insumos para procedimientos internos</a><a href="#13-glosario-y-anexos" class="l2">13. Glosario y anexos</a></nav>
-  <div class="foot">Polyuprotec S.A. · 05/11/2026<br><button class="btn-print" onclick="window.print()">🖨 Imprimir</button> <a class="btn-print" style="text-decoration:none" href="ver.php?f=Manual_Torre_de_Control_v3.1.pdf">⬇ PDF</a></div>
+  <div class="foot">Polyuprotec S.A. · 12/11/2026<br><button class="btn-print" onclick="window.print()">🖨 Imprimir</button> <a class="btn-print" style="text-decoration:none" href="ver.php?f=Manual_Torre_de_Control_v3.2.pdf">⬇ PDF</a></div>
 </aside>
 <main>
   <header class="hero">
     <small>Polyuprotec S.A. · Sistema de Monitoreo Operativo</small>
-    <h1>Torre de Control v3.1 — Antecedentes, funcionamiento y manual de uso</h1>
-    <p>05/11/2026 · Jeider Buelvas — Desarrollo Full Stack</p>
+    <h1>Torre de Control v3.2 — Antecedentes, funcionamiento y manual de uso</h1>
+    <p>12/11/2026 · Jeider Buelvas — Desarrollo Full Stack</p>
   </header>
   <div class="doc"><section>
-
 <h2 id="presentacion">Presentación</h2>
-<p>Este documento reúne los antecedentes, el funcionamiento y el manual de uso de la Torre de Control v3.1 de Polyuprotec S.A., como insumo para elaborar los procedimientos internos y el manual de instrucciones. La entrega solicitada vence el 30/11/2026.</p>
+<p>Este documento reúne los antecedentes, el funcionamiento y el manual de uso de la Torre de Control v3.2 de Polyuprotec S.A., como insumo para elaborar los procedimientos internos y el manual de instrucciones. La entrega solicitada vence el 30/11/2026.</p>
 <table>
 <thead>
 <tr>
@@ -114,11 +113,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Versión del sistema</td>
-<td>v3.1 (05/11/2026)</td>
+<td>v3.2 (12/11/2026)</td>
 </tr>
 <tr>
 <td>Componentes</td>
-<td>Maestra v4.4 · Macro Comercial v14.5 · Producción V2 v4.3 · App web 04/11/2026</td>
+<td>Maestra v4.7 · Macro Comercial v14.10 · Producción V2 v4.5 (archivos Bogotá y Barranquilla) · App web 11/11/2026</td>
 </tr>
 <tr>
 <td>Responsable técnico</td>
@@ -162,7 +161,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </ol>
 <h3 id="13-alcance">1.3 Alcance</h3>
 <ul>
-<li><strong>Incluye:</strong> registro y edición de OP (Comercial), cronogramas por área, registro diario de Producción, consolidación en la Maestra, App web de consulta, bitácora por OP, historial de cambios y notificaciones.</li>
+<li><strong>Incluye:</strong> registro y edición de OP (Comercial), cronogramas por área, registro diario de Producción, consolidación en la Maestra, App web de consulta, Tareas de la O.P. (compromisos de reunión por OP), historial de cambios y notificaciones. Desde v3.2, Producción trabaja con un archivo por planta (Bogotá y Barranquilla) y la App filtra por planta.</li>
 <li><strong>No incluye (por ahora):</strong> integración de la base de Compras y migración de los registros de Producción de octubre; quedaron fuera por decisión del 03/11/2026.</li>
 <li><strong>Excluido expresamente:</strong> botones de "liberación rápida" para que Comercial libere Dibujo u otras áreas. La propuesta se descartó en la reunión.</li>
 </ul>
@@ -176,6 +175,26 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>11/11/2026</td>
+<td>v3.2</td>
+<td>"Bitácora" pasa a llamarse <strong>📝 Tareas de la O.P.</strong> en la App, el Historial y el correo semanal; el envío a las áreas ya no falla si un área deja un filtro activo (Comercial v14.10)</td>
+</tr>
+<tr>
+<td>09/11/2026</td>
+<td>v3.2</td>
+<td>Cronogramas sin #DIV/0! ni 01/01/1900; los días de las tareas No aplica ya no suman en TOTAL_DIAS; Editar OP carga la OP aunque el comercial guardado ya no esté en la lista (Comercial v14.9)</td>
+</tr>
+<tr>
+<td>06/11/2026</td>
+<td>v3.2</td>
+<td>Producción en dos plantas: un archivo para Bogotá y otro para Barranquilla, filtro Planta e insignias BOG/BAQ/MIXTO en la App y columna PLANTA en el Historial (Producción V2 v4.5, Comercial v14.8, Maestra v4.6)</td>
+</tr>
+<tr>
+<td>06/11/2026</td>
+<td>v3.2</td>
+<td>Producción con 2 tareas por subestructura: Kg Fabricados (50%) y Entrega en negro (50%), y fila diaria ENTREGA MATERIAL EN NEGRO (Producción V2 v4.4, Comercial v14.7)</td>
+</tr>
 <tr>
 <td>05/11/2026</td>
 <td>v3.1</td>
@@ -236,8 +255,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>PLANTILLA_LOOKER_COMERCIAL</td>
 <td>Google Sheets + Apps Script</td>
-<td>v14.5</td>
-<td>Registra y edita OP, las envía a las áreas, marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP</td>
+<td>v14.10</td>
+<td>Registra y edita OP, las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP</td>
 </tr>
 <tr>
 <td>Cronogramas de área (9 archivos)</td>
@@ -246,28 +265,28 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Cada área registra estado, fechas reales, kg avanzados y observaciones de sus tareas</td>
 </tr>
 <tr>
-<td>PLANTILLA_LOOKER_PRODUCCION_V2</td>
+<td>PLANTILLA_LOOKER_PRODUCCION_V2 (Barranquilla) y PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA</td>
 <td>Google Sheets + Apps Script</td>
-<td>v4.3</td>
-<td>Cronograma de Producción más hojas mensuales de kg diarios por OP y subestructura; sincroniza el avance al cronograma</td>
+<td>v4.5</td>
+<td>Un archivo por planta: cronograma de Producción y hojas mensuales con kg fabricados y kg entregados en negro por día; sincroniza las dos tareas al cronograma</td>
 </tr>
 <tr>
 <td>TORRE_CONTROL_MAESTRA_POLYUPROTEC</td>
 <td>Google Sheets + Apps Script + Web App</td>
-<td>v4.4</td>
-<td>Importa todas las áreas, consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda historial y bitácora, entrega los datos a la App</td>
+<td>v4.7</td>
+<td>Importa todas las áreas (Producción de las dos plantas), consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda el historial y las Tareas de la O.P., entrega los datos a la App</td>
 </tr>
 <tr>
 <td>App web</td>
 <td>Hosting torredecontrol.polypro.space</td>
-<td>04/11/2026</td>
-<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), bitácora y análisis con IA</td>
+<td>11/11/2026</td>
+<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P. y análisis con IA</td>
 </tr>
 <tr>
 <td>Correos automáticos</td>
 <td>Hosting (archivos PHP)</td>
-<td>03–05/11/2026</td>
-<td>Nueva OP, cambios críticos cada 15 min y bitácora semanal, desde notificacion@torredecontrol.polypro.space</td>
+<td>03–11/11/2026</td>
+<td>Nueva OP, cambios críticos cada 15 min y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space</td>
 </tr>
 </tbody>
 </table>
@@ -287,6 +306,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Fórmula de importación</td>
 </tr>
 <tr>
+<td>PRODUCCION y PRODUCCION_BOGOTA</td>
+<td>Cronograma de Producción de Barranquilla y de Bogotá</td>
+<td>Fórmula de importación (menú 🏭 Conectar Producción Bogotá)</td>
+</tr>
+<tr>
 <td>LOOKER_MAESTRA</td>
 <td>Todas las áreas en una sola tabla de 40 columnas</td>
 <td>Menú 🔄 Actualizar LOOKER_MAESTRA</td>
@@ -303,7 +327,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>HISTORIAL_CAMBIOS</td>
-<td>Registro de cambios e intentos bloqueados (solo consulta)</td>
+<td>Registro de cambios e intentos bloqueados, con columna PLANTA (solo consulta)</td>
 <td>Script de vigilancia</td>
 </tr>
 <tr>
@@ -313,7 +337,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>BITACORA_OP</td>
-<td>Notas, compromisos y bloqueos de cada OP</td>
+<td>Tareas de la O.P.: notas, compromisos y bloqueos de cada OP (la hoja conserva su nombre interno)</td>
 <td>Script, desde la App</td>
 </tr>
 </tbody>
@@ -368,17 +392,17 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Jefe o responsable de área</td>
-<td>Registrar estado, inicio y duración reales, kg avanzados y observaciones de sus tareas; cerrar los compromisos de la bitácora que le asignen</td>
+<td>Registrar estado, inicio y duración reales, kg avanzados y observaciones de sus tareas; cerrar los compromisos de las Tareas de la O.P. que le asignen</td>
 <td>Cambiar la fecha de entrega, marcar "No aplica", modificar fechas de tareas ya terminadas</td>
 </tr>
 <tr>
-<td>Producción</td>
-<td>Registrar los kg diarios en las hojas mensuales de Producción V2 y sincronizarlos al cronograma</td>
-<td>Editar a mano el estado "Entrega en negro" cuando lo calcula la sincronización</td>
+<td>Producción (Bogotá y Barranquilla)</td>
+<td>Registrar cada día, en el archivo de su planta, los kg fabricados y los kg entregados en negro, y sincronizarlos al cronograma</td>
+<td>Registrar kg de OP de la otra planta; editar a mano el estado de "Kg Fabricados" o "Entrega en negro" cuando lo calcula la sincronización</td>
 </tr>
 <tr>
 <td>Gerencia y coordinación</td>
-<td>Revisar la vista ejecutiva, el semáforo, el cumplimiento de entrega y las alertas; dar seguimiento a la bitácora</td>
+<td>Revisar la vista ejecutiva, el semáforo, el cumplimiento de entrega y las alertas; dar seguimiento a las Tareas de la O.P.</td>
 <td>—</td>
 </tr>
 <tr>
@@ -393,7 +417,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Cualquier usuario con sesión en la App</td>
-<td>Consultar todas las vistas y anotar en la bitácora de cualquier OP</td>
+<td>Consultar todas las vistas y anotar en las Tareas de la O.P. de cualquier OP</td>
 <td>Modificar datos de cronogramas desde la App</td>
 </tr>
 </tbody>
@@ -402,13 +426,13 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <h2 id="4-ciclo-de-vida-de-una-op">4. Ciclo de vida de una OP</h2>
 <p>Una OP recorre nueve pasos: se registra en Comercial, se planea, se envía a las áreas, cada área registra su avance, la Torre la vigila y Comercial registra la entrega real al cliente.</p>
 <ol>
-<li><strong>Registro (Comercial).</strong> En BASE_CREADOR se diligencian número de OP, proyecto, cliente, comercial, sede, número de subestructuras, fecha de entrega al cliente y áreas. El botón "Crear Nueva OP" crea la hoja de la OP. Esa fecha queda como <strong>fecha comprometida original</strong> y sale el correo "Se registró una nueva O.P".</li>
-<li><strong>Planeación (Comercial).</strong> En la hoja de la OP se completan el nombre y los kg de cada subestructura, y la fecha de inicio y la duración planeadas de cada tarea. Si una tarea no se hace en ese contrato, se marca "No aplica" en 🧩 Tareas de la OP.</li>
-<li><strong>Envío a áreas (Comercial).</strong> "📤 Enviar / Actualizar OP en Áreas" crea o actualiza la OP en el cronograma de cada área, sin borrar lo que el área ya registró.</li>
-<li><strong>Ejecución (áreas).</strong> Cada área cambia el estado de sus tareas (Abierto, En pausa, Reproceso, Terminado) y registra inicio y duración reales, kg avanzados y observaciones. Producción registra kg diarios en Producción V2.</li>
+<li><strong>Registro (Comercial).</strong> En BASE_CREADOR se diligencian número de OP, proyecto, cliente, comercial, sede, número de subestructuras, fecha de entrega al cliente y áreas. La <strong>sede</strong> define la planta de Producción: BOGOTÁ, BARRANQUILLA o MIXTO (parte en cada planta). El botón "Crear Nueva OP" crea la hoja de la OP. Esa fecha queda como <strong>fecha comprometida original</strong> y sale el correo "Se registró una nueva O.P".</li>
+<li><strong>Planeación (Comercial).</strong> En la hoja de la OP se completan el nombre y los kg de cada subestructura, y la fecha de inicio y la duración planeadas de cada tarea. Si una tarea no se hace en ese contrato, se marca "No aplica" en 🧩 Ajustar tareas del cronograma.</li>
+<li><strong>Envío a áreas (Comercial).</strong> "📤 Enviar / Actualizar OP en Áreas" crea o actualiza la OP en el cronograma de cada área, sin borrar lo que el área ya registró. Producción la recibe en el archivo de su planta; una OP MIXTO va a los dos.</li>
+<li><strong>Ejecución (áreas).</strong> Cada área cambia el estado de sus tareas (Abierto, En pausa, Reproceso, Terminado) y registra inicio y duración reales, kg avanzados y observaciones. Producción registra cada día los kg fabricados y los entregados en negro en el archivo de su planta.</li>
 <li><strong>Consolidación (Maestra).</strong> La Maestra importa todos los cronogramas, arma LOOKER_MAESTRA y calcula avance, semáforo y cumplimiento. La App lee esos datos.</li>
 <li><strong>Vigilancia (automática).</strong> Cada edición de fechas, estados o kg queda en el Historial. Si alguien intenta cambiar una fecha protegida, el cambio se revierte y se notifica.</li>
-<li><strong>Seguimiento (todos).</strong> En la App se revisan semáforo, Gantt, alertas y bitácora. Los compromisos y bloqueos se anotan en la bitácora de la OP.</li>
+<li><strong>Seguimiento (todos).</strong> En la App se revisan semáforo, Gantt, alertas y las Tareas de la O.P. Los compromisos de cada reunión y los bloqueos se anotan en 📝 Tareas de la O.P.</li>
 <li><strong>Reprogramación (Comercial, si aplica).</strong> Si el cliente o la empresa mueven la entrega, Comercial edita la OP; la macro pide un motivo obligatorio y guarda la reprogramación. La fecha original no cambia.</li>
 <li><strong>Entrega y cierre (Comercial).</strong> "🚚 Registrar entrega real al cliente" guarda la fecha real; desde ese momento la fecha comprometida ya no se puede reprogramar. La entrega cuenta para el indicador de cumplimiento del mes.</li>
 </ol>
@@ -446,8 +470,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>🚀 Torre de Control</td>
-<td>🧩 Tareas de la OP</td>
-<td>Marca tareas "No aplica" o les pone un nombre propio en esa OP</td>
+<td>🧩 Ajustar tareas del cronograma (No aplica / nombre)</td>
+<td>Marca tareas "No aplica" o les pone un nombre propio en esa OP. Antes se llamaba "Tareas de la OP"; no confundir con 📝 Tareas de la O.P. de la App</td>
 </tr>
 <tr>
 <td>🚀 Torre de Control</td>
@@ -475,6 +499,16 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Agregar campo Fecha de entrega, Autorizar acceso a áreas, Probar correo, Ordenar lista de áreas, Preparar registro de entregas</td>
 </tr>
 <tr>
+<td>🚀 Torre de Control</td>
+<td>🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)</td>
+<td>Pasa las OP no terminadas de las 5 tareas antiguas a las 2 nuevas, en los dos archivos de Producción. Se puede repetir sin riesgo</td>
+</tr>
+<tr>
+<td>🚀 Torre de Control</td>
+<td>🩹 Corregir fórmulas: #DIV/0!, 01/01/1900 y días No aplica</td>
+<td>Corrige esas fórmulas en las hojas de OP y en los cronogramas de todas las áreas. Se puede repetir sin riesgo</td>
+</tr>
+<tr>
 <td>🔎 Buscar O.P</td>
 <td>🔎 Buscar O.P…</td>
 <td>Abre el buscador de OP</td>
@@ -492,10 +526,34 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>Marcar las áreas que participan.</li>
 <li>Pulsar <strong>Crear Nueva OP</strong> y confirmar el resumen.</li>
 <li>En la hoja nueva de la OP, completar nombre y kg de cada subestructura (columnas E y F) y la fecha de inicio y la duración planeadas de cada tarea (columnas I y J).</li>
-<li>Si alguna tarea no aplica al contrato, usar 🧩 Tareas de la OP (5.6).</li>
+<li>Si alguna tarea no aplica al contrato, usar 🧩 Ajustar tareas del cronograma (5.6).</li>
 <li>Pulsar <strong>📤 Enviar / Actualizar OP en Áreas</strong> y confirmar.</li>
 </ol>
 <p>Si el número ya existe, la macro ofrece cargarla para editarla en lugar de duplicarla.</p>
+<p><strong>Sede y planta de Producción.</strong> La sede elegida (C7) decide a qué archivo de Producción va la OP:</p>
+<table>
+<thead>
+<tr>
+<th>Sede</th>
+<th>Archivo de Producción</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BOGOTÁ</td>
+<td>Producción Bogotá</td>
+</tr>
+<tr>
+<td>BARRANQUILLA</td>
+<td>Producción Barranquilla</td>
+</tr>
+<tr>
+<td>BOG Y BAQ (MIXTO)</td>
+<td>Los dos. En la hoja de la OP, en la sección PRODUCCION, se escribe en la columna G (Sede) la planta de cada subestructura; cada planta ve solo las suyas</td>
+</tr>
+</tbody>
+</table>
+<p>Si después se cambia la sede, al enviar la OP la macro la quita del archivo de la planta que ya no le corresponde, con confirmación.</p>
 <h3 id="53-editar-una-op">5.3 Editar una OP</h3>
 <ol>
 <li>Usar ✏️ Cargar OP para editar, o el botón ✏️ Editar dentro de 🔎 Buscar O.P.</li>
@@ -505,6 +563,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>Aceptar la actualización en las áreas, o hacerla después con 📤 Enviar / Actualizar.</li>
 </ol>
 <p>Las fechas, los kg y las observaciones que ya tenía la hoja se conservan, incluso si se agregan o quitan áreas o subestructuras. Si se quitan subestructuras con avance, la macro avisa antes de borrarlas.</p>
+<p>Si la OP tiene guardado un comercial que ya no está en la lista de C6 (por ejemplo, porque se corrigió la ortografía del nombre), la OP se carga completa igual, C6 queda vacío y sale un aviso para escoger el comercial correcto antes de guardar.</p>
 <h3 id="54-buscar-una-op">5.4 Buscar una OP</h3>
 <ol>
 <li>Abrir 🔎 Buscar O.P o pulsar el botón de la hoja.</li>
@@ -512,22 +571,25 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>Hacer clic en la OP (o moverse con ↑ ↓ y pulsar Enter). Aparece la barra "Abriendo O.P…" hasta que Google abre la hoja.</li>
 <li>✏️ Editar carga la OP en el formulario; ↻ actualiza la lista.</li>
 </ol>
-<figure class="shot"><a href="ver.php?f=macro_buscar_op.jpg" target="_blank"><img src="ver.php?f=macro_buscar_op.jpg" alt="Cuadro 🔎 Buscar O.P en el archivo Comercial: escriba número, proyecto, cliente o comercial; Enter abre la primera coincidencia y ✏️ Editar la carga para edición." loading="lazy"></a><figcaption><b>Figura 1.</b> Cuadro 🔎 Buscar O.P en el archivo Comercial: escriba número, proyecto, cliente o comercial; Enter abre la primera coincidencia y ✏️ Editar la carga para edición.</figcaption></figure><h3 id="55-reprogramar-la-fecha-de-entrega">5.5 Reprogramar la fecha de entrega</h3>
+<figure class="shot"><a href="ver.php?f=macro_buscar_op.jpg" target="_blank"><img src="ver.php?f=macro_buscar_op.jpg" alt="Cuadro 🔎 Buscar O.P en el archivo Comercial: escriba número, proyecto, cliente o comercial; Enter abre la primera coincidencia y ✏️ Editar la carga para edición." loading="lazy"></a><figcaption><b>Figura 1.</b> Cuadro 🔎 Buscar O.P en el archivo Comercial: escriba número, proyecto, cliente o comercial; Enter abre la primera coincidencia y ✏️ Editar la carga para edición.</figcaption></figure>
+<h3 id="55-reprogramar-la-fecha-de-entrega">5.5 Reprogramar la fecha de entrega</h3>
 <ol>
 <li>Cargar la OP para editar y cambiar la fecha de entrega.</li>
 <li>Al guardar, elegir el motivo: 1 Solicitud del cliente, 2 Causa interna, 3 Materiales o proveedores, 4 Cambio de alcance, 5 Otro.</li>
 <li>Escribir el comentario; con "Otro" es obligatorio.</li>
 </ol>
 <p>La reprogramación queda en REPROGRAMACIONES_ENTREGA y en REGISTRO_CAMBIOS. La fecha original no cambia y sigue siendo la referencia del indicador oficial. Si la OP ya tiene entrega real, no se puede reprogramar.</p>
-<h3 id="56-tareas-que-no-aplican-y-nombre-de-tarea-por-op">5.6 Tareas que no aplican y nombre de tarea por OP</h3>
+<h3 id="56-tareas-que-no-aplican-y-nombre-de-tarea-por-op-ajustar-tareas-del-cronograma">5.6 Tareas que no aplican y nombre de tarea por OP (🧩 Ajustar tareas del cronograma)</h3>
 <ol>
-<li>Abrir la hoja de la OP y usar 🧩 Tareas de la OP.</li>
+<li>Abrir la hoja de la OP y usar 🧩 Ajustar tareas del cronograma (No aplica / nombre).</li>
 <li>Marcar ☐ No aplica en las tareas que no se hacen en ese contrato. Su peso se reparte entre las demás tareas de la subestructura.</li>
 <li>Si hace falta, escribir un "Nombre en esta OP". Solo cambia lo que ve el área; por dentro se conserva el nombre original.</li>
 <li>Guardar y pulsar 📤 Enviar a las áreas.</li>
 </ol>
-<p>Cada subestructura debe tener al menos una tarea que aplique. "Entrega en negro" de Producción no se puede renombrar, porque Producción V2 la usa para sincronizar los kg. No se deben borrar filas de tareas a mano.</p>
-<figure class="shot"><a href="ver.php?f=macro_tareas_op.jpg" target="_blank"><img src="ver.php?f=macro_tareas_op.jpg" alt="Cuadro Tareas O.P: marque “No aplica” en las tareas que no se hacen y, si lo necesita, escriba un nombre propio para esta OP." loading="lazy"></a><figcaption><b>Figura 2.</b> Cuadro Tareas O.P: marque “No aplica” en las tareas que no se hacen y, si lo necesita, escriba un nombre propio para esta OP.</figcaption></figure><h3 id="57-registrar-la-entrega-real">5.7 Registrar la entrega real</h3>
+<p>Cada subestructura debe tener al menos una tarea que aplique. "Kg Fabricados" y "Entrega en negro" de Producción no se pueden renombrar, porque Producción V2 las usa para sincronizar los kg. No se deben borrar filas de tareas a mano.</p>
+<p>Desde v3.2, los días planeados y reales de las tareas No aplica <strong>no suman</strong> en TOTAL_DIAS (en la hoja de la OP y en el cronograma del área) y esas tareas quedan con 0 % de participación. Sin tareas No aplica, todo funciona igual que antes.</p>
+<figure class="shot"><a href="ver.php?f=macro_tareas_op.jpg" target="_blank"><img src="ver.php?f=macro_tareas_op.jpg" alt="Cuadro 🧩 Ajustar tareas del cronograma" loading="lazy"></a><figcaption><b>Figura 2.</b> Cuadro 🧩 Ajustar tareas del cronograma: marque “No aplica” en las tareas que no se hacen y, si lo necesita, escriba un nombre propio para esta OP. En Producción, Kg Fabricados y Entrega en negro tienen nombre fijo.</figcaption></figure>
+<h3 id="57-registrar-la-entrega-real">5.7 Registrar la entrega real</h3>
 <ol>
 <li>Usar 🚚 Registrar entrega real al cliente (desde la hoja de la OP, o escribiendo el número).</li>
 <li>Escribir la fecha real (dd/mm/aaaa); no puede ser futura.</li>
@@ -621,58 +683,125 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>Todo cambio de estado, fechas o kg queda en el Historial con usuario, fecha y valores.</li>
 </ul>
 <p>Si una fecha protegida está mal (por ejemplo, un año mal digitado), la corrige un usuario autorizado (6.5, procedimiento PR-06).</p>
-<h3 id="64-produccion-v2">6.4 Producción V2</h3>
-<p>Producción registra los kg de cada día en las hojas mensuales (por ejemplo "NOVIEMBRE 2026") de PLANTILLA_LOOKER_PRODUCCION_V2. Cada subestructura aparece como un bloque "OP 4127_1 · Nombre" con una fila de kg reales y una de kg planeados por día.</p>
+<h3 id="64-produccion-v2-bogota-y-barranquilla">6.4 Producción V2 (Bogotá y Barranquilla)</h3>
+<p>Producción tiene <strong>un archivo por planta</strong>: PLANTILLA_LOOKER_PRODUCCION_V2 (Barranquilla) y PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA (Bogotá). Cada planta trabaja solo en el suyo, con el mismo código y los mismos menús. Una OP MIXTO aparece en los dos, pero cada archivo solo programa y sincroniza las subestructuras de su planta; las de la otra planta quedan en gris.</p>
+<p><strong>Tareas de Producción en el cronograma.</strong> Cada subestructura tiene dos tareas, cada una con 50 % del peso del área:</p>
 <table>
 <thead>
 <tr>
-<th>Opción del menú</th>
+<th>Tarea</th>
+<th>Qué mide</th>
+<th>Se alimenta de</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Kg Fabricados</td>
+<td>Kg fabricados de la subestructura</td>
+<td>Fila de la OP (kg reales del día) en la hoja del mes</td>
+</tr>
+<tr>
+<td>Entrega en negro</td>
+<td>Kg entregados en negro (sin galvanizar ni pintar)</td>
+<td>Fila ENTREGA MATERIAL EN NEGRO en la hoja del mes</td>
+</tr>
+</tbody>
+</table>
+<p>Las OP terminadas antes del cambio conservan sus 5 tareas antiguas (Corte, Armado, Soldadura, Calidad y Entrega en negro). En ellas el aporte de cada tarea depende de los kg registrados frente al peso de la subestructura: si faltan kg, Producción no llega al 100 % aunque todas las tareas digan Terminado.</p>
+<p><strong>Hojas del mes.</strong> Producción registra los kg de cada día en las hojas mensuales (por ejemplo "NOVIEMBRE 2026"). Cada subestructura es un bloque de cuatro filas:</p>
+<table>
+<thead>
+<tr>
+<th>Fila</th>
+<th>Qué se digita</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OP 4127_1 · Nombre</td>
+<td>Kg fabricados en el día</td>
+</tr>
+<tr>
+<td>PLANEADO</td>
+<td>Kg que se planeaba fabricar ese día</td>
+</tr>
+<tr>
+<td>DIFERENCIA</td>
+<td>Se calcula sola</td>
+</tr>
+<tr>
+<td>ENTREGA MATERIAL EN NEGRO</td>
+<td>Kg entregados en negro ese día. No suma en el TOTAL REAL del día; tiene su propio TOTAL ENTREGA</td>
+</tr>
+</tbody>
+</table>
+<figure class="shot"><a href="ver.php?f=produccion_entrega.jpg" target="_blank"><img src="ver.php?f=produccion_entrega.jpg" alt="Hoja del mes en Producción Bogotá" loading="lazy"></a><figcaption><b>Figura 3.</b> Hoja del mes en Producción Bogotá (extracto): cada subestructura con su fila de kg fabricados, PLANEADO, DIFERENCIA y ENTREGA MATERIAL EN NEGRO.</figcaption></figure>
+<table>
+<thead>
+<tr>
+<th>Opción del menú 🏗️ Torre de Control</th>
 <th>Para qué sirve</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>📤 Enviar / Crear O.P (botón "Crear O.P - Producción")</td>
-<td>Programa una OP o subestructura en la hoja del mes desde el formulario</td>
+<td>Programa una OP o subestructura de esta planta en la hoja del mes</td>
 </tr>
 <tr>
 <td>🔄 Sincronizar diario → Cronograma</td>
-<td>Lleva los kg diarios al cronograma de Producción</td>
+<td>Lleva los kg fabricados y los entregados en negro al cronograma</td>
 </tr>
 <tr>
-<td>⏱ Activar sincronización automática</td>
-<td>La misma sincronización cada hora</td>
+<td>⏱ Activar sincronización automática (cada hora)</td>
+<td>La misma sincronización cada hora; se activa una vez en cada archivo</td>
 </tr>
 <tr>
 <td>🔁 Actualizar lista de OP del formulario</td>
 <td>Refresca la lista desplegable de OP</td>
 </tr>
 <tr>
-<td>🧹 Borrar de los meses las OP que no vienen de Comercial</td>
+<td>🧹 Borrar de los meses las OP que no vienen de comercial</td>
 <td>Limpia pruebas u OP no registradas</td>
+</tr>
+<tr>
+<td>➕ Agregar fila ENTREGA MATERIAL EN NEGRO a las OP programadas</td>
+<td>Agrega la fila nueva a los bloques que no la tienen (una sola vez)</td>
+</tr>
+<tr>
+<td>🏭 Planta de este archivo…</td>
+<td>Indica si el archivo es de BOGOTÁ o BARRANQUILLA (una sola vez)</td>
+</tr>
+<tr>
+<td>✂️ Separar por planta (una vez)</td>
+<td>Deja en el archivo solo las OP de su planta y las MIXTO; guarda copia en hojas "RESPALDO_SEP · …"</td>
 </tr>
 </tbody>
 </table>
 <p>Reglas de la sincronización:</p>
 <ul>
 <li>Solo <strong>sube</strong> valores: nunca baja los kg, nunca saca una tarea de Terminado y no borra datos digitados.</li>
-<li>La tarea "Entrega en negro" toma los kg de la subestructura y pasa a Terminado cuando los kg reales alcanzan el peso de la subestructura.</li>
+<li>"Kg Fabricados" toma los kg fabricados de la subestructura y "Entrega en negro" los kg entregados en negro. Cada una pasa a Terminado cuando sus kg alcanzan el peso de la subestructura.</li>
 <li>Toma la fecha de inicio más temprana entre la digitada y la del primer reporte diario.</li>
 <li>No toca una tarea Terminado con fecha real válida ni una tarea "No aplica".</li>
+<li>Cada archivo sincroniza solo las subestructuras de su planta.</li>
 </ul>
 <h3 id="65-correccion-de-una-fecha-protegida">6.5 Corrección de una fecha protegida</h3>
 <p>La hace un correo incluido en AUTORIZADOS_FECHAS, editando la celda en el cronograma del área. El cambio se conserva y queda en el Historial como "Cambio autorizado".</p>
 <h2 id="7-manual-de-usuario-app-web-torre-de-control">7. Manual de usuario — App web Torre de Control</h2>
-<p>La App es de consulta: muestra en un solo lugar lo que registran Comercial, las áreas y Producción. Los datos no se editan aquí, salvo la bitácora.</p>
+<p>La App es de consulta: muestra en un solo lugar lo que registran Comercial, las áreas y Producción. Los datos no se editan aquí, salvo las Tareas de la O.P.</p>
 <h3 id="71-ingreso">7.1 Ingreso</h3>
 <ol>
 <li>Abra la dirección de la Torre de Control en el navegador.</li>
 <li>Inicie sesión con su cuenta Google @polyuprotec.com. No se aceptan cuentas de otro dominio.</li>
 <li>La App carga los datos de la Maestra. Use el botón de actualizar para traer los últimos cambios.</li>
 </ol>
-<figure class="shot movil"><a href="ver.php?f=app_movil.jpg" target="_blank"><img src="ver.php?f=app_movil.jpg" alt="La App en un celular: el menú se abre con ☰ y los filtros quedan arriba." loading="lazy"></a><figcaption><b>Figura 3.</b> La App en un celular: el menú se abre con ☰ y los filtros quedan arriba.</figcaption></figure><h3 id="72-banda-de-resumen">7.2 Banda de resumen</h3>
+<figure class="shot movil"><a href="ver.php?f=app_movil.jpg" target="_blank"><img src="ver.php?f=app_movil.jpg" alt="La App en un celular: el menú se abre con ☰ y los filtros quedan arriba." loading="lazy"></a><figcaption><b>Figura 4.</b> La App en un celular: el menú se abre con ☰ y los filtros quedan arriba.</figcaption></figure>
+<h3 id="72-banda-de-resumen">7.2 Banda de resumen</h3>
 <p>En la parte superior aparecen 6 indicadores generales. Al hacer clic se abre el detalle de las OP que los componen. "Cumplimiento entrega" lleva a la vista Entregas.</p>
-<figure class="shot"><a href="ver.php?f=app_ejecutiva.jpg" target="_blank"><img src="ver.php?f=app_ejecutiva.jpg" alt="Vista Ejecutiva: banda de resumen arriba y tarjetas de OP abajo." loading="lazy"></a><figcaption><b>Figura 4.</b> Vista Ejecutiva: banda de resumen arriba y tarjetas de OP abajo.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_resumen_detalle.jpg" target="_blank"><img src="ver.php?f=app_resumen_detalle.jpg" alt="Al hacer clic en un indicador se abre la lista de OP que lo componen." loading="lazy"></a><figcaption><b>Figura 5.</b> Al hacer clic en un indicador se abre la lista de OP que lo componen.</figcaption></figure><h3 id="73-vistas">7.3 Vistas</h3>
+<figure class="shot"><a href="ver.php?f=app_ejecutiva.jpg" target="_blank"><img src="ver.php?f=app_ejecutiva.jpg" alt="Vista Ejecutiva" loading="lazy"></a><figcaption><b>Figura 5.</b> Vista Ejecutiva: filtro Planta arriba, banda de resumen y tarjetas de OP con su insignia de planta.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_resumen_detalle.jpg" target="_blank"><img src="ver.php?f=app_resumen_detalle.jpg" alt="Al hacer clic en un indicador se abre la lista de OP que lo componen." loading="lazy"></a><figcaption><b>Figura 6.</b> Al hacer clic en un indicador se abre la lista de OP que lo componen.</figcaption></figure>
+<h3 id="73-vistas">7.3 Vistas</h3>
 <p>Las vistas se eligen en el menú lateral. Todas respetan los filtros de la parte superior.</p>
 <table>
 <thead>
@@ -685,7 +814,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tbody>
 <tr>
 <td>🏠 Ejecutiva</td>
-<td>Banda de resumen y una tarjeta por OP con semáforo, avance, áreas en orden de proceso y botón 📝 Bitácora</td>
+<td>Banda de resumen y una tarjeta por OP con semáforo, avance, áreas en orden de proceso, insignia de planta (BOG, BAQ o MIXTO) y botón 📝 Tareas de la O.P.</td>
 <td>Revisión diaria</td>
 </tr>
 <tr>
@@ -695,7 +824,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>🏭 Producción diaria</td>
-<td>Kg reportados por día desde Producción V2</td>
+<td>Kg reportados por día desde los dos archivos de Producción V2, con su planta</td>
 <td>Producción</td>
 </tr>
 <tr>
@@ -725,7 +854,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>🚨 Alertas</td>
-<td>Entregas en riesgo, OP vencidas, sin planeación, entregas inconsistentes y bitácora pendiente</td>
+<td>Entregas en riesgo, OP vencidas, sin planeación, entregas inconsistentes y compromisos vencidos o bloqueos de las Tareas de la O.P.</td>
 <td>Priorizar</td>
 </tr>
 <tr>
@@ -740,34 +869,50 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </tbody>
 </table>
-<div class="gallery"><figure class="shot"><a href="ver.php?f=app_kg.jpg" target="_blank"><img src="ver.php?f=app_kg.jpg" alt="KG & Avance." loading="lazy"></a><figcaption><b>Figura 6.</b> KG & Avance.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_obeya.jpg" target="_blank"><img src="ver.php?f=app_obeya.jpg" alt="Obeya: avance de cada OP por área." loading="lazy"></a><figcaption><b>Figura 7.</b> Obeya: avance de cada OP por área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_gantt.jpg" target="_blank"><img src="ver.php?f=app_gantt.jpg" alt="Gantt con las 4 fechas y el paginador." loading="lazy"></a><figcaption><b>Figura 8.</b> Gantt con las 4 fechas y el paginador.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_areas.jpg" target="_blank"><img src="ver.php?f=app_areas.jpg" alt="Por Área." loading="lazy"></a><figcaption><b>Figura 9.</b> Por Área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_alertas.jpg" target="_blank"><img src="ver.php?f=app_alertas.jpg" alt="Alertas." loading="lazy"></a><figcaption><b>Figura 10.</b> Alertas.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_tabla.jpg" target="_blank"><img src="ver.php?f=app_tabla.jpg" alt="Tabla Detalle con la columna 👁." loading="lazy"></a><figcaption><b>Figura 11.</b> Tabla Detalle con la columna 👁.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_observaciones.jpg" target="_blank"><img src="ver.php?f=app_observaciones.jpg" alt="Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP." loading="lazy"></a><figcaption><b>Figura 12.</b> Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP.</figcaption></figure></div><h3 id="74-semaforo-y-avisos">7.4 Semáforo y avisos</h3>
+<div class="gallery"><figure class="shot"><a href="ver.php?f=app_kg.jpg" target="_blank"><img src="ver.php?f=app_kg.jpg" alt="KG & Avance." loading="lazy"></a><figcaption><b>Figura 7.</b> KG & Avance.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_obeya.jpg" target="_blank"><img src="ver.php?f=app_obeya.jpg" alt="Obeya: avance de cada OP por área." loading="lazy"></a><figcaption><b>Figura 8.</b> Obeya: avance de cada OP por área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_gantt.jpg" target="_blank"><img src="ver.php?f=app_gantt.jpg" alt="Gantt con las 4 fechas y el paginador." loading="lazy"></a><figcaption><b>Figura 9.</b> Gantt con las 4 fechas y el paginador.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_areas.jpg" target="_blank"><img src="ver.php?f=app_areas.jpg" alt="Por Área." loading="lazy"></a><figcaption><b>Figura 10.</b> Por Área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_alertas.jpg" target="_blank"><img src="ver.php?f=app_alertas.jpg" alt="Alertas." loading="lazy"></a><figcaption><b>Figura 11.</b> Alertas.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_tabla.jpg" target="_blank"><img src="ver.php?f=app_tabla.jpg" alt="Tabla Detalle con la columna 👁." loading="lazy"></a><figcaption><b>Figura 12.</b> Tabla Detalle con la columna 👁.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_observaciones.jpg" target="_blank"><img src="ver.php?f=app_observaciones.jpg" alt="Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP." loading="lazy"></a><figcaption><b>Figura 13.</b> Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP.</figcaption></figure></div>
+<h3 id="74-semaforo-y-avisos">7.4 Semáforo y avisos</h3>
 <ul>
 <li>Pase el puntero sobre el semáforo para ver <strong>por qué</strong> tiene ese color (regla, brecha, fechas).</li>
 <li><strong>Sin planeación</strong> (naranja) significa que la OP no tiene fechas de plan.</li>
 <li>El ⚠ del Gantt indica una fecha a más de 2 años del plan o un fin real anterior al inicio; pase el puntero para ver el detalle.</li>
 </ul>
-<figure class="shot"><a href="ver.php?f=app_semaforo_motivo.jpg" target="_blank"><img src="ver.php?f=app_semaforo_motivo.jpg" alt="Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados." loading="lazy"></a><figcaption><b>Figura 13.</b> Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_gantt_aviso.jpg" target="_blank"><img src="ver.php?f=app_gantt_aviso.jpg" alt="Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango." loading="lazy"></a><figcaption><b>Figura 14.</b> Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango.</figcaption></figure><h3 id="75-filtros">7.5 Filtros</h3>
-<p>Las vistas permiten filtrar por OP, cliente, área y semáforo. El orden de las áreas siempre sigue el proceso: Diseño → Dibujo → Compras → Producción → Galvanizado → Pintura → Logística → Montaje → Administración → RRHH.</p>
-<h3 id="76-bitacora-de-la-op">7.6 Bitácora de la OP</h3>
-<p>La bitácora guarda notas, compromisos y bloqueos por OP. Cada registro lleva autor, fecha y hora.</p>
+<figure class="shot"><a href="ver.php?f=app_semaforo_motivo.jpg" target="_blank"><img src="ver.php?f=app_semaforo_motivo.jpg" alt="Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados." loading="lazy"></a><figcaption><b>Figura 14.</b> Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_gantt_aviso.jpg" target="_blank"><img src="ver.php?f=app_gantt_aviso.jpg" alt="Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango." loading="lazy"></a><figcaption><b>Figura 15.</b> Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango.</figcaption></figure>
+<h3 id="75-filtros">7.5 Filtros</h3>
+<p>Arriba de todas las vistas están los filtros <strong>Planta</strong>, Comercial, OP y Subestructura.</p>
+<p><strong>Planta</strong> tiene tres botones: Todas las plantas, Bogotá y Barranquilla. Al elegir una planta, todas las vistas (tarjetas, Gantt, Tabla Detalle, Producción diaria, Historial, Entregas, indicadores) muestran solo lo de esa planta:</p>
+<ul>
+<li>Las OP de esa sede y las MIXTO. En una OP MIXTO, las tareas de Producción que se ven son solo las de las subestructuras de esa planta; las demás áreas se ven completas.</li>
+<li>La App recuerda la planta elegida la próxima vez que se abra en ese navegador.</li>
+<li>Las insignias <strong>BOG</strong>, <strong>BAQ</strong> y <strong>MIXTO</strong> junto al número de OP indican la planta de cada OP.</li>
+</ul>
+<figure class="shot"><a href="ver.php?f=app_planta.jpg" target="_blank"><img src="ver.php?f=app_planta.jpg" alt="Filtro Planta en Bogotá" loading="lazy"></a><figcaption><b>Figura 16.</b> Con el filtro en Bogotá solo se ven las OP de Bogotá y las MIXTO; la App lo recuerda la próxima vez.</figcaption></figure>
+<p>Las vistas también permiten filtrar por cliente, área y semáforo. El orden de las áreas siempre sigue el proceso: Diseño → Dibujo → Compras → Producción → Galvanizado → Pintura → Logística → Montaje → Administración → RRHH.</p>
+<h3 id="76-tareas-de-la-op">7.6 📝 Tareas de la O.P.</h3>
+<p>Aquí se suben los compromisos que se acuerdan para cada O.P. en las reuniones de seguimiento, además de notas y bloqueos. Antes se llamaba "Bitácora"; solo cambió el nombre. Cada registro lleva autor, fecha y hora.</p>
 <ol>
-<li>En la tarjeta de la OP pulse <strong>📝 Bitácora</strong>.</li>
+<li>En la tarjeta de la OP pulse <strong>📝 Tareas de la O.P.</strong>. El botón muestra cuántos registros están abiertos y cuántos vencidos.</li>
 <li>Elija el tipo (nota, compromiso o bloqueo), el área y escriba la descripción.</li>
 <li>Para compromisos y bloqueos indique responsable y fecha compromiso.</li>
 <li>Pulse <strong>Guardar</strong>.</li>
-<li>Para cerrar un compromiso o bloqueo, pulse <strong>Cerrar</strong> y escriba una nota de cierre.</li>
+<li>Para cerrar un compromiso o bloqueo, pulse <strong>Cerrar</strong> y escriba una nota de cierre. Los registros no se borran.</li>
 </ol>
-<p>Los compromisos vencidos y bloqueos abiertos aparecen en Alertas y en el correo semanal de los lunes.</p>
-<figure class="shot"><a href="ver.php?f=app_bitacora.jpg" target="_blank"><img src="ver.php?f=app_bitacora.jpg" alt="Ventana 📝 Bitácora de una OP: formulario arriba, registros abiertos y cerrados abajo." loading="lazy"></a><figcaption><b>Figura 15.</b> Ventana 📝 Bitácora de una OP: formulario arriba, registros abiertos y cerrados abajo.</figcaption></figure><h3 id="77-entregas">7.7 Entregas</h3>
+<p>Los compromisos vencidos y los bloqueos abiertos aparecen en Alertas y en el resumen semanal que llega por correo los lunes.</p>
+<figure class="shot"><a href="ver.php?f=app_tareas_op.jpg" target="_blank"><img src="ver.php?f=app_tareas_op.jpg" alt="Ventana Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 17.</b> Ventana 📝 Tareas de la O.P.: formulario arriba; abajo los registros abiertos (los vencidos resaltados) y los cerrados con su nota de cierre.</figcaption></figure>
+<h3 id="77-entregas">7.7 Entregas</h3>
 <p>Muestra por OP la fecha original, la vigente y la real, los días de diferencia y si cumplió. El indicador oficial se mide contra la fecha <strong>original</strong> con tolerancia de 0 días. El botón de reprogramaciones muestra cada cambio con su motivo.</p>
-<figure class="shot"><a href="ver.php?f=app_entregas.jpg" target="_blank"><img src="ver.php?f=app_entregas.jpg" alt="Vista Entregas: indicadores, tendencia mensual y detalle por OP." loading="lazy"></a><figcaption><b>Figura 16.</b> Vista Entregas: indicadores, tendencia mensual y detalle por OP.</figcaption></figure><h3 id="78-historial">7.8 Historial</h3>
-<p>Lista los cambios de estado, fechas y kg, los cambios autorizados y los intentos bloqueados. Filtre por OP, área, tipo, usuario o fecha.</p>
-<figure class="shot"><a href="ver.php?f=app_historial.jpg" target="_blank"><img src="ver.php?f=app_historial.jpg" alt="Vista Historial: cada cambio con su tipo, usuario y valores anterior y nuevo." loading="lazy"></a><figcaption><b>Figura 17.</b> Vista Historial: cada cambio con su tipo, usuario y valores anterior y nuevo.</figcaption></figure><h2 id="8-indicadores-y-reglas-de-calculo">8. Indicadores y reglas de cálculo</h2>
+<figure class="shot"><a href="ver.php?f=app_entregas.jpg" target="_blank"><img src="ver.php?f=app_entregas.jpg" alt="Vista Entregas: indicadores, tendencia mensual y detalle por OP." loading="lazy"></a><figcaption><b>Figura 18.</b> Vista Entregas: indicadores, tendencia mensual y detalle por OP.</figcaption></figure>
+<h3 id="78-historial">7.8 Historial</h3>
+<p>Lista los cambios de estado, fechas y kg, los cambios autorizados, los intentos bloqueados y lo anotado en las Tareas de la O.P. Filtre por OP, área, tipo, usuario o fecha. Los cambios hechos en un archivo de Producción llevan su planta y respetan el filtro Planta. Los registros anteriores guardados como "Bitácora" se muestran como "Tareas de la O.P.", así que en el filtro de tipo hay un solo nombre.</p>
+<figure class="shot"><a href="ver.php?f=app_historial.jpg" target="_blank"><img src="ver.php?f=app_historial.jpg" alt="Vista Historial" loading="lazy"></a><figcaption><b>Figura 19.</b> Vista Historial: cada cambio con su tipo, usuario, planta y valores anterior y nuevo. Lo anotado en Tareas de la O.P. también queda aquí.</figcaption></figure>
+<h2 id="8-indicadores-y-reglas-de-calculo">8. Indicadores y reglas de cálculo</h2>
 <p>Todos los indicadores se calculan en la Maestra a partir de los cronogramas. La App solo los muestra, así que la misma regla aplica en todas las vistas.</p>
 <h3 id="81-avance-de-la-op">8.1 Avance de la OP</h3>
 <ul>
 <li>Cada tarea tiene un peso (columna Q, aporte). El avance del área es la suma de los aportes de sus tareas según su estado o kg.</li>
 <li>Las tareas <strong>No aplica</strong> aportan 0 y su peso se reparte proporcionalmente entre las demás tareas del área, así que el área puede llegar al 100 %.</li>
+<li>En Producción, "Kg Fabricados" y "Entrega en negro" pesan 50 % cada una.</li>
+<li>Los días de las tareas No aplica no suman en el total de días de la subestructura (planeado ni real).</li>
 <li>El avance real de la OP para el semáforo es el % de tareas Terminado.</li>
 </ul>
 <h3 id="82-semaforo-regla-v42">8.2 Semáforo (regla v4.2)</h3>
@@ -860,7 +1005,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Estado No aplica</td>
 <td>No se pone ni se quita en el área</td>
-<td>Solo Comercial (botón Tareas O.P)</td>
+<td>Solo Comercial (🧩 Ajustar tareas del cronograma)</td>
 </tr>
 <tr>
 <td>Fecha original de entrega</td>
@@ -887,7 +1032,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>HISTORIAL</td>
 <td>Maestra</td>
-<td>Cambios, cambios autorizados e intentos bloqueados: fecha, usuario, OP, área, tarea, campo, valor anterior y nuevo</td>
+<td>Cambios, cambios autorizados e intentos bloqueados: fecha, usuario, OP, área, tarea, campo, valor anterior y nuevo, y planta</td>
 </tr>
 <tr>
 <td>LINEA_BASE</td>
@@ -897,7 +1042,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>BITACORA_OP</td>
 <td>Maestra</td>
-<td>Notas, compromisos y bloqueos con su cierre</td>
+<td>Tareas de la O.P.: notas, compromisos y bloqueos con su cierre</td>
 </tr>
 <tr>
 <td>ENTREGAS_CLIENTE</td>
@@ -930,25 +1075,27 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Resumen de cambios</td>
 <td>Cada 15 minutos, solo si hubo cambios o bloqueos</td>
-<td>todos@polyuprotec.com</td>
+<td>Desarrollo y las Obeya de Bogotá y Barranquilla (lista en notificar_cambios.php)</td>
 </tr>
 <tr>
-<td>Bitácora semanal</td>
-<td>Lunes a las 7:00: compromisos vencidos, próximos y bloqueos</td>
+<td>📝 Tareas de la O.P. (semanal)</td>
+<td>Lunes a las 7:00: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos</td>
 <td>todos@polyuprotec.com</td>
 </tr>
 </tbody>
 </table>
 <p>Los correos salen de la cuenta de notificaciones del servidor de la Torre de Control. Las credenciales están solo en el servidor y no se incluyen en este documento.</p>
-<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 18.</b> Correo “Cambios críticos registrados”.</figcaption></figure><figure class="shot correo"><a href="ver.php?f=correo_bitacora.jpg" target="_blank"><img src="ver.php?f=correo_bitacora.jpg" alt="Correo semanal de la bitácora." loading="lazy"></a><figcaption><b>Figura 19.</b> Correo semanal de la bitácora.</figcaption></figure><h3 id="94-seguridad-de-acceso">9.4 Seguridad de acceso</h3>
+<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 20.</b> Correo “Cambios críticos registrados”.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_tareas_op.jpg" target="_blank"><img src="ver.php?f=correo_tareas_op.jpg" alt="Correo semanal Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 21.</b> Correo semanal 📝 Tareas de la O.P.: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos.</figcaption></figure>
+<h3 id="94-seguridad-de-acceso">9.4 Seguridad de acceso</h3>
 <ul>
-<li>La App y la bitácora exigen sesión Google del dominio polyuprotec.com.</li>
-<li>El autor de cada registro de bitácora se toma de la sesión, no de lo que escriba el usuario.</li>
+<li>La App y las Tareas de la O.P. exigen sesión Google del dominio polyuprotec.com.</li>
+<li>El autor de cada registro de las Tareas de la O.P. se toma de la sesión, no de lo que escriba el usuario.</li>
 <li>La comunicación entre el servidor y Apps Script usa un token privado que solo conoce el administrador.</li>
 </ul>
 <h2 id="10-administracion-instalacion-despliegue-y-mantenimiento">10. Administración, instalación, despliegue y mantenimiento</h2>
 <p>Esta sección es para el administrador del sistema (Desarrollo Full Stack). Cubre las versiones vigentes, cómo publicar cambios y las tareas de mantenimiento.</p>
-<h3 id="101-versiones-vigentes-torre-de-control-v31">10.1 Versiones vigentes (Torre de Control v3.1)</h3>
+<h3 id="101-versiones-vigentes-torre-de-control-v32">10.1 Versiones vigentes (Torre de Control v3.2)</h3>
 <table>
 <thead>
 <tr>
@@ -961,22 +1108,22 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Macro Comercial</td>
 <td>MACRO_COMERCIAL</td>
-<td>v14.5</td>
+<td>v14.10</td>
 </tr>
 <tr>
-<td>Maestra (API, semáforo, protección, bitácora)</td>
+<td>Maestra (API, semáforo, protección, historial, Tareas de la O.P.)</td>
 <td>MAESTRA_POLYUPROTEC</td>
-<td>v4.4</td>
+<td>v4.7</td>
 </tr>
 <tr>
-<td>Producción V2</td>
+<td>Producción V2 (mismo código en Bogotá y Barranquilla)</td>
 <td>PRODUCCION_V2</td>
-<td>v4.3</td>
+<td>v4.5</td>
 </tr>
 <tr>
 <td>App web</td>
 <td>app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php)</td>
-<td>04/11/2026</td>
+<td>11/11/2026</td>
 </tr>
 </tbody>
 </table>
@@ -1009,14 +1156,14 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Se instala con la protección</td>
 </tr>
 <tr>
-<td>Correo semanal de bitácora (lunes 7:00)</td>
+<td>Correo semanal de Tareas de la O.P. (lunes 7:00)</td>
 <td>Maestra</td>
-<td>Menú → Activar correo de bitácora</td>
+<td>Menú → 📅 Activar correo semanal de Tareas de la O.P.</td>
 </tr>
 <tr>
 <td>Sincronización diaria (cada hora)</td>
-<td>Producción V2</td>
-<td>Menú → Activar sincronización automática</td>
+<td>Producción V2, en cada archivo (Bogotá y Barranquilla)</td>
+<td>Menú → ⏱ Activar sincronización automática</td>
 </tr>
 </tbody>
 </table>
@@ -1025,7 +1172,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <ul>
 <li>Suba app.html y los archivos PHP a la carpeta de la Torre de Control en el hosting.</li>
 <li>Configure en cada PHP la URL de la Web App, el token y los datos SMTP. Estos valores no se documentan aquí; los custodia el administrador.</li>
-<li>Pruebe con las opciones del menú "Probar correo de cambios" y "Probar correo de bitácora".</li>
+<li>Pruebe con las opciones del menú "✉️ Probar correo de cambios" y "✉️ Probar correo de Tareas de la O.P.".</li>
 </ul>
 <h3 id="105-parametros-configurables">10.5 Parámetros configurables</h3>
 <table>
@@ -1072,13 +1219,18 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Maestra</td>
 <td>IDs de los archivos de Google Sheets</td>
 </tr>
+<tr>
+<td>IDS_PRODUCCION_PLANTA</td>
+<td>Comercial</td>
+<td>ID del archivo de Producción de cada planta (Bogotá y Barranquilla)</td>
+</tr>
 </tbody>
 </table>
 <h3 id="106-mantenimiento-periodico">10.6 Mantenimiento periódico</h3>
 <ul>
 <li><strong>Semanal:</strong> revisar en Historial los intentos bloqueados y en Alertas las OP sin planeación o con entregas inconsistentes.</li>
-<li><strong>Mensual:</strong> crear la hoja del nuevo mes en Producción V2 y revisar que la sincronización corre.</li>
-<li><strong>Trimestral:</strong> revisar el tamaño de HISTORIAL y BITACORA_OP y archivar si pasa de varios miles de filas; revisar la lista de autorizados.</li>
+<li><strong>Mensual:</strong> crear la hoja del nuevo mes en los dos archivos de Producción V2 y revisar que la sincronización corre en ambos.</li>
+<li><strong>Trimestral:</strong> revisar el tamaño de HISTORIAL y BITACORA_OP (Tareas de la O.P.) y archivar si pasa de varios miles de filas; revisar la lista de autorizados.</li>
 <li><strong>Ante cada cambio:</strong> aplicar la regla "original funcional + solo modificaciones = final" y comparar original vs. final antes de publicar.</li>
 </ul>
 <h2 id="11-solucion-de-problemas-frecuentes">11. Solución de problemas frecuentes</h2>
@@ -1153,14 +1305,39 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Revisar activadores y probar con "Probar correo"</td>
 </tr>
 <tr>
-<td>La bitácora no guarda</td>
+<td>Las Tareas de la O.P. no guardan</td>
 <td>Sesión vencida o cuenta fuera del dominio</td>
 <td>Volver a iniciar sesión con la cuenta @polyuprotec.com</td>
 </tr>
 <tr>
 <td>Un área no llega al 100 %</td>
 <td>Tareas que no se hacen siguen activas</td>
-<td>Comercial las marca No aplica en Tareas O.P</td>
+<td>Comercial las marca No aplica en 🧩 Ajustar tareas del cronograma</td>
+</tr>
+<tr>
+<td>Una OP antigua de Producción (5 tareas) no cierra aunque todo esté Terminado</td>
+<td>Faltan kg registrados: el aporte depende de los kg frente al peso de la subestructura</td>
+<td>Registrar los kg que faltan; si se fabricaron todos, KG_AVANCE_ACUMULADO debe igualar el peso de la subestructura</td>
+</tr>
+<tr>
+<td>Al enviar una OP sale "No se pueden combinar celdas en una fila filtrada"</td>
+<td>El área dejó un filtro activo en su Cronograma (versiones anteriores a v14.10)</td>
+<td>Desde Comercial v14.10 el filtro se suelta y se restaura solo; con una versión anterior, quitar el filtro y volver a enviar</td>
+</tr>
+<tr>
+<td>#DIV/0! o 01/01/1900 en el cronograma de un área</td>
+<td>Fórmulas anteriores a v14.9 sin datos reales todavía</td>
+<td>Comercial: menú 🩹 Corregir fórmulas</td>
+</tr>
+<tr>
+<td>Editar OP corta la carga o sale un aviso de validación en C6</td>
+<td>El comercial guardado ya no está en la lista desplegable</td>
+<td>Desde v14.9 la OP se carga igual y se escoge el comercial en C6</td>
+</tr>
+<tr>
+<td>Una OP no aparece al filtrar por planta</td>
+<td>La sede de la OP no corresponde a esa planta</td>
+<td>Revisar la sede en Comercial; las OP MIXTO aparecen en las dos plantas</td>
 </tr>
 </tbody>
 </table>
@@ -1168,7 +1345,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <ul>
 <li>OP 4093: fecha de Montaje con año 2029.</li>
 <li>OP 4101: fechas de entrega inconsistentes entre áreas.</li>
-<li>OP 4027, 4077 y 4085: sin fecha de entrega.</li>
+<li>OP 4027, 4077 y 4085: sin fecha de entrega. La 4085 ya quedó con Producción al 100 % (12/11/2026).</li>
 <li>OP 4127: Armado y Soldadura deben marcarse No aplica.</li>
 <li>Listas AUTORIZADOS_FECHAS y AUTORIZADOS_ENTREGA vacías.</li>
 </ul>
@@ -1177,7 +1354,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <h3 id="pr-01-registro-de-una-nueva-op">PR-01 Registro de una nueva OP</h3>
 <ul>
 <li><strong>Responsable:</strong> Comercial. <strong>Frecuencia:</strong> cada contrato nuevo.</li>
-<li><strong>Pasos:</strong> 1) Crear la OP en la base del creador con datos generales y subestructuras. 2) Registrar la fecha de entrega comprometida (queda como fecha original). 3) Ajustar tareas con Tareas O.P (No aplica, nombres). 4) Enviar la OP a las áreas. 5) Programar en Producción V2.</li>
+<li><strong>Pasos:</strong> 1) Crear la OP en la base del creador con datos generales y subestructuras. 2) Registrar la fecha de entrega comprometida (queda como fecha original). 3) Ajustar tareas con 🧩 Ajustar tareas del cronograma (No aplica, nombres). 4) Enviar la OP a las áreas. 5) Programar en Producción V2, en el archivo de la planta que corresponda.</li>
 <li><strong>Registros:</strong> hoja de la OP, ENTREGAS_CLIENTE, correo "Se registró una nueva O.P".</li>
 </ul>
 <h3 id="pr-02-actualizacion-de-avance-por-area">PR-02 Actualización de avance por área</h3>
@@ -1188,9 +1365,9 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </ul>
 <h3 id="pr-03-reporte-diario-de-produccion">PR-03 Reporte diario de producción</h3>
 <ul>
-<li><strong>Responsable:</strong> Producción. <strong>Frecuencia:</strong> diaria.</li>
-<li><strong>Pasos:</strong> 1) Digitar los kg del día en la hoja del mes. 2) Verificar que la sincronización automática corrió o ejecutarla manualmente.</li>
-<li><strong>Registros:</strong> PRODUCCION_V2, cronograma de Producción.</li>
+<li><strong>Responsable:</strong> Producción de cada planta (Bogotá y Barranquilla). <strong>Frecuencia:</strong> diaria.</li>
+<li><strong>Pasos:</strong> 1) En el archivo de su planta, digitar en la hoja del mes los kg fabricados del día (fila de la OP) y los kg entregados en negro (fila ENTREGA MATERIAL EN NEGRO). 2) Verificar que la sincronización automática corrió o ejecutarla manualmente.</li>
+<li><strong>Registros:</strong> PRODUCCION_V2 de cada planta, cronograma de Producción.</li>
 </ul>
 <h3 id="pr-04-reprogramacion-de-la-fecha-de-entrega">PR-04 Reprogramación de la fecha de entrega</h3>
 <ul>
@@ -1210,16 +1387,16 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li><strong>Pasos:</strong> 1) Recibir la solicitud con justificación. 2) Corregir la celda en el cronograma. 3) Verificar en Historial que quedó como "Cambio autorizado".</li>
 <li><strong>Registros:</strong> HISTORIAL, solicitud escrita.</li>
 </ul>
-<h3 id="pr-07-gestion-de-la-bitacora">PR-07 Gestión de la bitácora</h3>
+<h3 id="pr-07-gestion-de-las-tareas-de-la-op">PR-07 Gestión de las Tareas de la O.P.</h3>
 <ul>
 <li><strong>Responsable:</strong> cualquier usuario; cierra el responsable del compromiso o bloqueo. <strong>Frecuencia:</strong> continua.</li>
-<li><strong>Pasos:</strong> 1) Registrar notas, compromisos o bloqueos desde la App. 2) Revisar el correo de los lunes. 3) Cerrar con nota cuando se cumpla.</li>
+<li><strong>Pasos:</strong> 1) Registrar desde la App, en 📝 Tareas de la O.P., los compromisos acordados en cada reunión, las notas y los bloqueos. 2) Revisar el correo de los lunes. 3) Cerrar con nota cuando se cumpla.</li>
 <li><strong>Registros:</strong> BITACORA_OP.</li>
 </ul>
 <h3 id="pr-08-seguimiento-semanal-de-la-torre-de-control">PR-08 Seguimiento semanal de la Torre de Control</h3>
 <ul>
 <li><strong>Responsable:</strong> Gerencia de proyectos y jefes de área. <strong>Frecuencia:</strong> semanal.</li>
-<li><strong>Pasos:</strong> 1) Revisar banda de resumen y OP en rojo o amarillo con su motivo. 2) Revisar Alertas, bitácora y cumplimiento de entregas. 3) Definir compromisos y registrarlos en la bitácora.</li>
+<li><strong>Pasos:</strong> 1) Revisar banda de resumen y OP en rojo o amarillo con su motivo. 2) Revisar Alertas, Tareas de la O.P. y cumplimiento de entregas. 3) Definir compromisos y registrarlos en 📝 Tareas de la O.P.</li>
 <li><strong>Registros:</strong> BITACORA_OP, acta de reunión.</li>
 </ul>
 <h3 id="pr-09-control-de-cambios-del-sistema">PR-09 Control de cambios del sistema</h3>
@@ -1283,8 +1460,24 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Tablero visual de seguimiento por área</td>
 </tr>
 <tr>
-<td>Bitácora</td>
-<td>Registro de notas, compromisos y bloqueos por OP</td>
+<td>Tareas de la O.P.</td>
+<td>Registro de compromisos de reunión, notas y bloqueos por OP (antes "Bitácora")</td>
+</tr>
+<tr>
+<td>Planta</td>
+<td>Sede de Producción: Bogotá o Barranquilla. Cada una tiene su archivo de Producción V2</td>
+</tr>
+<tr>
+<td>MIXTO</td>
+<td>OP con subestructuras en las dos plantas</td>
+</tr>
+<tr>
+<td>Kg Fabricados</td>
+<td>Tarea de Producción que mide los kg fabricados (50 %)</td>
+</tr>
+<tr>
+<td>Entrega en negro</td>
+<td>Tarea de Producción que mide los kg entregados sin galvanizar ni pintar (50 %)</td>
 </tr>
 <tr>
 <td>Web App</td>
@@ -1307,7 +1500,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tbody>
 <tr>
 <td>A</td>
-<td>Código fuente: MACRO_COMERCIAL v14.5, MAESTRA_POLYUPROTEC v4.4, PRODUCCION_V2 v4.3</td>
+<td>Código fuente: MACRO_COMERCIAL v14.10, MAESTRA_POLYUPROTEC v4.7, PRODUCCION_V2 v4.5</td>
 </tr>
 <tr>
 <td>B</td>
@@ -1343,6 +1536,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>1.0</td>
 <td>05/11/2026</td>
 <td>Versión inicial para procedimientos y manual</td>
+<td>Jeider Buelvas — Desarrollo Full Stack</td>
+</tr>
+<tr>
+<td>1.1</td>
+<td>12/11/2026</td>
+<td>Torre de Control v3.2: Producción con Kg Fabricados y Entrega en negro, dos plantas, 📝 Tareas de la O.P., correcciones de Comercial v14.9 y v14.10</td>
 <td>Jeider Buelvas — Desarrollo Full Stack</td>
 </tr>
 <tr>

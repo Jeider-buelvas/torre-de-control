@@ -1,19 +1,19 @@
 # Torre de Control · Polyuprotec S.A.
 
-Sistema de monitoreo operativo de las órdenes de producción (O.P): Comercial registra la O.P, cada área reporta su avance en su cronograma, la **Maestra** consolida y la **App web** lo muestra con semáforo, Gantt, entregas, bitácora e historial.
+Sistema de monitoreo operativo de las órdenes de producción (O.P): Comercial registra la O.P, cada área reporta su avance en su cronograma, la **Maestra** consolida y la **App web** lo muestra con semáforo, Gantt, entregas, Tareas de la O.P. e historial.
 
-**Versión vigente: v3.1** · Responsable: Jeider Buelvas — Desarrollo Full Stack
+**Versión vigente: v3.2** · Responsable: Jeider Buelvas — Desarrollo Full Stack
 
 ## Estructura
 
 | Carpeta | Contenido | Dónde corre |
 | --- | --- | --- |
-| `apps-script/comercial/` | Macro Comercial (v14.6) y botones PNG | Apps Script del archivo Comercial |
-| `apps-script/maestra/` | Maestra (v4.5): API de la App, semáforo, protección, historial, bitácora | Apps Script de la Maestra (Web App) |
-| `apps-script/produccion-v2/` | Producción V2 (v4.3): registro diario de kg | Apps Script de PLANTILLA_LOOKER_PRODUCCION_V2 |
+| `apps-script/comercial/` | Macro Comercial (v14.10) y botones PNG | Apps Script del archivo Comercial |
+| `apps-script/maestra/` | Maestra (v4.7): API de la App, semáforo, protección, historial, Tareas de la O.P. | Apps Script de la Maestra (Web App) |
+| `apps-script/produccion-v2/` | Producción V2 (v4.5): registro diario de kg fabricados y entregados en negro | Apps Script de los dos archivos de Producción (Barranquilla y Bogotá), mismo código |
 | `apps-script/produccion/` | Script original de creación de O.P (v1.x, histórico) | — |
-| `web/torre_de_control_v2/` | App web (`app.html`) y PHP de correo y bitácora | Hosting |
-| `web/torre_de_control_v2/manual_torre_control/` | Manual v3.1 en HTML, protegido con la sesión | Hosting |
+| `web/torre_de_control_v2/` | App web (`app.html`) y PHP de correo y Tareas de la O.P. (`bitacora.php`) | Hosting |
+| `web/torre_de_control_v2/manual_torre_control/` | Manual v3.2 en HTML y PDF, protegido con la sesión | Hosting |
 | `docs/` | Manual en Markdown | — |
 
 ## Secretos (no están en este repositorio)
