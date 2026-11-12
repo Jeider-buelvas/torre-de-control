@@ -69,6 +69,15 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .filter-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;}
 .filter-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;padding:6px 12px;cursor:pointer;outline:none;transition:border-color .2s;}
 .filter-select:focus{border-color:var(--accent);}
+/* Planta (Bogotá / Barranquilla) */
+.planta-seg{display:inline-flex;gap:2px;padding:3px;border:1px solid var(--border);border-radius:999px;background:var(--surface2);}
+.planta-seg button{border:0;background:none;color:var(--muted);font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;padding:5px 12px;border-radius:999px;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s;}
+.planta-seg button:hover{color:var(--text);}
+.planta-seg button.on{background:var(--accent);color:#fff;}
+.planta-badge{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9.5px;font-weight:700;letter-spacing:.4px;padding:1px 6px;border-radius:999px;margin-left:6px;vertical-align:middle;line-height:1.5;}
+.planta-badge.pb-bog{background:rgba(59,130,246,.16);color:#3b82f6;}
+.planta-badge.pb-baq{background:rgba(249,115,22,.16);color:#f97316;}
+.planta-badge.pb-mix{background:rgba(139,92,246,.18);color:#8b5cf6;}
 .alert-pill{padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;color:#fff;background:var(--red);}
 main{position:relative;z-index:1;padding:24px 28px;max-width:1600px;margin:0 auto;flex:1;width:100%;}
 .page{display:none;}
@@ -412,7 +421,7 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="modal-header">
       <div class="modal-title-wrap">
         <div class="modal-icon" style="--mc:var(--grad-2)">📝</div>
-        <div><div class="modal-title" id="bitTitle">Bitácora</div><div class="modal-sub" id="bitSub">—</div></div>
+        <div><div class="modal-title" id="bitTitle">Tareas de la O.P.</div><div class="modal-sub" id="bitSub">—</div></div>
       </div>
       <button class="modal-close" onclick="cerrarBitacora()" aria-label="Cerrar">✕</button>
     </div>
@@ -516,8 +525,13 @@ footer b{color:var(--accent);font-weight:600;}
 </header>
 
 <div class="filter-bar">
-  <span class="filter-label">Sucursal:</span>
-  <select class="filter-select" id="sedeFilter" onchange="applySedeFilter()"><option value="all">Todas</option></select>
+  <span class="filter-label">Planta:</span>
+  <div class="planta-seg" id="plantaSeg" role="group" aria-label="Planta">
+    <button type="button" data-p="all" class="on" onclick="elegirPlanta('all')">🏭 Todas las plantas</button>
+    <button type="button" data-p="BOGOTÁ" onclick="elegirPlanta('BOGOTÁ')">Bogotá</button>
+    <button type="button" data-p="BARRANQUILLA" onclick="elegirPlanta('BARRANQUILLA')">Barranquilla</button>
+  </div>
+  <select class="filter-select" id="sedeFilter" onchange="applySedeFilter()" style="display:none"><option value="all">Todas las plantas</option><option value="BOGOTÁ">Bogotá</option><option value="BARRANQUILLA">Barranquilla</option></select>
   <span class="filter-label">Comercial:</span>
   <select class="filter-select" id="comercialFilter" onchange="applyComercialFilter()"><option value="all">Todos</option></select>
   <span class="filter-label">OP:</span>
@@ -830,8 +844,8 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="alert-list" id="alertEntregas"><div class="empty">Sin alertas de entrega</div></div>
   </div>
   <div class="card" style="margin-bottom:16px">
-    <div class="card-title"><span>📝 Bitácora: compromisos vencidos y bloqueos</span>
-      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en la bitácora de cada OP · se cierran desde la tarjeta</span></div>
+    <div class="card-title"><span>📝 Tareas de la O.P. · compromisos vencidos y bloqueos</span>
+      <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none">Anotados en las Tareas de la O.P. · se cierran desde la tarjeta</span></div>
     <div class="alert-list" id="alertBitacora"><div class="empty">Sin pendientes</div></div>
   </div>
   <div class="card">
@@ -975,7 +989,7 @@ async function cargarDatos(){
     state.tareas=(data.tareas||[]).map(function(t){t.op=String(t.op).replace(/\.0$/,'');return t;});
     state.tareas=normalizarDatosGrupo(state.tareas);
     state.produccion=(data.produccion||[]).map(function(r){r.op=String(r.op).replace(/\.0$/,'');return r;});
-    state.historial=data.historial||[];   // Maestra v4 (solo consulta)
+    state.historial=(data.historial||[]).map(histNombreTareas);   // Maestra v4 (solo consulta) · «Bitácora» se muestra como «Tareas de la O.P.»
     state.entregas=data.entregas||null;   // Maestra v4.1 (desde Comercial)
     state.bitacora=(data.bitacora||[]).map(function(b){b.op=String(b.op).replace(/\.0$/,'');return b;});   // Maestra v4.4
     var ts=data.timestamp?new Date(data.timestamp).toLocaleString('es-CO'):'Ahora';
@@ -1295,21 +1309,61 @@ function populateFilters(){
   else pill.style.display='none';
 }
 
-// Repuebla el filtro de Sucursal con los valores distintos presentes en los datos
+// Filtro de PLANTA (antes "Sucursal"): opciones fijas; se recuerda la última elegida en este navegador
+var PLANTAS=['BOGOTÁ','BARRANQUILLA'];
 function populateSedeFilter(){
-  var sedes=[...new Set(state.tareas.map(function(t){return t.sede||'';}).filter(Boolean))].sort();
   var sel=document.getElementById('sedeFilter');
   var cur=sel.value||currentSede;
-  var html='<option value="all">Todas</option>';
-  sedes.forEach(function(s){html+='<option value="'+s+'">'+s+'</option>';});
-  sel.innerHTML=html;
-  if(cur!=='all' && sedes.indexOf(cur)===-1){
-    currentSede='all';
-    sel.value='all';
-  }else{
-    sel.value=cur;
-  }
+  if(cur==='all'){try{var g=localStorage.getItem('tc_planta');if(g&&PLANTAS.indexOf(g)!==-1)cur=g;}catch(e){}}
+  if(cur!=='all'&&PLANTAS.indexOf(cur)===-1)cur='all';
+  currentSede=cur;sel.value=cur;marcarPlanta();
 }
+function marcarPlanta(){
+  var b=document.querySelectorAll('#plantaSeg button');
+  for(var i=0;i<b.length;i++)b[i].classList.toggle('on',b[i].getAttribute('data-p')===currentSede);
+}
+function elegirPlanta(p){
+  document.getElementById('sedeFilter').value=p;
+  try{localStorage.setItem('tc_planta',p);}catch(e){}
+  applySedeFilter();
+}
+// Planta normalizada: 'BOGOTÁ' · 'BARRANQUILLA' · 'MIXTO' · ''
+function normPlanta(s){
+  var n=String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().trim();
+  return n==='BOGOTA'?'BOGOTÁ':n==='BARRANQUILLA'?'BARRANQUILLA':(n==='MIXTO'||n==='MIXTA')?'MIXTO':'';
+}
+function plantasOP(o){
+  if(!o)return [];
+  if(o.plantas&&o.plantas.length)return o.plantas.map(normPlanta).filter(Boolean);
+  var p=normPlanta(o.sede);return p?[p]:[];
+}
+function opPorNumero(op){op=String(op);for(var i=0;i<state.ops.length;i++)if(String(state.ops[i].op)===op)return state.ops[i];return null;}
+// OP en la planta elegida (una OP MIXTO está en las dos)
+function opEnPlanta(o){
+  if(currentSede==='all')return true;
+  var p=plantasOP(o);
+  return p.indexOf(currentSede)!==-1||p.indexOf('MIXTO')!==-1;
+}
+// Tarea en la planta elegida: por la planta de su subestructura (Sede); si no tiene, por su OP
+function tareaEnPlanta(t){
+  if(currentSede==='all')return true;
+  var p=normPlanta(t.sede);
+  if(p&&p!=='MIXTO')return p===currentSede;
+  var o=opPorNumero(t.op);return o?opEnPlanta(o):true;
+}
+// Registro con planta propia (producción diaria, historial); si no la trae, por su OP
+function registroEnPlanta(planta,op){
+  if(currentSede==='all')return true;
+  var p=normPlanta(planta);
+  if(p&&p!=='MIXTO')return p===currentSede;
+  var o=opPorNumero(op);return o?opEnPlanta(o):true;
+}
+function plantaBadge(p){
+  p=normPlanta(p);if(!p)return '';
+  var c=p==='BOGOTÁ'?['pb-bog','BOG','Planta Bogotá']:p==='BARRANQUILLA'?['pb-baq','BAQ','Planta Barranquilla']:['pb-mix','MIXTO','Se fabrica en las dos plantas'];
+  return '<span class="planta-badge '+c[0]+'" title="'+c[2]+'">'+c[1]+'</span>';
+}
+function plantaBadgeOP(o){var p=plantasOP(o);return plantaBadge(p.length>1||normPlanta(o&&o.sede)==='MIXTO'?'MIXTO':p[0]);}
 
 // Repuebla el filtro de OP según la Sucursal seleccionada (currentSede)
 function populateComercialFilter(){
@@ -1324,7 +1378,7 @@ function applyComercialFilter(){
   populateOpFilter();populateSubFilter();renderAll();
 }
 function populateOpFilter(){
-  var opsBase=(currentSede==='all'?state.ops:state.ops.filter(function(o){return o.sede===currentSede;}))
+  var opsBase=(currentSede==='all'?state.ops:state.ops.filter(opEnPlanta))
     .filter(function(o){return currentComercial==='all'||comercialOP(o)===currentComercial;});
   var opHtml='<option value="all">Todas las OPs</option>';
   opsBase.forEach(function(o){opHtml+='<option value="'+o.op+'">OP '+o.op+' — '+o.nombre+'</option>';});
@@ -1341,7 +1395,7 @@ function populateOpFilter(){
 // Repuebla el filtro de Subestructura según la Sucursal y la OP seleccionadas
 function populateSubFilter(){
   var base=state.tareas.filter(function(t){
-    return (currentSede==='all'||t.sede===currentSede)&&(currentOP==='all'||String(t.op)===currentOP);
+    return tareaEnPlanta(t)&&(currentOP==='all'||String(t.op)===currentOP);
   });
   base=base.filter(function(t){return AREAS_SIN_SUBESTRUCTURA_REAL.indexOf(t.area)===-1;});
   var subs=[...new Set(base.map(function(t){return t.subEstructura||'';}).filter(Boolean))].sort();
@@ -1361,6 +1415,7 @@ function populateSubFilter(){
 
 function applySedeFilter(){
   currentSede=document.getElementById('sedeFilter').value;
+  marcarPlanta();
   currentOP='all';
   currentSub='all';
   populateOpFilter();
@@ -1378,7 +1433,7 @@ function applySubFilter(){currentSub=document.getElementById('subFilter').value;
 
 function filtOps(){
   return state.ops.filter(function(o){
-    return (currentSede==='all'||o.sede===currentSede)&&(currentOP==='all'||String(o.op)===currentOP)&&
+    return opEnPlanta(o)&&(currentOP==='all'||String(o.op)===currentOP)&&
            (currentComercial==='all'||comercialOP(o)===currentComercial);
   });
 }
@@ -1389,7 +1444,7 @@ function opsDelComercial(){
 function filtTareas(){
   var setC=opsDelComercial();
   var t=state.tareas.filter(function(x){
-    return (currentSede==='all'||x.sede===currentSede)&&(currentOP==='all'||String(x.op)===currentOP)&&
+    return tareaEnPlanta(x)&&(currentOP==='all'||String(x.op)===currentOP)&&
            (!setC||setC[String(x.op)]);
   });
   if(currentSub!=='all')t=t.filter(function(x){return x.subEstructura===currentSub;});
@@ -1397,7 +1452,7 @@ function filtTareas(){
 }
 function filtTareasForAreas(){
   var opF=document.getElementById('areaOpFilter').value;
-  var base=state.tareas.filter(function(t){return currentSede==='all'||t.sede===currentSede;});
+  var base=state.tareas.filter(tareaEnPlanta);
   if(opF==='all'||!opF)return base;
   return base.filter(function(t){return String(t.op)===opF;});
 }
@@ -1477,7 +1532,7 @@ function opCardHtml(op){
     });
     var kgStr=kgOp>0?'<div class="op-kg">⚖️ '+fmtKg(kgOp)+' kg</div>':'';
     return '<div class="op-card" style="--sc:'+color+'">'+
-      '<div class="op-header"><div><div class="op-num">OP '+op.op+'</div><div class="op-name">'+(op.nombre||'—')+'</div></div>'+
+      '<div class="op-header"><div><div class="op-num">OP '+op.op+plantaBadgeOP(op)+'</div><div class="op-name">'+(op.nombre||'—')+'</div></div>'+
       '<span class="semaforo-badge '+bCls+'"'+(op.semaforoMotivos?' tabindex="0" style="cursor:help" data-op="'+esc(op.op)+'" onmouseenter="showSemTip(this)" onmouseleave="hideWarnTip()" onfocus="showSemTip(this)" onblur="hideWarnTip()" onclick="event.stopPropagation();showSemTip(this)"':'')+'>'+lbl+'</span></div>'+
       '<div class="op-cliente">👤 '+(op.cliente||'—')+'</div>'+
       '<div class="op-info"><span>💼 '+esc(comercialOP(op)||'Sin comercial')+'</span>'+
@@ -1837,7 +1892,7 @@ function renderGantt(){
     return '<div class="gantt-row">'+
       '<div>'+
         '<div class="gantt-row-name">'+esc(op.nombre||'—')+'</div>'+
-        '<div class="gantt-row-op">OP '+op.op+'</div>'+
+        '<div class="gantt-row-op">OP '+op.op+plantaBadgeOP(op)+'</div>'+
         '<div class="gantt-row-dates">'+ganttFechaAviso(op,'fip')+' → '+ganttFechaAviso(op,'ffp')+(entregaOP(op)?' · 🏁 '+fmtD(entregaOP(op)):'')+'</div>'+
       '</div>'+
       '<div class="gantt-track">'+
@@ -2524,7 +2579,7 @@ function renderBodyTabla(){
     var avPct=(cN(t.pct)||0)+'%';
     return '<tr>'+
       '<td><span class="area-tag">'+(t.area||'')+'</span></td>'+
-      '<td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+(t.op||'')+'</td>'+
+      '<td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;white-space:nowrap">'+(t.op||'')+plantaBadge(t.sede)+'</td>'+
       '<td style="max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.nombreOP||'')+'</td>'+
       '<td style="max-width:90px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(t.cliente||'')+'</td>'+
       '<td style="font-size:12px;color:var(--accent)">'+(t.subEstructura||'—')+'</td>'+
@@ -2724,7 +2779,7 @@ function renderEntBody(){
   var tp=Math.max(1,Math.ceil(total/ENT_PAGE));if(entPage>tp)entPage=tp;var i0=(entPage-1)*ENT_PAGE;
   var est={ok:'<span class="ent-chip ent-ok">✅ A tiempo</span>',late:'<span class="ent-chip ent-late">🔴 Tarde</span>',pend:'<span class="ent-chip ent-pend">⏳ Pendiente</span>',venc:'<span class="ent-chip ent-venc">⛔ Vencida sin entregar</span>'};
   body.innerHTML=entFiltrados.slice(i0,i0+ENT_PAGE).map(function(r){var x=r.x,n=x.reprogramaciones||0;
-    return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+esc(x.op)+'</td><td>'+esc(x.nombre||'—')+'</td><td style="font-size:12px">'+esc(x.cliente||'—')+'</td><td style="font-size:12px">'+esc(x.comercial||'—')+'</td>'+
+    return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;white-space:nowrap">'+esc(x.op)+plantaBadgeOP(opPorNumero(x.op))+'</td><td>'+esc(x.nombre||'—')+'</td><td style="font-size:12px">'+esc(x.cliente||'—')+'</td><td style="font-size:12px">'+esc(x.comercial||'—')+'</td>'+
       '<td style="font-size:12px">'+(r.ori?fmtDMY(r.ori):'—')+'</td><td style="font-size:12px">'+(r.vig?fmtDMY(r.vig):'—')+'</td>'+
       '<td>'+(n?'<span class="ent-rep" onclick="verReprog(\''+esc(x.op)+'\')">'+n+'</span>':'0')+'</td>'+
       '<td style="font-size:12px;font-weight:600">'+(r.real?fmtDMY(r.real):'—')+'</td><td>'+chipDias(r.dOri)+'</td><td>'+chipDias(r.dVig)+'</td><td>'+est[r.estado]+'</td></tr>';}).join('');
@@ -2764,7 +2819,7 @@ function bitDeOP(op){return (state.bitacora||[]).filter(function(b){return Strin
 function bitVencido(b){if(b.estado!=='Abierto'||!b.fechaCompromiso)return false;var d=parseD(b.fechaCompromiso),h=new Date();h.setHours(0,0,0,0);return d&&d<h;}
 function bitBotonHtml(op){
   var ab=bitDeOP(op.op).filter(function(b){return b.estado==='Abierto';}),venc=ab.filter(bitVencido).length;
-  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Bitácora'+
+  return '<button class="bit-btn" onclick="event.stopPropagation();abrirBitacora(\''+esc(op.op)+'\')">📝 Tareas de la O.P.'+
     (ab.length?' <span class="n'+(venc?' v':'')+'">'+ab.length+' abierto'+(ab.length===1?'':'s')+(venc?' · '+venc+' vencido'+(venc===1?'':'s'):'')+'</span>':'')+'</button>';
 }
 function abrirBitacora(op){bitOpActual=String(op);renderBitacoraModal();document.getElementById('bitOverlay').classList.add('active');}
@@ -2788,7 +2843,7 @@ function renderBitacoraModal(){
   if(!bitOpActual)return;
   var op=state.ops.find(function(o){return String(o.op)===bitOpActual;})||{op:bitOpActual,areas:[]};
   var lista=bitDeOP(bitOpActual).slice().sort(function(a,b){var r=function(x){return x.estado==='Abierto'?(bitVencido(x)?0:1):2;};return r(a)-r(b)||String(b.id).localeCompare(String(a.id));});
-  document.getElementById('bitTitle').textContent='Bitácora · OP '+bitOpActual;
+  document.getElementById('bitTitle').textContent='Tareas de la O.P. '+bitOpActual;
   document.getElementById('bitSub').textContent=[op.nombre,op.cliente].filter(Boolean).join(' · ')||'—';
   var areas=ordenarAreas(op.areas||[]).map(function(a){return '<option>'+esc(a)+'</option>';}).join('');
   var form='<div class="bit-form">'+
@@ -2854,7 +2909,9 @@ var histFiltrados=[],histPage=1,HIST_PAGE=20;
 var HIST_ESTILO={'Intento bloqueado':['⛔','var(--red)','var(--tint-red)'],'Cambio protegido sin revertir':['⛔','var(--red)','var(--tint-red)'],
   'Terminación registrada':['✅','var(--green)','var(--tint-green)'],'Diferencia entre áreas':['⚠','var(--yellow)','var(--tint-yellow)'],
   'Cambio de línea base comercial':['🏁','var(--grad-1)','var(--tint-accent)'],'Cambio autorizado':['🔑','var(--grad-3)','var(--tint-accent)'],
-  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Bitácora':['📝','var(--grad-2)','var(--tint-accent)']};
+  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Tareas de la O.P.':['📝','var(--grad-2)','var(--tint-accent)']};
+/* Registros anteriores guardados como «Bitácora»: se muestran con el nombre nuevo (solo presentación). */
+function histNombreTareas(h){if(h){['tipo','campo'].forEach(function(k){if(typeof h[k]==='string')h[k]=h[k].replace(/^Bit[aá]cora\b/i,'Tareas de la O.P.');});}return h;}
 function renderHistorial(){
   var sel=document.getElementById('histTipo');if(!sel)return;
   var cur=sel.value,tipos=[...new Set((state.historial||[]).map(function(h){return h.tipo;}).filter(Boolean))].sort();
@@ -2867,6 +2924,7 @@ function filtrarHistorial(){
   if(currentOP!=='all'||currentComercial!=='all'||currentSede!=='all'){opsOk={};filtOps().forEach(function(o){opsOk[String(o.op)]=true;});}
   histFiltrados=(state.historial||[]).filter(function(h){
     if(opsOk&&!opsOk[String(h.op)])return false;
+    if(h.planta&&!registroEnPlanta(h.planta,h.op))return false;   // cambio hecho en la otra planta
     if(tipo&&h.tipo!==tipo)return false;
     return !txt||[h.op,h.usuario,h.correo,h.area,h.sub,h.tarea,h.campo,h.anterior,h.nuevo,h.tipo].some(function(v){return String(v||'').toLowerCase().indexOf(txt)!==-1;});
   });
@@ -2887,7 +2945,7 @@ function renderHistBody(){
     if(h.tipo==='Diferencia entre áreas')val='<span class="hist-val" style="color:var(--yellow);font-weight:700">'+esc((h.anterior+' '+h.nuevo).trim())+'</span>';
     return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;white-space:nowrap">'+esc(h.fecha)+'</td>'+
       '<td style="font-size:12px"><div style="font-weight:600">'+esc(h.usuario||'—')+'</div>'+(h.correo?'<div style="color:var(--muted);font-size:11px">'+esc(h.correo)+'</div>':'')+'</td>'+
-      '<td style="font-family:\'JetBrains Mono\',monospace;font-size:12px">'+esc(h.op)+'</td>'+
+      '<td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;white-space:nowrap">'+esc(h.op)+(h.planta?plantaBadge(h.planta):plantaBadgeOP(opPorNumero(h.op)))+'</td>'+
       '<td>'+(h.area?'<span class="area-tag">'+esc(h.area)+'</span>':'—')+'</td>'+
       '<td style="font-size:12px">'+esc([h.sub,h.tarea].filter(Boolean).join(' · ')||'—')+'</td>'+
       '<td style="font-size:12px;font-weight:600">'+esc(h.campo)+'</td>'+
@@ -3059,6 +3117,7 @@ function prodBase(){
   var lin=(document.getElementById('prodLinea')||{}).value||'all';
   return state.produccion.filter(function(r){
     if(currentOP!=='all'&&String(r.op)!==currentOP)return false;
+    if(!registroEnPlanta(r.planta,r.op))return false;   // planta (Kg fabricados de cada planta)
     var setC=opsDelComercial();if(setC&&!setC[String(r.op)])return false;
     if(currentSub!=='all'&&r.sub!==currentSub)return false;
     if(lin!=='all'&&String(r.linea).toUpperCase()!==lin)return false;

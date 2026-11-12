@@ -79,7 +79,7 @@ if ($CONFIG['COPIA_A_LOS_AUTORES']) foreach (array_merge($vencidos, $proximos, $
 $para = array_keys($para);
 if (!$para) responder(false, 'No hay destinatarios configurados', 500);
 
-$asunto = '📝 Bitácora semanal: ' . count($vencidos) . ' compromiso' . (count($vencidos) === 1 ? '' : 's') . ' vencido' . (count($vencidos) === 1 ? '' : 's')
+$asunto = '📝 Tareas de la O.P.: ' . count($vencidos) . ' compromiso' . (count($vencidos) === 1 ? '' : 's') . ' vencido' . (count($vencidos) === 1 ? '' : 's')
         . ' · ' . count($proximos) . ' por vencer · ' . count($bloqueos) . ' bloqueo' . (count($bloqueos) === 1 ? '' : 's') . ' — Torre de Control';
 $CONFIG['_LOGO'] = null;
 foreach ($CONFIG['LOGO_ARCHIVOS'] as $f) { if (is_readable($f)) { $CONFIG['_LOGO'] = $f; break; } }
@@ -114,14 +114,14 @@ function bloqueLista($titulo, $ico, $col, $bg, $items, $chip) {
 function plantillaBitacora($vencidos, $proximos, $bloqueos, $C) {
     $hoy = (new DateTime('now', new DateTimeZone('America/Bogota')))->format('d/m/Y');
     $kpi = function ($n, $l, $col, $bg) { return '<td width="33%" style="padding:4px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:' . $bg . ';border-radius:12px"><tr><td style="padding:12px;text-align:center;font-family:Arial,sans-serif"><div style="font-size:26px;font-weight:bold;color:' . $col . '">' . $n . '</div><div style="font-size:11px;color:#5a5a72;margin-top:2px">' . $l . '</div></td></tr></table></td>'; };
-    return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Bitácora semanal</title></head>'
+    return '<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tareas de la O.P.</title></head>'
     . '<body style="margin:0;padding:0;background:#f4f5fb">'
     . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5fb"><tr><td align="center" style="padding:28px 12px">'
     . '<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 4px 24px rgba(43,43,64,.08)">'
     . '<tr><td bgcolor="#8763e8" style="background:#8763e8;background-image:linear-gradient(100deg,#ee4d9e,#8763e8 55%,#4b6ef5);padding:26px 30px">'
     .   '<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font-family:Arial,Helvetica,sans-serif;color:#ffffff">'
     .     '<div style="font-size:12px;letter-spacing:1px;opacity:.9;text-transform:uppercase">🏗️ Torre de Control · Polyuprotec S.A.</div>'
-    .     '<div style="font-size:24px;font-weight:bold;margin-top:8px">📝 Bitácora semanal de las O.P</div>'
+    .     '<div style="font-size:24px;font-weight:bold;margin-top:8px">📝 Resumen semanal de las Tareas de la O.P.</div>'
     .     '<div style="font-size:13px;opacity:.9;margin-top:4px">Compromisos y bloqueos al ' . $hoy . '</div></td>'
     .   (!empty($C['_LOGO']) ? '<td align="right" valign="top" width="120"><span style="display:inline-block;background:#ffffff;border-radius:12px;padding:8px 12px"><img src="' . e($C['_LOGO_SRC'] ?? 'cid:logo-polyuprotec') . '" alt="Polyuprotec S.A." width="91" height="45" style="display:block;width:91px;height:45px;border:0"></span></td>' : '')
     .   '</tr></table></td></tr>'
@@ -133,13 +133,13 @@ function plantillaBitacora($vencidos, $proximos, $bloqueos, $C) {
     . bloqueLista('Bloqueos abiertos', '🚧', '#7c5cfc', '#f1edfe', $bloqueos, function ($b) { return 'Bloqueo'; })
     . '<tr><td align="center" style="padding:22px 24px 26px"><a href="' . e($C['APP_URL']) . '" style="display:inline-block;padding:13px 24px;border-radius:24px;background:#7c5cfc;background-image:linear-gradient(100deg,#ee4d9e,#8763e8 55%,#4b6ef5);color:#ffffff;font-family:Arial,sans-serif;font-size:14px;font-weight:bold;text-decoration:none">🚀 Abrir Torre de Control</a></td></tr>'
     . '<tr><td style="background:#f7f7fc;border-top:1px solid #edeef5;padding:16px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#8f9bb3;text-align:center;line-height:1.6">'
-    .   'Para cerrar un compromiso: Torre de Control → tarjeta de la O.P → 📝 Bitácora → Cerrar.<br>'
+    .   'Para cerrar un compromiso: Torre de Control → tarjeta de la O.P. → 📝 Tareas de la O.P. → Cerrar.<br>'
     .   '<b style="color:#7c5cfc">Polyuprotec S.A.</b> · Sistema de Monitoreo Operativo<br>Desarrollado por <b style="color:#7c5cfc">Jeider Buelvas</b> · Desarrollador Full Stack'
     . '</td></tr></table></td></tr></table></body></html>';
 }
 
 function textoBitacora($v, $p, $b, $C) {
-    $t = "Bitácora semanal de las O.P\n\n";
+    $t = "Resumen semanal de las Tareas de la O.P.\n\n";
     foreach ([['COMPROMISOS VENCIDOS', $v], ['VENCEN EN 7 DÍAS', $p], ['BLOQUEOS ABIERTOS', $b]] as $g) {
         if (!$g[1]) continue;
         $t .= $g[0] . "\n";
