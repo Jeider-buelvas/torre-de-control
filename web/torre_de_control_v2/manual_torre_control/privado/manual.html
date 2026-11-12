@@ -176,6 +176,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </thead>
 <tbody>
 <tr>
+<td>12/11/2026</td>
+<td>v3.2</td>
+<td>App: indicador <strong>🟢 en línea</strong> (quién está viendo la Torre, en qué vista y planta, y quién entró hoy) y enlace <strong>📘 Manual de usuario</strong> en el menú</td>
+</tr>
+<tr>
 <td>11/11/2026</td>
 <td>v3.2</td>
 <td>"Bitácora" pasa a llamarse <strong>📝 Tareas de la O.P.</strong> en la App, el Historial y el correo semanal; el envío a las áreas ya no falla si un área deja un filtro activo (Comercial v14.10)</td>
@@ -279,8 +284,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>App web</td>
 <td>Hosting torredecontrol.polypro.space</td>
-<td>11/11/2026</td>
-<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P. y análisis con IA</td>
+<td>12/11/2026</td>
+<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P., indicador 🟢 en línea, enlace al manual y análisis con IA</td>
 </tr>
 <tr>
 <td>Correos automáticos</td>
@@ -795,6 +800,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>Abra la dirección de la Torre de Control en el navegador.</li>
 <li>Inicie sesión con su cuenta Google @polyuprotec.com. No se aceptan cuentas de otro dominio.</li>
 <li>La App carga los datos de la Maestra. Use el botón de actualizar para traer los últimos cambios.</li>
+<li>El manual de usuario se abre desde el menú lateral, en <strong>📘 Manual de usuario</strong> (al final del menú). Se abre en una pestaña nueva, con la misma sesión.</li>
 </ol>
 <figure class="shot movil"><a href="ver.php?f=app_movil.jpg" target="_blank"><img src="ver.php?f=app_movil.jpg" alt="La App en un celular: el menú se abre con ☰ y los filtros quedan arriba." loading="lazy"></a><figcaption><b>Figura 4.</b> La App en un celular: el menú se abre con ☰ y los filtros quedan arriba.</figcaption></figure>
 <h3 id="72-banda-de-resumen">7.2 Banda de resumen</h3>
@@ -905,6 +911,55 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <h3 id="78-historial">7.8 Historial</h3>
 <p>Lista los cambios de estado, fechas y kg, los cambios autorizados, los intentos bloqueados y lo anotado en las Tareas de la O.P. Filtre por OP, área, tipo, usuario o fecha. Los cambios hechos en un archivo de Producción llevan su planta y respetan el filtro Planta. Los registros anteriores guardados como "Bitácora" se muestran como "Tareas de la O.P.", así que en el filtro de tipo hay un solo nombre.</p>
 <figure class="shot"><a href="ver.php?f=app_historial.jpg" target="_blank"><img src="ver.php?f=app_historial.jpg" alt="Vista Historial" loading="lazy"></a><figcaption><b>Figura 19.</b> Vista Historial: cada cambio con su tipo, usuario, planta y valores anterior y nuevo. Lo anotado en Tareas de la O.P. también queda aquí.</figcaption></figure>
+<h3 id="79-quien-esta-en-linea">7.9 🟢 Quién está en línea</h3>
+<p>En la barra superior, junto al correo del usuario, el botón <strong>🟢 N en línea</strong> muestra cuántas personas tienen la Torre de Control abierta en ese momento. Al pulsarlo se abre una ventana con dos partes:</p>
+<table>
+<thead>
+<tr>
+<th>Parte</th>
+<th>Qué muestra</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>En línea ahora</td>
+<td>Nombre, correo, estado, hace cuánto se conectó, la vista que está viendo (por ejemplo Gantt o "Tareas de la O.P. 4109") y la planta elegida en el filtro</td>
+</tr>
+<tr>
+<td>Hoy entraron</td>
+<td>Todas las personas que abrieron la Torre en el día, con la hora del primer ingreso y la última vez (o "en línea" si siguen conectadas)</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🟢 Activo</td>
+<td>Tiene la Torre abierta y a la vista</td>
+</tr>
+<tr>
+<td>🟡 Ausente</td>
+<td>La tiene abierta, pero en otra pestaña o minimizada</td>
+</tr>
+<tr>
+<td>⚪ (solo en "Hoy entraron")</td>
+<td>Entró hoy y ya no está conectada</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>La información se actualiza cada 30 segundos y enseguida cuando alguien cambia de vista o de planta.</li>
+<li>Al cerrar la Torre la persona sale de la lista; si se cierra de golpe (por ejemplo, se apaga el equipo), sale en máximo 90 segundos.</li>
+<li>"Hoy entraron" se reinicia cada día a medianoche (hora de Colombia).</li>
+<li>Todos los usuarios con sesión ven esta lista. El nombre y el correo salen del inicio de sesión de Google, así que nadie puede aparecer con otro nombre.</li>
+</ul>
+<figure class="shot"><a href="ver.php?f=app_en_linea.jpg" target="_blank"><img src="ver.php?f=app_en_linea.jpg" alt="Ventana En línea" loading="lazy"></a><figcaption><b>Figura 20.</b> Ventana 🟢 En línea: quién tiene la Torre abierta, en qué vista y planta, y quién entró hoy.</figcaption></figure>
 <h2 id="8-indicadores-y-reglas-de-calculo">8. Indicadores y reglas de cálculo</h2>
 <p>Todos los indicadores se calculan en la Maestra a partir de los cronogramas. La App solo los muestra, así que la misma regla aplica en todas las vistas.</p>
 <h3 id="81-avance-de-la-op">8.1 Avance de la OP</h3>
@@ -1085,13 +1140,14 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tbody>
 </table>
 <p>Los correos salen de la cuenta de notificaciones del servidor de la Torre de Control. Las credenciales están solo en el servidor y no se incluyen en este documento.</p>
-<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 20.</b> Correo “Cambios críticos registrados”.</figcaption></figure>
-<figure class="shot correo"><a href="ver.php?f=correo_tareas_op.jpg" target="_blank"><img src="ver.php?f=correo_tareas_op.jpg" alt="Correo semanal Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 21.</b> Correo semanal 📝 Tareas de la O.P.: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 21.</b> Correo “Cambios críticos registrados”.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_tareas_op.jpg" target="_blank"><img src="ver.php?f=correo_tareas_op.jpg" alt="Correo semanal Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 22.</b> Correo semanal 📝 Tareas de la O.P.: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos.</figcaption></figure>
 <h3 id="94-seguridad-de-acceso">9.4 Seguridad de acceso</h3>
 <ul>
 <li>La App y las Tareas de la O.P. exigen sesión Google del dominio polyuprotec.com.</li>
 <li>El autor de cada registro de las Tareas de la O.P. se toma de la sesión, no de lo que escriba el usuario.</li>
 <li>La comunicación entre el servidor y Apps Script usa un token privado que solo conoce el administrador.</li>
+<li>El indicador 🟢 en línea solo funciona con sesión @polyuprotec.com. Guarda el último aviso de cada persona y los ingresos del día en la carpeta datos_presencia del servidor, bloqueada al navegador; no guarda datos de las OP.</li>
 </ul>
 <h2 id="10-administracion-instalacion-despliegue-y-mantenimiento">10. Administración, instalación, despliegue y mantenimiento</h2>
 <p>Esta sección es para el administrador del sistema (Desarrollo Full Stack). Cubre las versiones vigentes, cómo publicar cambios y las tareas de mantenimiento.</p>
@@ -1122,8 +1178,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>App web</td>
-<td>app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php)</td>
-<td>11/11/2026</td>
+<td>app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php)</td>
+<td>12/11/2026</td>
 </tr>
 </tbody>
 </table>
@@ -1171,6 +1227,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <h3 id="104-servidor-web">10.4 Servidor web</h3>
 <ul>
 <li>Suba app.html y los archivos PHP a la carpeta de la Torre de Control en el hosting.</li>
+<li>La carpeta datos_presencia (indicador 🟢 en línea) debe existir con su archivo .htaccess de bloqueo; no se borra ni se sube desde GitHub.</li>
 <li>Configure en cada PHP la URL de la Web App, el token y los datos SMTP. Estos valores no se documentan aquí; los custodia el administrador.</li>
 <li>Pruebe con las opciones del menú "✉️ Probar correo de cambios" y "✉️ Probar correo de Tareas de la O.P.".</li>
 </ul>
@@ -1333,6 +1390,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Editar OP corta la carga o sale un aviso de validación en C6</td>
 <td>El comercial guardado ya no está en la lista desplegable</td>
 <td>Desde v14.9 la OP se carga igual y se escoge el comercial en C6</td>
+</tr>
+<tr>
+<td>No aparece el botón 🟢 en línea</td>
+<td>La App se abrió sin sesión o es una versión guardada en caché</td>
+<td>Iniciar sesión con la cuenta @polyuprotec.com y recargar con Ctrl + F5</td>
 </tr>
 <tr>
 <td>Una OP no aparece al filtrar por planta</td>
@@ -1542,6 +1604,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>1.1</td>
 <td>12/11/2026</td>
 <td>Torre de Control v3.2: Producción con Kg Fabricados y Entrega en negro, dos plantas, 📝 Tareas de la O.P., correcciones de Comercial v14.9 y v14.10</td>
+<td>Jeider Buelvas — Desarrollo Full Stack</td>
+</tr>
+<tr>
+<td>1.2</td>
+<td>12/11/2026</td>
+<td>Indicador 🟢 en línea (sección 7.9) y enlace 📘 Manual de usuario en el menú de la App</td>
 <td>Jeider Buelvas — Desarrollo Full Stack</td>
 </tr>
 <tr>
