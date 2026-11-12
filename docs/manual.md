@@ -54,6 +54,7 @@ La Torre de Control nace para ver en un solo lugar el estado real de cada Orden 
 
 | Fecha | Versión | Cambio principal |
 | --- | --- | --- |
+| 12/11/2026 | v3.2 | App: indicador **🟢 en línea** (quién está viendo la Torre, en qué vista y planta, y quién entró hoy) y enlace **📘 Manual de usuario** en el menú |
 | 11/11/2026 | v3.2 | "Bitácora" pasa a llamarse **📝 Tareas de la O.P.** en la App, el Historial y el correo semanal; el envío a las áreas ya no falla si un área deja un filtro activo (Comercial v14.10) |
 | 09/11/2026 | v3.2 | Cronogramas sin #DIV/0! ni 01/01/1900; los días de las tareas No aplica ya no suman en TOTAL_DIAS; Editar OP carga la OP aunque el comercial guardado ya no esté en la lista (Comercial v14.9) |
 | 06/11/2026 | v3.2 | Producción en dos plantas: un archivo para Bogotá y otro para Barranquilla, filtro Planta e insignias BOG/BAQ/MIXTO en la App y columna PLANTA en el Historial (Producción V2 v4.5, Comercial v14.8, Maestra v4.6) |
@@ -89,7 +90,7 @@ La Torre funciona con archivos de Google Sheets que tienen macros (Apps Script) 
 | Cronogramas de área (9 archivos) | Google Sheets, hoja "Cronograma" | Plantilla por área | Cada área registra estado, fechas reales, kg avanzados y observaciones de sus tareas |
 | PLANTILLA_LOOKER_PRODUCCION_V2 (Barranquilla) y PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA | Google Sheets + Apps Script | v4.5 | Un archivo por planta: cronograma de Producción y hojas mensuales con kg fabricados y kg entregados en negro por día; sincroniza las dos tareas al cronograma |
 | TORRE_CONTROL_MAESTRA_POLYUPROTEC | Google Sheets + Apps Script + Web App | v4.7 | Importa todas las áreas (Producción de las dos plantas), consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda el historial y las Tareas de la O.P., entrega los datos a la App |
-| App web | Hosting torredecontrol.polypro.space | 11/11/2026 | Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P. y análisis con IA |
+| App web | Hosting torredecontrol.polypro.space | 12/11/2026 | Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P., indicador 🟢 en línea, enlace al manual y análisis con IA |
 | Correos automáticos | Hosting (archivos PHP) | 03–11/11/2026 | Nueva OP, cambios críticos cada 15 min y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space |
 
 ### 2.2 Hojas principales de la Maestra
@@ -334,6 +335,7 @@ La App es de consulta: muestra en un solo lugar lo que registran Comercial, las 
 1. Abra la dirección de la Torre de Control en el navegador.
 2. Inicie sesión con su cuenta Google @polyuprotec.com. No se aceptan cuentas de otro dominio.
 3. La App carga los datos de la Maestra. Use el botón de actualizar para traer los últimos cambios.
+4. El manual de usuario se abre desde el menú lateral, en **📘 Manual de usuario** (al final del menú). Se abre en una pestaña nueva, con la misma sesión.
 
 ![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_movil.jpg)
 
@@ -414,6 +416,28 @@ Muestra por OP la fecha original, la vigente y la real, los días de diferencia 
 Lista los cambios de estado, fechas y kg, los cambios autorizados, los intentos bloqueados y lo anotado en las Tareas de la O.P. Filtre por OP, área, tipo, usuario o fecha. Los cambios hechos en un archivo de Producción llevan su planta y respetan el filtro Planta. Los registros anteriores guardados como "Bitácora" se muestran como "Tareas de la O.P.", así que en el filtro de tipo hay un solo nombre.
 
 ![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_historial.jpg)
+
+### 7.9 🟢 Quién está en línea
+
+En la barra superior, junto al correo del usuario, el botón **🟢 N en línea** muestra cuántas personas tienen la Torre de Control abierta en ese momento. Al pulsarlo se abre una ventana con dos partes:
+
+| Parte | Qué muestra |
+| --- | --- |
+| En línea ahora | Nombre, correo, estado, hace cuánto se conectó, la vista que está viendo (por ejemplo Gantt o "Tareas de la O.P. 4109") y la planta elegida en el filtro |
+| Hoy entraron | Todas las personas que abrieron la Torre en el día, con la hora del primer ingreso y la última vez (o "en línea" si siguen conectadas) |
+
+| Estado | Significado |
+| --- | --- |
+| 🟢 Activo | Tiene la Torre abierta y a la vista |
+| 🟡 Ausente | La tiene abierta, pero en otra pestaña o minimizada |
+| ⚪ (solo en "Hoy entraron") | Entró hoy y ya no está conectada |
+
+- La información se actualiza cada 30 segundos y enseguida cuando alguien cambia de vista o de planta.
+- Al cerrar la Torre la persona sale de la lista; si se cierra de golpe (por ejemplo, se apaga el equipo), sale en máximo 90 segundos.
+- "Hoy entraron" se reinicia cada día a medianoche (hora de Colombia).
+- Todos los usuarios con sesión ven esta lista. El nombre y el correo salen del inicio de sesión de Google, así que nadie puede aparecer con otro nombre.
+
+![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_en_linea.jpg)
 
 ## 8. Indicadores y reglas de cálculo
 
@@ -507,6 +531,7 @@ Los correos salen de la cuenta de notificaciones del servidor de la Torre de Con
 - La App y las Tareas de la O.P. exigen sesión Google del dominio polyuprotec.com.
 - El autor de cada registro de las Tareas de la O.P. se toma de la sesión, no de lo que escriba el usuario.
 - La comunicación entre el servidor y Apps Script usa un token privado que solo conoce el administrador.
+- El indicador 🟢 en línea solo funciona con sesión @polyuprotec.com. Guarda el último aviso de cada persona y los ingresos del día en la carpeta datos_presencia del servidor, bloqueada al navegador; no guarda datos de las OP.
 
 ## 10. Administración, instalación, despliegue y mantenimiento
 
@@ -519,7 +544,7 @@ Esta sección es para el administrador del sistema (Desarrollo Full Stack). Cubr
 | Macro Comercial | MACRO_COMERCIAL | v14.10 |
 | Maestra (API, semáforo, protección, historial, Tareas de la O.P.) | MAESTRA_POLYUPROTEC | v4.7 |
 | Producción V2 (mismo código en Bogotá y Barranquilla) | PRODUCCION_V2 | v4.5 |
-| App web | app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php) | 11/11/2026 |
+| App web | app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php) | 12/11/2026 |
 
 ### 10.2 Publicar un cambio en Apps Script
 
@@ -543,6 +568,7 @@ Para revisar o eliminar activadores use el panel "Activadores" del proyecto de A
 ### 10.4 Servidor web
 
 - Suba app.html y los archivos PHP a la carpeta de la Torre de Control en el hosting.
+- La carpeta datos_presencia (indicador 🟢 en línea) debe existir con su archivo .htaccess de bloqueo; no se borra ni se sube desde GitHub.
 - Configure en cada PHP la URL de la Web App, el token y los datos SMTP. Estos valores no se documentan aquí; los custodia el administrador.
 - Pruebe con las opciones del menú "✉️ Probar correo de cambios" y "✉️ Probar correo de Tareas de la O.P.".
 
@@ -590,6 +616,7 @@ La mayoría de las fallas vistas en la operación vienen de datos digitados o de
 | Al enviar una OP sale "No se pueden combinar celdas en una fila filtrada" | El área dejó un filtro activo en su Cronograma (versiones anteriores a v14.10) | Desde Comercial v14.10 el filtro se suelta y se restaura solo; con una versión anterior, quitar el filtro y volver a enviar |
 | #DIV/0! o 01/01/1900 en el cronograma de un área | Fórmulas anteriores a v14.9 sin datos reales todavía | Comercial: menú 🩹 Corregir fórmulas |
 | Editar OP corta la carga o sale un aviso de validación en C6 | El comercial guardado ya no está en la lista desplegable | Desde v14.9 la OP se carga igual y se escoge el comercial en C6 |
+| No aparece el botón 🟢 en línea | La App se abrió sin sesión o es una versión guardada en caché | Iniciar sesión con la cuenta @polyuprotec.com y recargar con Ctrl + F5 |
 | Una OP no aparece al filtrar por planta | La sede de la OP no corresponde a esa planta | Revisar la sede en Comercial; las OP MIXTO aparecen en las dos plantas |
 
 ### 11.1 Casos de datos pendientes a la fecha
@@ -701,4 +728,5 @@ El código y los paquetes se entregan aparte. No contienen ni deben contener con
 | --- | --- | --- | --- |
 | 1.0 | 05/11/2026 | Versión inicial para procedimientos y manual | Jeider Buelvas — Desarrollo Full Stack |
 | 1.1 | 12/11/2026 | Torre de Control v3.2: Producción con Kg Fabricados y Entrega en negro, dos plantas, 📝 Tareas de la O.P., correcciones de Comercial v14.9 y v14.10 | Jeider Buelvas — Desarrollo Full Stack |
+| 1.2 | 12/11/2026 | Indicador 🟢 en línea (sección 7.9) y enlace 📘 Manual de usuario en el menú de la App | Jeider Buelvas — Desarrollo Full Stack |
 |  |  |  |  |
