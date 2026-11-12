@@ -394,6 +394,27 @@ footer b{color:var(--accent);font-weight:600;}
 .obs-btn:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 4px 12px rgba(124,92,252,.18);}
 .obs-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 .obs-box{max-width:600px;}
+/* ── En línea (presencia) ── */
+.btn-enlinea{font-weight:600;}
+.pres-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.3);display:inline-block;margin-right:4px;}
+.pres-box{max-width:760px;}
+.pres-sec{font-family:'Poppins',sans-serif;font-weight:700;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:6px 0 10px;}
+.pres-sec+.pres-sec,.pres-list+.pres-sec{margin-top:18px;}
+.pres-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface2);margin-bottom:8px;}
+.pres-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#fff;background:var(--brand-gradient);overflow:hidden;position:relative;}
+.pres-av img{width:100%;height:100%;object-fit:cover;}
+.pres-est{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;border:2px solid var(--surface2);}
+.pres-av-wrap{position:relative;flex-shrink:0;}
+.pres-main{flex:1;min-width:0;}
+.pres-nom{font-weight:600;font-size:13.5px;color:var(--text);}
+.pres-nom small{font-weight:500;color:var(--accent);margin-left:6px;}
+.pres-meta{font-size:11.5px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pres-vista{font-size:12px;font-weight:600;color:var(--text);text-align:right;white-space:nowrap;}
+.pres-vista span{display:block;font-weight:500;color:var(--muted);font-size:11px;margin-top:2px;}
+.pres-hoy{display:grid;grid-template-columns:1fr auto auto;gap:6px 16px;font-size:12.5px;align-items:center;}
+.pres-hoy .h{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+.pres-hoy .t{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);text-align:right;}
+@media(max-width:600px){.pres-item{flex-wrap:wrap;}.pres-vista{text-align:left;width:100%;padding-left:46px;}}
 .obs-label{font-size:10.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:6px 0 8px;}
 .obs-label:not(:first-child){margin-top:16px;}
 .obs-item{border:1px solid var(--border);background:var(--surface2);border-radius:10px;padding:11px 13px;margin-bottom:8px;}
@@ -430,6 +451,21 @@ footer b{color:var(--accent);font-weight:600;}
     </div>
     <div class="modal-body" id="bitBody"></div>
     <div class="modal-footer"><span id="bitCount">0 anotaciones</span><span>No se borran: los compromisos se cierran con una nota</span></div>
+  </div>
+</div>
+
+<!-- ══ MODAL EN LÍNEA (presencia.php) ══ -->
+<div class="modal-overlay" id="presOverlay" onclick="if(event.target===this)cerrarEnLinea()">
+  <div class="modal-box pres-box" role="dialog" aria-modal="true" aria-labelledby="presTitle">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon" style="--mc:var(--green)">🟢</div>
+        <div><div class="modal-title" id="presTitle">En línea en la Torre de Control</div><div class="modal-sub" id="presSub">—</div></div>
+      </div>
+      <button class="modal-close" onclick="cerrarEnLinea()" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body" id="presBody"></div>
+    <div class="modal-footer"><span>🟢 activo: la Torre está a la vista · 🟡 ausente: abierta en otra pestaña o minimizada</span><span>Se actualiza cada 30 s</span></div>
   </div>
 </div>
 
@@ -525,6 +561,7 @@ footer b{color:var(--accent);font-weight:600;}
     <button class="btn btn-connect" id="btnConectar" onclick="conectarManual()">⬤ Conectar</button>
     <button class="btn btn-primary" onclick="cargarDatos()">⟳ Actualizar</button>
     <button class="btn btn-ai" id="btnAnalizarIA" onclick="analizarConGemini()">✦ Analizar con IA</button>
+    <button class="btn btn-connect btn-enlinea" id="btnEnLinea" onclick="abrirEnLinea()" style="display:none" title="Quién está viendo la Torre de Control"><span class="pres-dot"></span><span id="enLineaN">0</span>&nbsp;en línea</button>
     <span class="timestamp" id="userEmailEl" style="display:none"></span>
     <button class="btn btn-connect" onclick="cerrarSesion()" title="Cerrar sesión">⏻</button>
   </div>
@@ -3397,11 +3434,85 @@ function cargarSesion(){
       var el=document.getElementById('userEmailEl');
       el.textContent='👤 '+d.email;
       el.style.display='';
+      iniciarPresencia();   // 🟢 En línea
     }
   }).catch(function(){});
 }
 function cerrarSesion(){
   if(confirm('¿Cerrar sesión?'))window.location.href='logout.php';
+}
+
+// ── 🟢 EN LÍNEA: quién está viendo la Torre (presencia.php) ──
+var PRES={tab:Math.random().toString(36).slice(2,12),datos:null,timer:null,pronto:null,on:false};
+function presVista(){
+  if(typeof bitOpActual!=='undefined'&&bitOpActual)return 'Tareas de la O.P. '+bitOpActual;
+  var a=document.querySelector('.sidebar-nav .nav-item.active');if(!a)return '';
+  var c=a.cloneNode(true),i=c.querySelector('.nav-icon');if(i)i.remove();return c.textContent.trim();
+}
+function presPlanta(){
+  var p=(typeof currentSede!=='undefined')?currentSede:'all';
+  return p==='BOGOTÁ'?'Bogotá':p==='BARRANQUILLA'?'Barranquilla':'Todas';
+}
+function presCuerpo(salir){
+  return JSON.stringify({tab:PRES.tab,vista:presVista(),planta:presPlanta(),visible:document.visibilityState==='visible',salir:!!salir});
+}
+function presenciaLatido(){
+  return fetch('presencia.php',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:presCuerpo(false)})
+    .then(function(r){return r.ok?r.json():null;}).then(function(d){
+      if(!d||!d.ok)return;
+      PRES.datos=d;
+      var b=document.getElementById('btnEnLinea');
+      document.getElementById('enLineaN').textContent=d.enLinea.length;
+      b.style.display='';
+      if(document.getElementById('presOverlay').classList.contains('active'))renderEnLinea();
+    }).catch(function(){});
+}
+function presenciaPronto(){clearTimeout(PRES.pronto);PRES.pronto=setTimeout(presenciaLatido,400);}
+function iniciarPresencia(){
+  if(PRES.on)return;PRES.on=true;
+  presenciaLatido();
+  PRES.timer=setInterval(presenciaLatido,30000);
+  document.addEventListener('visibilitychange',presenciaPronto);
+  // al cambiar de vista, de planta o abrir Tareas de la O.P. se avisa enseguida
+  document.addEventListener('click',function(e){
+    if(e.target.closest&&e.target.closest('.nav-item, #plantaSeg button, .bit-btn, .modal-close'))presenciaPronto();
+  },true);
+  window.addEventListener('pagehide',function(){
+    try{navigator.sendBeacon('presencia.php',new Blob([presCuerpo(true)],{type:'application/json'}));}catch(e){}
+  });
+}
+function presHace(seg){
+  seg=Math.max(0,seg);if(seg<60)return 'hace un momento';
+  var m=Math.round(seg/60);if(m<60)return 'hace '+m+' min';
+  var h=Math.floor(m/60),r=m%60;return 'hace '+h+' h'+(r?' '+r+' min':'');
+}
+function presHora(ts){return new Date(ts*1000).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',hour12:true});}
+function presIniciales(n){var p=String(n||'?').trim().split(/\s+/);return ((p[0]||'?')[0]+(p[1]?p[1][0]:'')).toUpperCase();}
+function abrirEnLinea(){renderEnLinea();document.getElementById('presOverlay').classList.add('active');presenciaLatido();}
+function cerrarEnLinea(){document.getElementById('presOverlay').classList.remove('active');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&document.getElementById('presOverlay').classList.contains('active'))cerrarEnLinea();});
+function renderEnLinea(){
+  var d=PRES.datos,body=document.getElementById('presBody');
+  if(!d){body.innerHTML='<div class="empty">Cargando…</div>';return;}
+  var act=d.enLinea.filter(function(u){return u.estado==='activo';}).length;
+  document.getElementById('presSub').textContent=d.enLinea.length+' en línea · '+act+' activo'+(act===1?'':'s')+' · '+d.hoy.length+' entraron hoy';
+  var enl={};d.enLinea.forEach(function(u){enl[u.correo]=u;});
+  var h='<div class="pres-sec">En línea ahora ('+d.enLinea.length+')</div><div class="pres-list">';
+  h+=d.enLinea.length?d.enLinea.map(function(u){
+    var col=u.estado==='activo'?'#22c55e':'#f4a100';
+    var av=u.foto?'<img src="'+esc(u.foto).replace(/"/g,'&quot;')+'" alt="" referrerpolicy="no-referrer" onerror="this.remove()">':'';
+    return '<div class="pres-item"><div class="pres-av-wrap"><div class="pres-av">'+esc(presIniciales(u.nombre))+av+'</div><span class="pres-est" style="background:'+col+'"></span></div>'+
+      '<div class="pres-main"><div class="pres-nom">'+esc(u.nombre)+(u.yo?'<small>(tú)</small>':'')+'</div>'+
+      '<div class="pres-meta">'+esc(u.correo)+' · '+(u.estado==='activo'?'🟢 activo':'🟡 ausente')+' · conectado '+presHace(d.ahora-u.desde)+(u.pestanas>1?' · '+u.pestanas+' pestañas':'')+'</div></div>'+
+      '<div class="pres-vista">'+esc(u.vista||'—')+'<span>Planta: '+esc(u.planta||'—')+'</span></div></div>';
+  }).join(''):'<div class="empty">Nadie más en línea</div>';
+  h+='</div><div class="pres-sec">Hoy entraron ('+d.hoy.length+')</div>';
+  h+='<div class="pres-hoy"><div class="h">Persona</div><div class="h" style="text-align:right">Primer ingreso</div><div class="h" style="text-align:right">Última vez</div>'+
+    d.hoy.map(function(x){
+      var on=enl[x.correo];
+      return '<div>'+(on?(on.estado==='activo'?'🟢 ':'🟡 '):'⚪ ')+esc(x.nombre)+'</div><div class="t">'+presHora(x.primero)+'</div><div class="t">'+(on?'en línea':presHora(x.ultimo))+'</div>';
+    }).join('')+'</div>';
+  body.innerHTML=h;
 }
 </script>
 </body>

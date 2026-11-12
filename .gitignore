@@ -5,3 +5,4 @@ config.php
 *_respaldo*
 .DS_Store
 Thumbs.db
+web/torre_de_control_v2/datos_presencia/
