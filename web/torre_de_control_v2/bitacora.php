@@ -46,6 +46,9 @@ $payload = [
 ];
 if ($accion === 'agregar') $payload['datos'] = is_array($in['datos'] ?? null) ? $in['datos'] : [];
 else { $payload['id'] = (string)($in['id'] ?? ''); $payload['nota'] = (string)($in['nota'] ?? ''); }
+// Correo del responsable (solo para el aviso; a la Maestra va igual que antes)
+$avisoA = strtolower(trim((string)($payload['datos']['responsableCorreo'] ?? '')));
+if (isset($payload['datos'])) unset($payload['datos']['responsableCorreo']);
 
 $ch = curl_init($CONFIG['WEB_APP_URL']);
 curl_setopt_array($ch, [
@@ -64,4 +67,20 @@ curl_close($ch);
 if ($resp === false) responder(['ok' => false, 'error' => 'No se pudo conectar con la Maestra: ' . $err], 502);
 $json = json_decode($resp, true);
 if (!is_array($json)) responder(['ok' => false, 'error' => 'La Maestra no respondió como se esperaba (HTTP ' . $code . '). ¿Se publicó la v4.4 como Nueva versión?'], 502);
+// Aviso por correo al responsable, con copia a quien anotó (no afecta lo guardado)
+if ($accion === 'agregar' && !empty($json['ok']) && $avisoA !== '') {
+    if (filter_var($avisoA, FILTER_VALIDATE_EMAIL) && preg_match('/@' . preg_quote($CONFIG['DOMINIO'], '/') . '$/', $avisoA)) {
+        require_once __DIR__ . '/notificar_tarea_op.php';
+        $ctx = [];
+        foreach (['nombre', 'cliente', 'comercial', 'planta', 'entrega'] as $k)
+            $ctx[$k] = mb_substr(trim((string)($in['contexto'][$k] ?? '')), 0, 120);
+        $r = is_array($json['registro'] ?? null) ? $json['registro'] : [];
+        $cc = $avisoA !== $correo ? $correo : '';
+        $err = '';
+        $ok = enviarAvisoTareaOP($r, $ctx, $avisoA, ($r['responsable'] ?? '') ?: $avisoA, $cc, $err);
+        $json['correo'] = ['enviado' => $ok, 'para' => $avisoA, 'copia' => $cc, 'error' => $ok ? '' : $err];
+    } else {
+        $json['correo'] = ['enviado' => false, 'para' => $avisoA, 'copia' => '', 'error' => 'Correo no válido (solo @' . $CONFIG['DOMINIO'] . ')'];
+    }
+}
 responder($json, !empty($json['ok']) ? 200 : 400);
