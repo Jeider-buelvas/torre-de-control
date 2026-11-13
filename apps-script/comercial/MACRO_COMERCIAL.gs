@@ -1,4 +1,17 @@
 // ============================================================
+//  MACRO_COMERCIAL — v14.11
+//  v14.11: CAMBIO DEL NÚMERO DE O.P. desde Editar OP (solo AUTORIZADOS_CAMBIO_OP).
+//          Si en modo edición el número de C3 es distinto, se pide el motivo y el
+//          cambio se aplica en todo lo que usa el número: cronogramas de las áreas
+//          (celda OP del bloque), etiquetas "OP n_s" de las hojas de mes de Producción,
+//          Maestra (Tareas de la O.P., línea base, LOOKER_MAESTRA e historial, vía doPost)
+//          y Comercial (hoja, AB1, subestructuras, ENTREGAS_CLIENTE y REPROGRAMACIONES).
+//          Valida antes que el número nuevo no exista y que la OP no esté terminada ni
+//          entregada. Queda en REGISTRO_CAMBIOS y CAMBIOS_NUMERO_OP, y al final (solo si
+//          todo se guardó) se envía el correo (notificar_cambio_op.php, todos@).
+//          Si algo falla a mitad, al volver a guardar continúa donde quedó.
+//          Si el número no cambia, Editar OP funciona exactamente igual que antes.
+//
 //  MACRO_COMERCIAL — v14.10
 //  v14.10: si un área deja un FILTRO activo en su Cronograma, Google no deja combinar
 //          celdas ("No se pueden combinar celdas en una fila filtrada") y el envío fallaba.
@@ -596,7 +609,7 @@ function cargarOPParaEditar(opParam) {
       'Escoge el comercial correcto en C6 antes de guardar.', ui.ButtonSet.OK);
   ui.alert('✏️ OP ' + m.op + ' cargada para editar',
     'Corrige lo que necesites y pulsa el botón "Crear Nueva OP" (en modo edición guarda los cambios).\n\n' +
-    '• No cambies el número de OP.\n' +
+    '• El número de OP solo lo cambian los autorizados: se pedirá el motivo y se avisará por correo.\n' +
     '• Puedes cambiar nombre, cliente, comercial, sede, subestructuras, fecha de entrega y áreas.\n' +
     '• Para salir sin guardar: Torre de Control > ✖️ Cancelar edición.',
     ui.ButtonSet.OK);
@@ -612,10 +625,12 @@ function guardarCambiosOP() {
 
   var d = _leerFormularioOP(form);
   if (d.faltantes.length) { ui.alert('❌ Faltan datos:\n\n• ' + d.faltantes.join('\n• ')); return; }
-  if (d.op !== opEd) {
-    ui.alert('❌ Estabas editando la OP ' + opEd + ' y el número cambió a "' + d.op + '".\n\n' +
-      'El número de OP no se puede cambiar. Vuelve a poner ' + opEd + ', o cancela la edición y crea la OP nueva.');
-    return;
+  var renombrada = '';
+  if (d.op !== opEd) {   // v14.11: cambio del número de O.P.
+    var res = _cambiarNumeroOP(ss, opEd, d.op);
+    if (!res) return;
+    renombrada = res;
+    opEd = d.op;
   }
   var ws = ss.getSheetByName(opEd);
   if (!_esHojaOP(ws)) { ui.alert('❌ La hoja de la OP ' + opEd + ' ya no existe.'); _salirEdicion(form); return; }
@@ -634,6 +649,11 @@ function guardarCambiosOP() {
   if (agregadas.length) cambios.push(['Áreas agregadas', '', agregadas.join(', ')]);
   if (quitadas.length)  cambios.push(['Áreas quitadas', quitadas.join(', '), '']);
 
+  if (!cambios.length && renombrada) {   // v14.11: solo cambió el número
+    _limpiarFormulario(form); _salirEdicion(form);
+    ui.alert('✅ Número de O.P. cambiado', renombrada, ui.ButtonSet.OK);
+    return;
+  }
   if (!cambios.length) {
     var r0 = ui.alert('Sin cambios', 'No hay cambios en el formulario.\n¿Salir del modo edición?', ui.ButtonSet.YES_NO);
     if (r0 === ui.Button.YES) { _limpiarFormulario(form); _salirEdicion(form); }
@@ -2160,6 +2180,240 @@ function autorizarAreas() {
   } catch (_) { /* desde el editor no hay ventana: ver Registro de ejecución */ }
 }
 
+
+// ============================================================
+//  v14.11 — CAMBIO DEL NÚMERO DE O.P.
+// ============================================================
+var AUTORIZADOS_CAMBIO_OP = [
+  'jdmonroy@polyuprotec.com',
+  'jbuelvas@polyuprotec.com',
+];
+var URL_MAESTRA_WEBAPP = 'https://script.google.com/macros/s/AKfycbyWtYmov4ExKuL9Tu5MOaskUinIRhap3sV_nHsu-58wz_xOB107WST8cCQXY834frKAiQ/exec';
+var URL_NOTIFICAR_CAMBIO_OP = 'https://torredecontrol.polypro.space/torre_de_control_v2/notificar_cambio_op.php';
+var HOJA_CAMBIOS_OP = 'CAMBIOS_NUMERO_OP';
+var PROP_RENOMBRE = 'RENOMBRE_OP_PENDIENTE';
+var MESES_V2 = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+
+function _txtOP(v) { return String(v == null ? '' : v).trim().replace(/\.0$/, ''); }
+function _escRegex(t) { return String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+/** Todos los archivos de cronograma (las áreas y los de Producción de cada planta). */
+function _todosLosCronogramas() {
+  var lista = [], vistos = {};
+  Object.keys(IDS_AREAS).forEach(function(a) {
+    _archivosArea(a).forEach(function(x) {
+      if (!x.id || x.id.indexOf('PON_AQUI') !== -1 || vistos[x.id]) return;
+      vistos[x.id] = true; lista.push({ area: a, id: x.id, etiqueta: x.etiqueta, planta: x.planta });
+    });
+  });
+  return lista;
+}
+
+/** Filas (1-based) donde la columna OP del Cronograma tiene ese número, y estados del bloque. */
+function _buscarOPEnCronograma(tSheet, op) {
+  var last = tSheet.getLastRow(), out = { filas: [], estados: [] };
+  if (last < FILA_INICIO_CRONO) return out;
+  var n = last - FILA_INICIO_CRONO + 1;
+  var v = tSheet.getRange(FILA_INICIO_CRONO, 1, n, 16).getValues();
+  var dentro = false;
+  for (var i = 0; i < n; i++) {
+    var b = _txtOP(v[i][1]);
+    if (b) dentro = (b === op);
+    if (b === op) out.filas.push(FILA_INICIO_CRONO + i);
+    if (dentro && String(v[i][13]).trim()) out.estados.push(String(v[i][15]).trim());
+  }
+  return out;
+}
+
+/** Celdas de las hojas de mes de Producción con la etiqueta "OP n" / "OP n_s". */
+function _etiquetasV2(ssP, op) {
+  var re = new RegExp('^(\\s*OP\\.?\\s*)' + _escRegex(op) + '((_\\d+)?)(?=[\\s·]|$)', 'i'), out = [];
+  ssP.getSheets().forEach(function(sh) {
+    var m = sh.getName().match(/^([A-ZÁÉÍÓÚ]+) (\d{4})$/);
+    if (!m || MESES_V2.indexOf(m[1]) === -1) return;
+    var last = sh.getLastRow();
+    if (last < 1) return;
+    var v = sh.getRange(1, 3, last, 1).getValues();
+    for (var i = 0; i < v.length; i++) {
+      var t = String(v[i][0]);
+      if (re.test(t)) out.push({ sh: sh, fila: i + 1, texto: t });
+    }
+  });
+  return { celdas: out, re: re };
+}
+
+/**
+ * Cambia el número de la O.P. viejo → nuevo en todo el sistema.
+ * Devuelve el texto de resumen si terminó bien, o '' si no se hizo (ya se avisó al usuario).
+ */
+function _cambiarNumeroOP(ss, viejo, nuevo) {
+  var ui = SpreadsheetApp.getUi(), yo = String(_usuario() || '').toLowerCase();
+  viejo = _txtOP(viejo); nuevo = _txtOP(nuevo);
+  if (AUTORIZADOS_CAMBIO_OP.map(function(x) { return x.toLowerCase(); }).indexOf(yo) === -1) {
+    ui.alert('🔒 Cambio de número no autorizado',
+      'Solo pueden cambiar el número de una O.P.: ' + AUTORIZADOS_CAMBIO_OP.join(', ') + '.\n\nVuelve a poner ' + viejo + ' en C3 para guardar los demás cambios.', ui.ButtonSet.OK);
+    return '';
+  }
+  if (!/^[A-Za-z0-9-]{1,20}$/.test(nuevo)) {
+    ui.alert('❌ Número no válido', 'El número de O.P. solo puede tener letras, números o guion (sin espacios ni "_").', ui.ButtonSet.OK);
+    return '';
+  }
+  var props = PropertiesService.getDocumentProperties();
+  var pend = null;
+  try { pend = JSON.parse(props.getProperty(PROP_RENOMBRE) || 'null'); } catch (e) {}
+  var reanudar = !!(pend && pend.viejo === viejo && pend.nuevo === nuevo);
+  var ws = ss.getSheetByName(viejo);
+  if (!_esHojaOP(ws)) { ui.alert('❌ No encontré la hoja de la O.P. ' + viejo + '.'); return ''; }
+
+  // 1) Revisión de todo antes de tocar nada
+  ss.toast('Revisando los archivos de la Torre de Control...', '🔢 O.P. ' + viejo + ' → ' + nuevo, 10);
+  var problemas = [], plan = [], estados = [];
+  if (!reanudar && ss.getSheetByName(nuevo)) problemas.push('Ya existe una hoja con el número ' + nuevo + ' en Comercial.');
+  var shE = _hojaEntregas(ss);
+  var feNuevo = _filaEntrega(shE, nuevo), feViejo = _filaEntrega(shE, viejo);
+  if (!reanudar && feNuevo) problemas.push('El número ' + nuevo + ' ya está en ENTREGAS_CLIENTE.');
+  if (feViejo && _esFecha(feViejo.v[7])) problemas.push('La O.P. ' + viejo + ' ya tiene entrega real registrada (' + _fmtFecha(feViejo.v[7]) + '): no se le cambia el número.');
+  _todosLosCronogramas().forEach(function(x) {
+    try {
+      var ssA = SpreadsheetApp.openById(x.id), cron = ssA.getSheetByName('Cronograma');
+      if (!cron) return;
+      var bv = _buscarOPEnCronograma(cron, viejo), bn = _buscarOPEnCronograma(cron, nuevo);
+      if (!reanudar && bn.filas.length) problemas.push('El número ' + nuevo + ' ya está en el cronograma de ' + x.etiqueta + '.');
+      estados = estados.concat(bv.estados);
+      var et = x.area === 'Produccion' ? _etiquetasV2(ssA, viejo) : { celdas: [] };
+      if (!reanudar && x.area === 'Produccion' && _etiquetasV2(ssA, nuevo).celdas.length) problemas.push('El número ' + nuevo + ' ya aparece en las hojas de mes de ' + x.etiqueta + '.');
+      if (bv.filas.length || et.celdas.length) plan.push({ x: x, cron: cron, filas: bv.filas, et: et });
+    } catch (e) {
+      problemas.push('Sin acceso a ' + x.etiqueta + ': ' + e.message);
+    }
+  });
+  if (estados.length && estados.every(function(e) { return e === 'Terminado' || e === ESTADO_NO_APLICA; }))
+    problemas.push('La O.P. ' + viejo + ' está terminada en todas las áreas: no se le cambia el número.');
+  if (problemas.length) { ui.alert('❌ No se puede cambiar el número', '• ' + problemas.join('\n• ') + '\n\nNo se cambió nada.', ui.ButtonSet.OK); return ''; }
+
+  // 2) Motivo (obligatorio)
+  var motivo = reanudar ? pend.motivo : '';
+  if (!reanudar) {
+    var pr = ui.prompt('🔢 Cambio de número: O.P. ' + viejo + ' → ' + nuevo,
+      'Escribe el motivo del cambio (obligatorio).\nEj.: Corrección del número de la orden por solicitud del área Comercial.', ui.ButtonSet.OK_CANCEL);
+    if (pr.getSelectedButton() !== ui.Button.OK) return '';
+    motivo = pr.getResponseText().trim();
+    if (motivo.length < 5) { ui.alert('❌ El motivo es obligatorio (mínimo 5 caracteres). No se cambió nada.'); return ''; }
+  }
+
+  // 3) Confirmación
+  var lin = plan.map(function(p) {
+    return '• ' + p.x.etiqueta + (p.filas.length ? ': cronograma' : '') + (p.et.celdas.length ? (p.filas.length ? ' + ' : ': ') + p.et.celdas.length + ' etiqueta(s) en hojas de mes' : '');
+  });
+  var txt = 'O.P. ' + viejo + '  →  ' + nuevo + '\nMotivo: ' + motivo + '\n\nSe actualizará:\n• Comercial: hoja de la O.P., subestructuras, entregas y reprogramaciones\n' +
+    (lin.length ? lin.join('\n') + '\n' : '') + '• Maestra: Tareas de la O.P., línea base y tablero\n\n' +
+    'Las fechas, kg, estados y observaciones no cambian. El historial anterior se conserva.\nAl terminar se enviará el correo a todos@polyuprotec.com.' +
+    (reanudar ? '\n\n(Se continúa un cambio que quedó a medias.)' : '') + '\n\n¿Continuar?';
+  if (ui.alert('🔢 Cambiar número de O.P.', txt, ui.ButtonSet.YES_NO) !== ui.Button.YES) return '';
+
+  var lock = LockService.getDocumentLock();
+  if (!lock.tryLock(30000)) { ui.alert('⏳ Otra persona está trabajando con las O.P. Intenta de nuevo en un minuto.'); return ''; }
+  var ahora = reanudar && pend.fecha ? new Date(pend.fecha) : new Date();
+  props.setProperty(PROP_RENOMBRE, JSON.stringify({ viejo: viejo, nuevo: nuevo, motivo: motivo, usuario: yo, fecha: ahora.toISOString() }));
+  var hechos = [];
+  try {
+    // 4) Cronogramas de las áreas: solo la celda OP del bloque
+    plan.forEach(function(p) {
+      p.filas.forEach(function(f) { p.cron.getRange(f, 2).setValue(/^\d+$/.test(nuevo) ? Number(nuevo) : nuevo); });
+      p.et.celdas.forEach(function(c) { c.sh.getRange(c.fila, 3).setValue(c.texto.replace(p.et.re, '$1' + nuevo + '$2')); });
+      if (p.filas.length || p.et.celdas.length) hechos.push(p.x.etiqueta);
+    });
+    SpreadsheetApp.flush();
+
+    // 5) Maestra (la hace la propia Maestra: sus hojas están protegidas)
+    var rM = _maestraRenombrarOP(viejo, nuevo, motivo);
+    if (!rM.ok) throw new Error('Maestra: ' + rM.error);
+
+    // 6) Comercial
+    var repl = function(sh, col) {
+      if (!sh || sh.getLastRow() < 2) return 0;
+      var rg = sh.getRange(2, col, sh.getLastRow() - 1, 1), v = rg.getDisplayValues(), n = 0;
+      for (var i = 0; i < v.length; i++) if (_txtOP(v[i][0]) === viejo) { sh.getRange(i + 2, col).setValue(/^\d+$/.test(nuevo) ? Number(nuevo) : nuevo); n++; }
+      return n;
+    };
+    repl(shE, 1);
+    var shR = ss.getSheetByName(HOJA_REPROG);
+    if (shR) repl(shR, ENC_REPROG.indexOf('OP') + 1);
+    var lastW = ws.getLastRow();
+    if (lastW >= 2) {
+      var dv = ws.getRange(2, 4, lastW - 1, 1).getValues(), reS = new RegExp('^' + _escRegex(viejo) + '_(\\d+)$');
+      for (var i = 0; i < dv.length; i++) {
+        var t = String(dv[i][0]).trim(), mm = t.match(reS);
+        if (mm) ws.getRange(i + 2, 4).setValue(nuevo + '_' + mm[1]);
+      }
+    }
+    ws.getRange(1, 28).setValue(/^\d+$/.test(nuevo) ? Number(nuevo) : nuevo);
+    ws.setName(nuevo);
+
+    // 7) Registro
+    var reg = _nuevoRegistro(nuevo);
+    reg.add('Cambio de número de O.P.', '', '', '', 'Número de O.P.', viejo, nuevo);
+    reg.add('Cambio de número de O.P.', '', '', '', 'Motivo', '', motivo);
+    reg.guardar(ss);
+    var shC = ss.getSheetByName(HOJA_CAMBIOS_OP);
+    if (!shC) {
+      shC = ss.insertSheet(HOJA_CAMBIOS_OP);
+      shC.getRange(1, 1, 1, 6).setValues([['FECHA_HORA', 'USUARIO', 'OP_ANTERIOR', 'OP_NUEVA', 'MOTIVO', 'ACTUALIZADO_EN']])
+        .setBackground('#2F75B5').setFontColor('#FFFFFF').setFontWeight('bold');
+      shC.setFrozenRows(1);
+      try { shC.protect().setDescription('Cambios de número de O.P. (solo lo escribe el script)').setWarningOnly(true); } catch (_) {}
+    }
+    shC.appendRow([ahora, yo, viejo, nuevo, motivo, ['Comercial', 'Maestra'].concat(hechos).join(', ')]);
+    shC.getRange(shC.getLastRow(), 1).setNumberFormat('dd/mm/yyyy hh:mm');
+    PropertiesService.getUserProperties().setProperty(PROP_EDICION, nuevo);
+    props.deleteProperty(PROP_RENOMBRE);
+    _invalidarListaOP();
+  } catch (e) {
+    lock.releaseLock();
+    ui.alert('⚠️ El cambio quedó a medias', 'Error: ' + e.message + '\n\nYa actualizado: ' + (hechos.join(', ') || 'nada') +
+      '.\nNo se envió el correo. Revisa el problema y vuelve a pulsar "Guardar cambios" con el número ' + nuevo + ': continuará donde quedó.', ui.ButtonSet.OK);
+    return '';
+  }
+  lock.releaseLock();
+
+  // 8) Correo (solo si todo se guardó)
+  var m = _leerMetaOP(ss.getSheetByName(nuevo));
+  var correo = _notificarCambioOP({ viejo: viejo, nuevo: nuevo, motivo: motivo, usuario: yo, fecha: ahora,
+    nombre: m.nombreOp, cliente: m.cliente, comercial: m.comercial, areas: ['Comercial', 'Maestra'].concat(hechos) });
+  return 'O.P. ' + viejo + ' → ' + nuevo + '\nMotivo: ' + motivo + '\nActualizado en: Comercial, Maestra' + (hechos.length ? ', ' + hechos.join(', ') : '') +
+    '\n\n' + correo;
+}
+
+/** Pide a la Maestra (doPost) que cambie el número en sus hojas. */
+function _maestraRenombrarOP(viejo, nuevo, motivo) {
+  var token = _tokenCorreo();
+  if (!token) return { ok: false, error: 'falta TOKEN_CORREO en Propiedades del script' };
+  try {
+    var resp = UrlFetchApp.fetch(URL_MAESTRA_WEBAPP, { method: 'post', contentType: 'application/json', muteHttpExceptions: true, followRedirects: true,
+      payload: JSON.stringify({ token: token, accion: 'renombrarOP', viejo: viejo, nuevo: nuevo, motivo: motivo,
+        usuario: { correo: _usuario(), nombre: _usuario() } }) });
+    var r = {};
+    try { r = JSON.parse(resp.getContentText()); } catch (_) { return { ok: false, error: 'respuesta inválida (HTTP ' + resp.getResponseCode() + '). ¿Se publicó la Maestra v4.8 como Nueva versión?' }; }
+    return r.ok ? r : { ok: false, error: r.error || 'error desconocido' };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+
+/** Correo del cambio de número (lo envía el hosting, como el de nueva O.P.). */
+function _notificarCambioOP(c) {
+  if (!CORREO_ACTIVO) return '';
+  var token = _tokenCorreo();
+  if (!token) return 'ℹ️ Correo no enviado: falta TOKEN_CORREO en Propiedades del script.';
+  try {
+    var resp = UrlFetchApp.fetch(URL_NOTIFICAR_CAMBIO_OP, { method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ token: token, viejo: c.viejo, nuevo: c.nuevo, motivo: c.motivo, usuario: c.usuario,
+        fecha: Utilities.formatDate(c.fecha, Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'),
+        nombre: c.nombre, cliente: c.cliente, comercial: c.comercial, areas: c.areas }) });
+    var r = {};
+    try { r = JSON.parse(resp.getContentText()); } catch (_) {}
+    if (resp.getResponseCode() === 200 && r.ok) return '✉️ ' + (r.mensaje || 'Correo enviado');
+    return '⚠️ No se envió el correo: ' + (r.mensaje || ('HTTP ' + resp.getResponseCode()));
+  } catch (e) { return '⚠️ No se envió el correo: ' + e.message; }
+}
 
 // ============================================================
 //  v11 — CORREO "SE CREÓ UNA NUEVA O.P"

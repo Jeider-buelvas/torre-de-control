@@ -2985,7 +2985,7 @@ var histFiltrados=[],histPage=1,HIST_PAGE=20;
 var HIST_ESTILO={'Intento bloqueado':['⛔','var(--red)','var(--tint-red)'],'Cambio protegido sin revertir':['⛔','var(--red)','var(--tint-red)'],
   'Terminación registrada':['✅','var(--green)','var(--tint-green)'],'Diferencia entre áreas':['⚠','var(--yellow)','var(--tint-yellow)'],
   'Cambio de línea base comercial':['🏁','var(--grad-1)','var(--tint-accent)'],'Cambio autorizado':['🔑','var(--grad-3)','var(--tint-accent)'],
-  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Tareas de la O.P.':['📝','var(--grad-2)','var(--tint-accent)']};
+  'Cambio detectado en revisión':['🔍','var(--yellow)','var(--tint-yellow)'],'Tareas de la O.P.':['📝','var(--grad-2)','var(--tint-accent)'],'Cambio de número de O.P.':['🔢','var(--grad-1)','var(--tint-accent)']};
 /* Registros anteriores guardados como «Bitácora»: se muestran con el nombre nuevo (solo presentación). */
 function histNombreTareas(h){if(h){['tipo','campo'].forEach(function(k){if(typeof h[k]==='string')h[k]=h[k].replace(/^Bit[aá]cora\b/i,'Tareas de la O.P.');});}return h;}
 function renderHistorial(){
@@ -2998,6 +2998,9 @@ function filtrarHistorial(){
   var txt=(document.getElementById('histTexto').value||'').toLowerCase(),tipo=document.getElementById('histTipo').value;
   var opsOk=null;
   if(currentOP!=='all'||currentComercial!=='all'||currentSede!=='all'){opsOk={};filtOps().forEach(function(o){opsOk[String(o.op)]=true;});}
+  if(opsOk){   // O.P. que cambiaron de número: también se ven sus registros con el número anterior
+    for(var _k=0;_k<3;_k++)(state.historial||[]).forEach(function(h){if(h.tipo==='Cambio de número de O.P.'&&opsOk[String(h.nuevo).trim()])opsOk[String(h.anterior).trim()]=true;});
+  }
   histFiltrados=(state.historial||[]).filter(function(h){
     if(opsOk&&!opsOk[String(h.op)])return false;
     if(h.planta&&!registroEnPlanta(h.planta,h.op))return false;   // cambio hecho en la otra planta

@@ -1,4 +1,12 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.7
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.8
+// v4.8 — CAMBIO DEL NÚMERO DE O.P. (pedido por Comercial v14.11 vía doPost, con el token):
+//   accion 'renombrarOP' {viejo, nuevo, motivo, usuario}. Cambia el número en
+//   BITACORA_OP (Tareas de la O.P.), LINEA_BASE (clave y columna OP), LOOKER_MAESTRA
+//   y DIF_ENTREGA, y deja en HISTORIAL_CAMBIOS el evento "Cambio de número de O.P."
+//   con el motivo. Los registros anteriores del historial NO se reescriben.
+//   Todo lo demás, igual que v4.7.
+//
+// (v4.7)
 // v4.7 — NOMBRE: la "Bitácora" pasa a llamarse "Tareas de la O.P." en lo que ve el usuario
 //   (menús, mensajes y los registros NUEVOS del historial: TIPO "Tareas de la O.P.").
 //   Nombres internos sin cambios (hoja BITACORA_OP, funciones, bitacora.php). Los
@@ -1556,9 +1564,65 @@ function verBitacora() { var ss = SpreadsheetApp.getActiveSpreadsheet(); ss.setA
 /** Recibe las anotaciones desde bitacora.php (hosting). Responde JSON. */
 function doPost(e) {
   var r;
-  try { r = _bitacoraPost(JSON.parse(e && e.postData ? e.postData.contents : '{}')); }
+  try {
+    var b = JSON.parse(e && e.postData ? e.postData.contents : '{}');
+    r = (b && b.accion === 'renombrarOP') ? _renombrarOPPost(b) : _bitacoraPost(b);   // v4.8
+  }
   catch (err) { r = { ok: false, error: 'Solicitud inválida: ' + err.message }; }
   return ContentService.createTextOutput(JSON.stringify(r)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** v4.8 — Cambio del número de O.P. (lo pide Comercial). Idempotente: si ya se hizo, no cambia nada. */
+function _renombrarOPPost(b) {
+  var tk = _tokenBitacora();
+  if (!b || !tk || b.token !== tk) return { ok: false, error: 'Token inválido' };
+  var limpio = function(v) { return String(v == null ? '' : v).trim().replace(/\.0$/, ''); };
+  var viejo = limpio(b.viejo), nuevo = limpio(b.nuevo), motivo = String(b.motivo || '').trim().slice(0, 500);
+  var u = b.usuario || {}, correo = String(u.correo || '').trim().toLowerCase(), autor = String(u.nombre || '').trim() || correo;
+  if (!viejo || !nuevo || viejo === nuevo) return { ok: false, error: 'Números de O.P. no válidos' };
+  if (motivo.length < 5) return { ok: false, error: 'Falta el motivo' };
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); } catch (er) { return { ok: false, error: 'Ocupado, intenta de nuevo' }; }
+  try {
+    var ss = SpreadsheetApp.openById(ID_MAESTRA), n = { tareasOP: 0, lineaBase: 0, looker: 0 };
+    var valor = /^\d+$/.test(nuevo) ? Number(nuevo) : nuevo;
+    var cambiarCol = function(sh, col, cont) {
+      if (!sh || sh.getLastRow() < 2) return;
+      var rg = sh.getRange(2, col, sh.getLastRow() - 1, 1), v = rg.getValues(), hubo = false;
+      for (var i = 0; i < v.length; i++) if (limpio(v[i][0]) === viejo) { v[i][0] = valor; n[cont]++; hubo = true; }
+      if (hubo) rg.setValues(v);
+    };
+    cambiarCol(ss.getSheetByName(HOJA_BITACORA), 5, 'tareasOP');                     // BITACORA_OP: columna OP
+    var lb = ss.getSheetByName(HOJA_LINEA_BASE);                                   // LINEA_BASE: CLAVE (area|op|…) y OP
+    if (lb && lb.getLastRow() > 1) {
+      var rgL = lb.getRange(2, 1, lb.getLastRow() - 1, 3), vl = rgL.getValues(), hubo = false;
+      for (var i = 0; i < vl.length; i++) {
+        var p = String(vl[i][0]).split('|');
+        if (p.length > 1 && limpio(p[1]) === viejo) { p[1] = nuevo; vl[i][0] = p.join('|'); hubo = true; }
+        if (limpio(vl[i][2]) === viejo) { vl[i][2] = valor; n.lineaBase++; hubo = true; }
+      }
+      if (hubo) rgL.setValues(vl);
+    }
+    var lk = ss.getSheetByName('LOOKER_MAESTRA');                                  // tablero: columna OP
+    if (lk && lk.getLastRow() > 1) {
+      var enc = lk.getRange(1, 1, 1, lk.getLastColumn()).getValues()[0], cOP = enc.map(function(x) { return String(x).trim(); }).indexOf('OP') + 1;
+      if (cOP > 0) cambiarCol(lk, cOP, 'looker');
+    }
+    var props = PropertiesService.getScriptProperties(), dif = JSON.parse(props.getProperty('DIF_ENTREGA') || '{}');
+    if (dif[viejo] !== undefined) { dif[nuevo] = dif[viejo]; delete dif[viejo]; props.setProperty('DIF_ENTREGA', JSON.stringify(dif)); }
+    // Historial: un solo evento por cambio (si se repite la llamada, no se duplica)
+    var hs = _hojaHistorial(ss), yaEsta = false, lastH = hs.getLastRow();
+    if (lastH > 1) {
+      var desde = Math.max(2, lastH - 200), vh = hs.getRange(desde, 1, lastH - desde + 1, 11).getValues();
+      yaEsta = vh.some(function(r) { return String(r[10]) === 'Cambio de número de O.P.' && limpio(r[8]) === viejo && limpio(r[9]) === nuevo; });
+    }
+    if (!yaEsta) _escribirHistorial(ss, [_evento(autor, correo, nuevo, '', '', '', 'Número de O.P.', viejo, nuevo, 'Cambio de número de O.P.', 'Motivo: ' + motivo, '', false)]);
+    return { ok: true, viejo: viejo, nuevo: nuevo, cambios: n };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function _bitacoraPost(b) {

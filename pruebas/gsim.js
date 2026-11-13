@@ -42,7 +42,7 @@ class Sheet {
     const px = new Proxy(this, { get: (t, p) => (p in t ? t[p] : (typeof p === 'string' ? (() => px) : undefined)) }); this._px = px; return px; }
   _valor(r, c) { const x = this.cells.get(r + ',' + c); if (!x) return ''; if (x.f && (x.v === undefined || x.v === null)) return ''; return x.v === null || x.v === undefined ? '' : dec(x.v); }
   _crecer(r, c) { if (r > this.maxR) this.maxR = r; if (c > this.maxC) this.maxC = c; }
-  getName() { return this.name; } setName(n) { this.name = n; return this._px; } getParent() { return this.ss; } getIndex() { return this.ss.sheets.indexOf(this._px) + 1; }
+  appendRow(r) { const f = this.getLastRow() + 1; this.getRange(f, 1, 1, r.length).setValues([r]); return this._px; } getName() { return this.name; } setName(n) { this.name = n; return this._px; } getParent() { return this.ss; } getIndex() { return this.ss.sheets.indexOf(this._px) + 1; }
   getMaxRows() { return this.maxR; } getMaxColumns() { return this.maxC; }
   getLastRow() { let m = 0; for (const [k, x] of this.cells) { if ((x.v === '' || x.v == null) && !x.f) continue; const r = +k.split(',')[0]; if (r > m) m = r; } return m; }
   getLastColumn() { let m = 0; for (const [k, x] of this.cells) { if ((x.v === '' || x.v == null) && !x.f) continue; const c = +k.split(',')[1]; if (c > m) m = c; } return m; }
