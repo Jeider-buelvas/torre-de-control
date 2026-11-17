@@ -1,6 +1,6 @@
 # Torre de Control v3.2 — Antecedentes, funcionamiento y manual de uso
 
-12/11/2026 · Jeider Buelvas — Desarrollo Full Stack
+17/11/2026 · Jeider Buelvas — Desarrollo Full Stack
 
 ## Presentación
 
@@ -10,7 +10,7 @@ Este documento reúne los antecedentes, el funcionamiento y el manual de uso de 
 | --- | --- |
 | Sistema | Torre de Control · Sistema de Monitoreo Operativo |
 | Versión del sistema | v3.2 (12/11/2026) |
-| Componentes | Maestra v4.7 · Macro Comercial v14.10 · Producción V2 v4.5 (archivos Bogotá y Barranquilla) · App web 11/11/2026 |
+| Componentes | Maestra v4.8 · Macro Comercial v14.11 · Producción V2 v4.5 (archivos Bogotá y Barranquilla) · App web 13/11/2026 |
 | Responsable técnico | Jeider Buelvas, Desarrollador Full Stack |
 | Destinatarios | Responsables de procesos, calidad y documentación interna |
 | Acceso a la App | https://torredecontrol.polypro.space/torre_de_control_v2/ (cuentas @polyuprotec.com) |
@@ -54,6 +54,7 @@ La Torre de Control nace para ver en un solo lugar el estado real de cada Orden 
 
 | Fecha | Versión | Cambio principal |
 | --- | --- | --- |
+| 13/11/2026 | v3.2 | **Cambio del número de O.P.** desde Editar OP, con motivo y correo (Comercial v14.11, Maestra v4.8); **correo automático al responsable** de cada registro de Tareas de la O.P.; **Cumplimiento Prom.** solo por O.P. con tope de 100 % por tarea; Vista Ejecutiva sin tarjetas repetidas |
 | 12/11/2026 | v3.2 | App: indicador **🟢 en línea** (quién está viendo la Torre, en qué vista y planta, y quién entró hoy) y enlace **📘 Manual de usuario** en el menú |
 | 11/11/2026 | v3.2 | "Bitácora" pasa a llamarse **📝 Tareas de la O.P.** en la App, el Historial y el correo semanal; el envío a las áreas ya no falla si un área deja un filtro activo (Comercial v14.10) |
 | 09/11/2026 | v3.2 | Cronogramas sin #DIV/0! ni 01/01/1900; los días de las tareas No aplica ya no suman en TOTAL_DIAS; Editar OP carga la OP aunque el comercial guardado ya no esté en la lista (Comercial v14.9) |
@@ -86,12 +87,12 @@ La Torre funciona con archivos de Google Sheets que tienen macros (Apps Script) 
 
 | Componente | Dónde vive | Versión | Qué hace |
 | --- | --- | --- | --- |
-| PLANTILLA_LOOKER_COMERCIAL | Google Sheets + Apps Script | v14.10 | Registra y edita OP, las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP |
+| PLANTILLA_LOOKER_COMERCIAL | Google Sheets + Apps Script | v14.11 | Registra y edita OP (incluido el cambio de número), las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP |
 | Cronogramas de área (9 archivos) | Google Sheets, hoja "Cronograma" | Plantilla por área | Cada área registra estado, fechas reales, kg avanzados y observaciones de sus tareas |
 | PLANTILLA_LOOKER_PRODUCCION_V2 (Barranquilla) y PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA | Google Sheets + Apps Script | v4.5 | Un archivo por planta: cronograma de Producción y hojas mensuales con kg fabricados y kg entregados en negro por día; sincroniza las dos tareas al cronograma |
-| TORRE_CONTROL_MAESTRA_POLYUPROTEC | Google Sheets + Apps Script + Web App | v4.7 | Importa todas las áreas (Producción de las dos plantas), consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda el historial y las Tareas de la O.P., entrega los datos a la App |
-| App web | Hosting torredecontrol.polypro.space | 12/11/2026 | Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P., indicador 🟢 en línea, enlace al manual y análisis con IA |
-| Correos automáticos | Hosting (archivos PHP) | 03–11/11/2026 | Nueva OP, cambios críticos cada 15 min y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space |
+| TORRE_CONTROL_MAESTRA_POLYUPROTEC | Google Sheets + Apps Script + Web App | v4.8 | Importa todas las áreas (Producción de las dos plantas), consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda el historial y las Tareas de la O.P., entrega los datos a la App |
+| App web | Hosting torredecontrol.polypro.space | 13/11/2026 | Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P. con correo al responsable, indicador 🟢 en línea, enlace al manual y análisis con IA |
+| Correos automáticos | Hosting (archivos PHP) | 03–13/11/2026 | Nueva OP, cambio de número de O.P., cambios críticos cada 15 min, aviso al responsable de cada registro de Tareas de la O.P. y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space |
 
 ### 2.2 Hojas principales de la Maestra
 
@@ -115,6 +116,7 @@ La Torre funciona con archivos de Google Sheets que tienen macros (Apps Script) 
 | REGISTRO_CAMBIOS | Cada creación, edición y envío de OP |
 | ENTREGAS_CLIENTE | Fecha original, vigente, reprogramaciones y entrega real por OP |
 | REPROGRAMACIONES_ENTREGA | Cada cambio de fecha de entrega con su motivo |
+| CAMBIOS_NUMERO_OP | Cada cambio de número de O.P.: fecha y hora, usuario, número anterior y nuevo, motivo y dónde se actualizó |
 
 Las hojas de control pueden ocultarse; no deben renombrarse, borrarse ni editarse a mano.
 
@@ -195,7 +197,7 @@ Si después se cambia la sede, al enviar la OP la macro la quita del archivo de 
 ### 5.3 Editar una OP
 
 1. Usar ✏️ Cargar OP para editar, o el botón ✏️ Editar dentro de 🔎 Buscar O.P.
-2. Corregir lo necesario en el formulario. El número de OP no se puede cambiar.
+2. Corregir lo necesario en el formulario. El número de OP solo lo cambian los usuarios autorizados (5.8).
 3. Pulsar el botón principal (en modo edición dice Guardar cambios) y revisar el resumen de cambios.
 4. Si cambió la fecha de entrega, escribir el **motivo obligatorio** (5.5).
 5. Aceptar la actualización en las áreas, o hacerla después con 📤 Enviar / Actualizar.
@@ -242,6 +244,29 @@ Desde v3.2, los días planeados y reales de las tareas No aplica **no suman** en
 4. La macro muestra si la entrega fue a tiempo frente a la fecha original y la vigente.
 
 La entrega real queda fija. Solo un usuario de AUTORIZADOS_ENTREGA puede corregirla, con motivo obligatorio.
+
+### 5.8 Cambiar el número de una O.P.
+
+Solo pueden hacerlo los usuarios autorizados (hoy: jdmonroy@polyuprotec.com y jbuelvas@polyuprotec.com, lista AUTORIZADOS_CAMBIO_OP). Para cualquier otra persona la macro lo bloquea y no cambia nada.
+
+1. Cargar la O.P. con ✏️ Cargar OP para editar.
+2. Escribir el número nuevo en **C3** y pulsar **Guardar cambios**.
+3. La macro revisa, antes de tocar nada, que el número nuevo no exista (hojas, ENTREGAS_CLIENTE, cronogramas de las áreas y hojas de mes de Producción), que la O.P. no esté terminada en todas las áreas ni tenga entrega real registrada y que todos los archivos estén accesibles. Si algo falla, avisa y no cambia nada.
+4. Escribir el **motivo** (obligatorio), por ejemplo "Corrección del número de la orden por solicitud del área Comercial".
+5. Revisar el resumen de lo que se va a actualizar y confirmar.
+
+| Dónde | Qué cambia |
+| --- | --- |
+| Comercial | Nombre de la hoja de la O.P., AB1, subestructuras (4025_1, 4025_2…), ENTREGAS_CLIENTE y REPROGRAMACIONES_ENTREGA |
+| Cronogramas de las áreas | Solo la celda del número de O.P. del bloque |
+| Producción V2 | Las etiquetas "OP n_s" de las hojas de mes, para que la sincronización siga sumando los kg |
+| Maestra | Tareas de la O.P., línea base de fechas protegidas, LOOKER_MAESTRA y un evento "Cambio de número de O.P." en el Historial |
+
+Las fechas, kg, estados y observaciones no cambian. El historial anterior se conserva con el número viejo y la App lo muestra al filtrar el número nuevo. El cambio queda en REGISTRO_CAMBIOS y en CAMBIOS_NUMERO_OP, y al terminar se envía el correo "Notificación de modificación del número de O.P. anterior → nuevo" a todos@polyuprotec.com. El correo sale solo si todo quedó guardado.
+
+Si en la misma edición se cambian otros datos, primero se cambia el número y luego se guardan los demás cambios como siempre. Si el proceso se interrumpe (por ejemplo, un archivo no responde), la macro avisa "quedó a medias" y no envía el correo; al volver a pulsar Guardar cambios con el mismo número, continúa donde quedó.
+
+![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/correo_cambio_op.jpg)
 
 ## 6. Manual de usuario — Áreas y Producción V2
 
@@ -343,6 +368,8 @@ La App es de consulta: muestra en un solo lugar lo que registran Comercial, las 
 
 En la parte superior aparecen 6 indicadores generales. Al hacer clic se abre el detalle de las OP que los componen. "Cumplimiento entrega" lleva a la vista Entregas.
 
+Debajo hay 6 tarjetas más: Total proyectos, Terminados, Cumplimiento Prom., Procesos desviados, Entregas próximas y KG total activos. **Cumplimiento Prom.** solo se muestra al escoger una O.P. en el filtro "OP"; con "Todas las OPs" aparece "—" con el texto "Filtra una O.P. para verlo" (ver 8.3).
+
 ![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_ejecutiva.jpg)
 
 ![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_resumen_detalle.jpg)
@@ -397,13 +424,25 @@ Aquí se suben los compromisos que se acuerdan para cada O.P. en las reuniones d
 
 1. En la tarjeta de la OP pulse **📝 Tareas de la O.P.**. El botón muestra cuántos registros están abiertos y cuántos vencidos.
 2. Elija el tipo (nota, compromiso o bloqueo), el área y escriba la descripción.
-3. Para compromisos y bloqueos indique responsable y fecha compromiso.
+3. Para compromisos y bloqueos indique responsable y fecha compromiso. En **Responsable** escoja a la persona de la lista (nombre y correo) o escriba su correo @polyuprotec.com. La lista se arma sola con quienes han entrado a la Torre, el Historial y quienes han anotado tareas.
 4. Pulse **Guardar**.
 5. Para cerrar un compromiso o bloqueo, pulse **Cerrar** y escriba una nota de cierre. Los registros no se borran.
 
 Los compromisos vencidos y los bloqueos abiertos aparecen en Alertas y en el resumen semanal que llega por correo los lunes.
 
+**Correo al responsable.** Si el responsable tiene correo, al guardar le llega un correo con la tarea (tipo, área, descripción, fecha compromiso), los datos de la O.P. (nombre, cliente, comercial, planta y entrega) y quién la anotó, **con copia a quien la anotó**. Mientras escribe, la ventana avisa lo que va a pasar:
+
+| Aviso | Significado |
+| --- | --- |
+| 📧 Se enviará un correo a … (con copia para ti) | El responsable tiene correo y se notificará |
+| ⚠ Sin correo: se guarda, pero no se notificará | Solo se escribió un nombre; se guarda sin enviar correo |
+| ❌ Solo correos @polyuprotec.com | No se aceptan correos externos |
+
+Después de guardar, la App confirma, por ejemplo: "✅ Guardado · 📧 correo enviado a … (copia a …)". Si el correo falla, la anotación queda guardada igual.
+
 ![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/app_tareas_op.jpg)
+
+![Figura](../web/torre_de_control_v2/manual_torre_control/privado/img/correo_tarea_op.jpg)
 
 ### 7.7 Entregas
 
@@ -466,6 +505,7 @@ Las reglas se evalúan en ese orden; la primera que se cumple define el color y 
 
 ### 8.3 Cumplimiento y eficiencia
 
+- **Cumplimiento Prom.** (Vista Ejecutiva) se calcula **por O.P.**: solo aparece al escoger una O.P. en el filtro y cada tarea cuenta máximo 100 %, la misma regla que usa la hoja de la OP en Comercial. Así un dato atípico (por ejemplo, una duración real mucho más corta que la planeada) no infla el promedio.
 - **Cumplimiento %** solo se calcula si hay evidencia de avance: al menos una tarea Terminado o Reproceso, o kg mayores a 0. Sin evidencia la OP aparece como "sin avance" y no como 0 % ni 100 %.
 - **Cumpl. %** por tarea solo se muestra en tareas Terminado.
 - **Eficiencia** compara duración real contra planeada en tareas Terminado; sin tareas terminadas queda vacía.
@@ -509,6 +549,7 @@ El sistema protege las fechas que sustentan los indicadores y deja rastro de cad
 | BITACORA_OP | Maestra | Tareas de la O.P.: notas, compromisos y bloqueos con su cierre |
 | ENTREGAS_CLIENTE | Comercial | Una fila por OP con fecha original, vigente y real |
 | REPROGRAMACIONES_ENTREGA | Comercial | Cada reprogramación con motivo, usuario y fecha |
+| CAMBIOS_NUMERO_OP | Comercial | Cada cambio de número de O.P. con motivo, usuario, fecha y hora |
 
 Estas hojas pueden ocultarse sin afectar el funcionamiento, pero no deben renombrarse, borrarse ni editarse a mano.
 
@@ -519,6 +560,8 @@ Estas hojas pueden ocultarse sin afectar el funcionamiento, pero no deben renomb
 | Nueva O.P | Al registrar una OP en Comercial ("¡Se registró una nueva O.P!") | todos@polyuprotec.com |
 | Resumen de cambios | Cada 15 minutos, solo si hubo cambios o bloqueos | Desarrollo y las Obeya de Bogotá y Barranquilla (lista en notificar_cambios.php) |
 | 📝 Tareas de la O.P. (semanal) | Lunes a las 7:00: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos | todos@polyuprotec.com |
+| 📝 Tarea asignada | Al guardar una nota, compromiso o bloqueo con responsable que tiene correo | El responsable, con copia a quien la anotó |
+| 🔢 Cambio de número de O.P. | Al terminar un cambio de número desde Comercial (solo si todo quedó guardado) | todos@polyuprotec.com |
 
 Los correos salen de la cuenta de notificaciones del servidor de la Torre de Control. Las credenciales están solo en el servidor y no se incluyen en este documento.
 
@@ -541,10 +584,10 @@ Esta sección es para el administrador del sistema (Desarrollo Full Stack). Cubr
 
 | Componente | Archivo | Versión |
 | --- | --- | --- |
-| Macro Comercial | MACRO_COMERCIAL | v14.10 |
-| Maestra (API, semáforo, protección, historial, Tareas de la O.P.) | MAESTRA_POLYUPROTEC | v4.7 |
+| Macro Comercial | MACRO_COMERCIAL | v14.11 |
+| Maestra (API, semáforo, protección, historial, Tareas de la O.P., cambio de número) | MAESTRA_POLYUPROTEC | v4.8 |
 | Producción V2 (mismo código en Bogotá y Barranquilla) | PRODUCCION_V2 | v4.5 |
-| App web | app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php) | 12/11/2026 |
+| App web | app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php, notificar_tarea_op.php, notificar_cambio_op.php) | 13/11/2026 |
 
 ### 10.2 Publicar un cambio en Apps Script
 
@@ -584,6 +627,7 @@ Para revisar o eliminar activadores use el panel "Activadores" del proyecto de A
 | GANTT_DIAS_AVISO | App | 730 |
 | ID_COMERCIAL / ID_MAESTRA | Maestra | IDs de los archivos de Google Sheets |
 | IDS_PRODUCCION_PLANTA | Comercial | ID del archivo de Producción de cada planta (Bogotá y Barranquilla) |
+| AUTORIZADOS_CAMBIO_OP | Comercial | jdmonroy@polyuprotec.com, jbuelvas@polyuprotec.com |
 
 ### 10.6 Mantenimiento periódico
 
@@ -616,6 +660,10 @@ La mayoría de las fallas vistas en la operación vienen de datos digitados o de
 | Al enviar una OP sale "No se pueden combinar celdas en una fila filtrada" | El área dejó un filtro activo en su Cronograma (versiones anteriores a v14.10) | Desde Comercial v14.10 el filtro se suelta y se restaura solo; con una versión anterior, quitar el filtro y volver a enviar |
 | #DIV/0! o 01/01/1900 en el cronograma de un área | Fórmulas anteriores a v14.9 sin datos reales todavía | Comercial: menú 🩹 Corregir fórmulas |
 | Editar OP corta la carga o sale un aviso de validación en C6 | El comercial guardado ya no está en la lista desplegable | Desde v14.9 la OP se carga igual y se escoge el comercial en C6 |
+| No se puede cambiar el número de una O.P. | Usuario no autorizado, número nuevo ya usado, O.P. terminada o con entrega real, o un archivo de área sin acceso | El mensaje dice la causa; no se cambió nada. Corregir la causa o pedirlo a un autorizado |
+| El cambio de número "quedó a medias" | Un archivo o la Maestra no respondieron en ese momento | Volver a pulsar Guardar cambios con el mismo número nuevo: continúa donde quedó y envía un solo correo |
+| No le llegó el correo al responsable de una tarea | Se escribió solo el nombre, sin correo | Escoger a la persona de la lista o escribir su correo; revisar también el correo no deseado |
+| Cumplimiento Prom. muestra "—" | Está con "Todas las OPs" | Escoger una O.P. en el filtro "OP" |
 | No aparece el botón 🟢 en línea | La App se abrió sin sesión o es una versión guardada en caché | Iniciar sesión con la cuenta @polyuprotec.com y recargar con Ctrl + F5 |
 | Una OP no aparece al filtrar por planta | La sede de la OP no corresponde a esa planta | Revisar la sede en Comercial; las OP MIXTO aparecen en las dos plantas |
 
@@ -685,6 +733,12 @@ Estos son los procedimientos que propone el sistema tal como funciona hoy. Cada 
 - **Pasos:** 1) Recibir la solicitud. 2) Explicar el cambio antes de programarlo. 3) Partir del original funcional y aplicar solo las modificaciones. 4) Probar comparando original vs. final. 5) Publicar (10.2) y actualizar la tabla de versiones.
 - **Registros:** archivos de versión, este documento.
 
+### PR-10 Cambio del número de una O.P.
+
+- **Responsable:** Comercial autorizado (AUTORIZADOS_CAMBIO_OP). **Frecuencia:** excepcional.
+- **Pasos:** 1) Confirmar que el número nuevo es correcto y que la O.P. no está terminada ni entregada. 2) Cargar la O.P. para editar y escribir el número nuevo en C3. 3) Escribir el motivo y confirmar el resumen. 4) Verificar el correo de notificación y la hoja CAMBIOS_NUMERO_OP.
+- **Registros:** CAMBIOS_NUMERO_OP, REGISTRO_CAMBIOS, HISTORIAL (Maestra), correo de notificación.
+
 ## 13. Glosario y anexos
 
 ### 13.1 Glosario
@@ -714,7 +768,7 @@ Estos son los procedimientos que propone el sistema tal como funciona hoy. Cada 
 
 | Anexo | Contenido |
 | --- | --- |
-| A | Código fuente: MACRO_COMERCIAL v14.10, MAESTRA_POLYUPROTEC v4.7, PRODUCCION_V2 v4.5 |
+| A | Código fuente: MACRO_COMERCIAL v14.11, MAESTRA_POLYUPROTEC v4.8, PRODUCCION_V2 v4.5 |
 | B | Paquete de la App web (app.html y archivos PHP) |
 | C | Botones PNG de las macros |
 | D | Acta de acuerdos de la reunión del 03/11 |
@@ -729,4 +783,5 @@ El código y los paquetes se entregan aparte. No contienen ni deben contener con
 | 1.0 | 05/11/2026 | Versión inicial para procedimientos y manual | Jeider Buelvas — Desarrollo Full Stack |
 | 1.1 | 12/11/2026 | Torre de Control v3.2: Producción con Kg Fabricados y Entrega en negro, dos plantas, 📝 Tareas de la O.P., correcciones de Comercial v14.9 y v14.10 | Jeider Buelvas — Desarrollo Full Stack |
 | 1.2 | 12/11/2026 | Indicador 🟢 en línea (sección 7.9) y enlace 📘 Manual de usuario en el menú de la App | Jeider Buelvas — Desarrollo Full Stack |
+| 1.3 | 17/11/2026 | Cambio del número de O.P. (5.8 y PR-10), correo al responsable de Tareas de la O.P. (7.6), Cumplimiento Prom. por O.P. (7.2 y 8.3), notificaciones y versiones | Jeider Buelvas — Desarrollo Full Stack |
 |  |  |  |  |

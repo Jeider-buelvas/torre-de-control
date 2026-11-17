@@ -117,7 +117,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Componentes</td>
-<td>Maestra v4.7 · Macro Comercial v14.10 · Producción V2 v4.5 (archivos Bogotá y Barranquilla) · App web 11/11/2026</td>
+<td>Maestra v4.8 · Macro Comercial v14.11 · Producción V2 v4.5 (archivos Bogotá y Barranquilla) · App web 13/11/2026</td>
 </tr>
 <tr>
 <td>Responsable técnico</td>
@@ -175,6 +175,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>13/11/2026</td>
+<td>v3.2</td>
+<td><strong>Cambio del número de O.P.</strong> desde Editar OP, con motivo y correo (Comercial v14.11, Maestra v4.8); <strong>correo automático al responsable</strong> de cada registro de Tareas de la O.P.; <strong>Cumplimiento Prom.</strong> solo por O.P. con tope de 100 % por tarea; Vista Ejecutiva sin tarjetas repetidas</td>
+</tr>
 <tr>
 <td>12/11/2026</td>
 <td>v3.2</td>
@@ -260,8 +265,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>PLANTILLA_LOOKER_COMERCIAL</td>
 <td>Google Sheets + Apps Script</td>
-<td>v14.10</td>
-<td>Registra y edita OP, las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP</td>
+<td>v14.11</td>
+<td>Registra y edita OP (incluido el cambio de número), las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP</td>
 </tr>
 <tr>
 <td>Cronogramas de área (9 archivos)</td>
@@ -278,20 +283,20 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>TORRE_CONTROL_MAESTRA_POLYUPROTEC</td>
 <td>Google Sheets + Apps Script + Web App</td>
-<td>v4.7</td>
+<td>v4.8</td>
 <td>Importa todas las áreas (Producción de las dos plantas), consolida en LOOKER_MAESTRA, calcula indicadores, vigila cambios, guarda el historial y las Tareas de la O.P., entrega los datos a la App</td>
 </tr>
 <tr>
 <td>App web</td>
 <td>Hosting torredecontrol.polypro.space</td>
-<td>12/11/2026</td>
-<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P., indicador 🟢 en línea, enlace al manual y análisis con IA</td>
+<td>13/11/2026</td>
+<td>Tablero de consulta con inicio de sesión Google (@polyuprotec.com), filtro por planta, Tareas de la O.P. con correo al responsable, indicador 🟢 en línea, enlace al manual y análisis con IA</td>
 </tr>
 <tr>
 <td>Correos automáticos</td>
 <td>Hosting (archivos PHP)</td>
-<td>03–11/11/2026</td>
-<td>Nueva OP, cambios críticos cada 15 min y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space</td>
+<td>03–13/11/2026</td>
+<td>Nueva OP, cambio de número de O.P., cambios críticos cada 15 min, aviso al responsable de cada registro de Tareas de la O.P. y resumen semanal de las Tareas de la O.P., desde notificacion@torredecontrol.polypro.space</td>
 </tr>
 </tbody>
 </table>
@@ -375,6 +380,10 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>REPROGRAMACIONES_ENTREGA</td>
 <td>Cada cambio de fecha de entrega con su motivo</td>
+</tr>
+<tr>
+<td>CAMBIOS_NUMERO_OP</td>
+<td>Cada cambio de número de O.P.: fecha y hora, usuario, número anterior y nuevo, motivo y dónde se actualizó</td>
 </tr>
 </tbody>
 </table>
@@ -562,7 +571,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <h3 id="53-editar-una-op">5.3 Editar una OP</h3>
 <ol>
 <li>Usar ✏️ Cargar OP para editar, o el botón ✏️ Editar dentro de 🔎 Buscar O.P.</li>
-<li>Corregir lo necesario en el formulario. El número de OP no se puede cambiar.</li>
+<li>Corregir lo necesario en el formulario. El número de OP solo lo cambian los usuarios autorizados (5.8).</li>
 <li>Pulsar el botón principal (en modo edición dice Guardar cambios) y revisar el resumen de cambios.</li>
 <li>Si cambió la fecha de entrega, escribir el <strong>motivo obligatorio</strong> (5.5).</li>
 <li>Aceptar la actualización en las áreas, o hacerla después con 📤 Enviar / Actualizar.</li>
@@ -602,6 +611,44 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>La macro muestra si la entrega fue a tiempo frente a la fecha original y la vigente.</li>
 </ol>
 <p>La entrega real queda fija. Solo un usuario de AUTORIZADOS_ENTREGA puede corregirla, con motivo obligatorio.</p>
+<h3 id="58-cambiar-el-numero-de-una-op">5.8 Cambiar el número de una O.P.</h3>
+<p>Solo pueden hacerlo los usuarios autorizados (hoy: jdmonroy@polyuprotec.com y jbuelvas@polyuprotec.com, lista AUTORIZADOS_CAMBIO_OP). Para cualquier otra persona la macro lo bloquea y no cambia nada.</p>
+<ol>
+<li>Cargar la O.P. con ✏️ Cargar OP para editar.</li>
+<li>Escribir el número nuevo en <strong>C3</strong> y pulsar <strong>Guardar cambios</strong>.</li>
+<li>La macro revisa, antes de tocar nada, que el número nuevo no exista (hojas, ENTREGAS_CLIENTE, cronogramas de las áreas y hojas de mes de Producción), que la O.P. no esté terminada en todas las áreas ni tenga entrega real registrada y que todos los archivos estén accesibles. Si algo falla, avisa y no cambia nada.</li>
+<li>Escribir el <strong>motivo</strong> (obligatorio), por ejemplo "Corrección del número de la orden por solicitud del área Comercial".</li>
+<li>Revisar el resumen de lo que se va a actualizar y confirmar.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>Dónde</th>
+<th>Qué cambia</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Comercial</td>
+<td>Nombre de la hoja de la O.P., AB1, subestructuras (4025_1, 4025_2…), ENTREGAS_CLIENTE y REPROGRAMACIONES_ENTREGA</td>
+</tr>
+<tr>
+<td>Cronogramas de las áreas</td>
+<td>Solo la celda del número de O.P. del bloque</td>
+</tr>
+<tr>
+<td>Producción V2</td>
+<td>Las etiquetas "OP n_s" de las hojas de mes, para que la sincronización siga sumando los kg</td>
+</tr>
+<tr>
+<td>Maestra</td>
+<td>Tareas de la O.P., línea base de fechas protegidas, LOOKER_MAESTRA y un evento "Cambio de número de O.P." en el Historial</td>
+</tr>
+</tbody>
+</table>
+<p>Las fechas, kg, estados y observaciones no cambian. El historial anterior se conserva con el número viejo y la App lo muestra al filtrar el número nuevo. El cambio queda en REGISTRO_CAMBIOS y en CAMBIOS_NUMERO_OP, y al terminar se envía el correo "Notificación de modificación del número de O.P. anterior → nuevo" a todos@polyuprotec.com. El correo sale solo si todo quedó guardado.</p>
+<p>Si en la misma edición se cambian otros datos, primero se cambia el número y luego se guardan los demás cambios como siempre. Si el proceso se interrumpe (por ejemplo, un archivo no responde), la macro avisa "quedó a medias" y no envía el correo; al volver a pulsar Guardar cambios con el mismo número, continúa donde quedó.</p>
+<figure class="shot correo"><a href="ver.php?f=correo_cambio_op.jpg" target="_blank"><img src="ver.php?f=correo_cambio_op.jpg" alt="Correo de cambio de número de O.P." loading="lazy"></a><figcaption><b>Figura 3.</b> Correo "Notificación de modificación del número de O.P." que se envía a todos@polyuprotec.com al terminar el cambio.</figcaption></figure>
 <h2 id="6-manual-de-usuario-areas-y-produccion-v2">6. Manual de usuario — Áreas y Producción V2</h2>
 <p>Cada área registra su avance en la hoja "Cronograma" de su archivo; solo diligencia cinco columnas, y el resto lo llenan Comercial o las fórmulas.</p>
 <h3 id="61-columnas-que-diligencia-el-area">6.1 Columnas que diligencia el área</h3>
@@ -740,7 +787,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </tbody>
 </table>
-<figure class="shot"><a href="ver.php?f=produccion_entrega.jpg" target="_blank"><img src="ver.php?f=produccion_entrega.jpg" alt="Hoja del mes en Producción Bogotá" loading="lazy"></a><figcaption><b>Figura 3.</b> Hoja del mes en Producción Bogotá (extracto): cada subestructura con su fila de kg fabricados, PLANEADO, DIFERENCIA y ENTREGA MATERIAL EN NEGRO.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=produccion_entrega.jpg" target="_blank"><img src="ver.php?f=produccion_entrega.jpg" alt="Hoja del mes en Producción Bogotá" loading="lazy"></a><figcaption><b>Figura 4.</b> Hoja del mes en Producción Bogotá (extracto): cada subestructura con su fila de kg fabricados, PLANEADO, DIFERENCIA y ENTREGA MATERIAL EN NEGRO.</figcaption></figure>
 <table>
 <thead>
 <tr>
@@ -802,11 +849,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>La App carga los datos de la Maestra. Use el botón de actualizar para traer los últimos cambios.</li>
 <li>El manual de usuario se abre desde el menú lateral, en <strong>📘 Manual de usuario</strong> (al final del menú). Se abre en una pestaña nueva, con la misma sesión.</li>
 </ol>
-<figure class="shot movil"><a href="ver.php?f=app_movil.jpg" target="_blank"><img src="ver.php?f=app_movil.jpg" alt="La App en un celular: el menú se abre con ☰ y los filtros quedan arriba." loading="lazy"></a><figcaption><b>Figura 4.</b> La App en un celular: el menú se abre con ☰ y los filtros quedan arriba.</figcaption></figure>
+<figure class="shot movil"><a href="ver.php?f=app_movil.jpg" target="_blank"><img src="ver.php?f=app_movil.jpg" alt="La App en un celular: el menú se abre con ☰ y los filtros quedan arriba." loading="lazy"></a><figcaption><b>Figura 5.</b> La App en un celular: el menú se abre con ☰ y los filtros quedan arriba.</figcaption></figure>
 <h3 id="72-banda-de-resumen">7.2 Banda de resumen</h3>
 <p>En la parte superior aparecen 6 indicadores generales. Al hacer clic se abre el detalle de las OP que los componen. "Cumplimiento entrega" lleva a la vista Entregas.</p>
-<figure class="shot"><a href="ver.php?f=app_ejecutiva.jpg" target="_blank"><img src="ver.php?f=app_ejecutiva.jpg" alt="Vista Ejecutiva" loading="lazy"></a><figcaption><b>Figura 5.</b> Vista Ejecutiva: filtro Planta arriba, banda de resumen y tarjetas de OP con su insignia de planta.</figcaption></figure>
-<figure class="shot"><a href="ver.php?f=app_resumen_detalle.jpg" target="_blank"><img src="ver.php?f=app_resumen_detalle.jpg" alt="Al hacer clic en un indicador se abre la lista de OP que lo componen." loading="lazy"></a><figcaption><b>Figura 6.</b> Al hacer clic en un indicador se abre la lista de OP que lo componen.</figcaption></figure>
+<p>Debajo hay 6 tarjetas más: Total proyectos, Terminados, Cumplimiento Prom., Procesos desviados, Entregas próximas y KG total activos. <strong>Cumplimiento Prom.</strong> solo se muestra al escoger una O.P. en el filtro "OP"; con "Todas las OPs" aparece "—" con el texto "Filtra una O.P. para verlo" (ver 8.3).</p>
+<figure class="shot"><a href="ver.php?f=app_ejecutiva.jpg" target="_blank"><img src="ver.php?f=app_ejecutiva.jpg" alt="Vista Ejecutiva" loading="lazy"></a><figcaption><b>Figura 6.</b> Vista Ejecutiva: filtro Planta arriba, banda de resumen, tarjetas de indicadores (Cumplimiento Prom. pide filtrar una O.P.) y tarjetas de OP con su insignia de planta.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_resumen_detalle.jpg" target="_blank"><img src="ver.php?f=app_resumen_detalle.jpg" alt="Al hacer clic en un indicador se abre la lista de OP que lo componen." loading="lazy"></a><figcaption><b>Figura 7.</b> Al hacer clic en un indicador se abre la lista de OP que lo componen.</figcaption></figure>
 <h3 id="73-vistas">7.3 Vistas</h3>
 <p>Las vistas se eligen en el menú lateral. Todas respetan los filtros de la parte superior.</p>
 <table>
@@ -875,15 +923,15 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </tbody>
 </table>
-<div class="gallery"><figure class="shot"><a href="ver.php?f=app_kg.jpg" target="_blank"><img src="ver.php?f=app_kg.jpg" alt="KG & Avance." loading="lazy"></a><figcaption><b>Figura 7.</b> KG & Avance.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_obeya.jpg" target="_blank"><img src="ver.php?f=app_obeya.jpg" alt="Obeya: avance de cada OP por área." loading="lazy"></a><figcaption><b>Figura 8.</b> Obeya: avance de cada OP por área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_gantt.jpg" target="_blank"><img src="ver.php?f=app_gantt.jpg" alt="Gantt con las 4 fechas y el paginador." loading="lazy"></a><figcaption><b>Figura 9.</b> Gantt con las 4 fechas y el paginador.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_areas.jpg" target="_blank"><img src="ver.php?f=app_areas.jpg" alt="Por Área." loading="lazy"></a><figcaption><b>Figura 10.</b> Por Área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_alertas.jpg" target="_blank"><img src="ver.php?f=app_alertas.jpg" alt="Alertas." loading="lazy"></a><figcaption><b>Figura 11.</b> Alertas.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_tabla.jpg" target="_blank"><img src="ver.php?f=app_tabla.jpg" alt="Tabla Detalle con la columna 👁." loading="lazy"></a><figcaption><b>Figura 12.</b> Tabla Detalle con la columna 👁.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_observaciones.jpg" target="_blank"><img src="ver.php?f=app_observaciones.jpg" alt="Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP." loading="lazy"></a><figcaption><b>Figura 13.</b> Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP.</figcaption></figure></div>
+<div class="gallery"><figure class="shot"><a href="ver.php?f=app_kg.jpg" target="_blank"><img src="ver.php?f=app_kg.jpg" alt="KG & Avance." loading="lazy"></a><figcaption><b>Figura 8.</b> KG & Avance.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_obeya.jpg" target="_blank"><img src="ver.php?f=app_obeya.jpg" alt="Obeya: avance de cada OP por área." loading="lazy"></a><figcaption><b>Figura 9.</b> Obeya: avance de cada OP por área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_gantt.jpg" target="_blank"><img src="ver.php?f=app_gantt.jpg" alt="Gantt con las 4 fechas y el paginador." loading="lazy"></a><figcaption><b>Figura 10.</b> Gantt con las 4 fechas y el paginador.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_areas.jpg" target="_blank"><img src="ver.php?f=app_areas.jpg" alt="Por Área." loading="lazy"></a><figcaption><b>Figura 11.</b> Por Área.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_alertas.jpg" target="_blank"><img src="ver.php?f=app_alertas.jpg" alt="Alertas." loading="lazy"></a><figcaption><b>Figura 12.</b> Alertas.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_tabla.jpg" target="_blank"><img src="ver.php?f=app_tabla.jpg" alt="Tabla Detalle con la columna 👁." loading="lazy"></a><figcaption><b>Figura 13.</b> Tabla Detalle con la columna 👁.</figcaption></figure><figure class="shot"><a href="ver.php?f=app_observaciones.jpg" target="_blank"><img src="ver.php?f=app_observaciones.jpg" alt="Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP." loading="lazy"></a><figcaption><b>Figura 14.</b> Ventana 👁 Ver observaciones: la nota de la tarea y las demás observaciones de la misma OP.</figcaption></figure></div>
 <h3 id="74-semaforo-y-avisos">7.4 Semáforo y avisos</h3>
 <ul>
 <li>Pase el puntero sobre el semáforo para ver <strong>por qué</strong> tiene ese color (regla, brecha, fechas).</li>
 <li><strong>Sin planeación</strong> (naranja) significa que la OP no tiene fechas de plan.</li>
 <li>El ⚠ del Gantt indica una fecha a más de 2 años del plan o un fin real anterior al inicio; pase el puntero para ver el detalle.</li>
 </ul>
-<figure class="shot"><a href="ver.php?f=app_semaforo_motivo.jpg" target="_blank"><img src="ver.php?f=app_semaforo_motivo.jpg" alt="Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados." loading="lazy"></a><figcaption><b>Figura 14.</b> Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados.</figcaption></figure>
-<figure class="shot"><a href="ver.php?f=app_gantt_aviso.jpg" target="_blank"><img src="ver.php?f=app_gantt_aviso.jpg" alt="Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango." loading="lazy"></a><figcaption><b>Figura 15.</b> Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_semaforo_motivo.jpg" target="_blank"><img src="ver.php?f=app_semaforo_motivo.jpg" alt="Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados." loading="lazy"></a><figcaption><b>Figura 15.</b> Al pasar el puntero sobre el semáforo aparece el motivo del color y los datos usados.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_gantt_aviso.jpg" target="_blank"><img src="ver.php?f=app_gantt_aviso.jpg" alt="Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango." loading="lazy"></a><figcaption><b>Figura 16.</b> Aviso ⚠ del Gantt con el detalle de la fecha fuera de rango.</figcaption></figure>
 <h3 id="75-filtros">7.5 Filtros</h3>
 <p>Arriba de todas las vistas están los filtros <strong>Planta</strong>, Comercial, OP y Subestructura.</p>
 <p><strong>Planta</strong> tiene tres botones: Todas las plantas, Bogotá y Barranquilla. Al elegir una planta, todas las vistas (tarjetas, Gantt, Tabla Detalle, Producción diaria, Historial, Entregas, indicadores) muestran solo lo de esa planta:</p>
@@ -892,25 +940,50 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>La App recuerda la planta elegida la próxima vez que se abra en ese navegador.</li>
 <li>Las insignias <strong>BOG</strong>, <strong>BAQ</strong> y <strong>MIXTO</strong> junto al número de OP indican la planta de cada OP.</li>
 </ul>
-<figure class="shot"><a href="ver.php?f=app_planta.jpg" target="_blank"><img src="ver.php?f=app_planta.jpg" alt="Filtro Planta en Bogotá" loading="lazy"></a><figcaption><b>Figura 16.</b> Con el filtro en Bogotá solo se ven las OP de Bogotá y las MIXTO; la App lo recuerda la próxima vez.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_planta.jpg" target="_blank"><img src="ver.php?f=app_planta.jpg" alt="Filtro Planta en Bogotá" loading="lazy"></a><figcaption><b>Figura 17.</b> Con el filtro en Bogotá solo se ven las OP de Bogotá y las MIXTO; la App lo recuerda la próxima vez.</figcaption></figure>
 <p>Las vistas también permiten filtrar por cliente, área y semáforo. El orden de las áreas siempre sigue el proceso: Diseño → Dibujo → Compras → Producción → Galvanizado → Pintura → Logística → Montaje → Administración → RRHH.</p>
 <h3 id="76-tareas-de-la-op">7.6 📝 Tareas de la O.P.</h3>
 <p>Aquí se suben los compromisos que se acuerdan para cada O.P. en las reuniones de seguimiento, además de notas y bloqueos. Antes se llamaba "Bitácora"; solo cambió el nombre. Cada registro lleva autor, fecha y hora.</p>
 <ol>
 <li>En la tarjeta de la OP pulse <strong>📝 Tareas de la O.P.</strong>. El botón muestra cuántos registros están abiertos y cuántos vencidos.</li>
 <li>Elija el tipo (nota, compromiso o bloqueo), el área y escriba la descripción.</li>
-<li>Para compromisos y bloqueos indique responsable y fecha compromiso.</li>
+<li>Para compromisos y bloqueos indique responsable y fecha compromiso. En <strong>Responsable</strong> escoja a la persona de la lista (nombre y correo) o escriba su correo @polyuprotec.com. La lista se arma sola con quienes han entrado a la Torre, el Historial y quienes han anotado tareas.</li>
 <li>Pulse <strong>Guardar</strong>.</li>
 <li>Para cerrar un compromiso o bloqueo, pulse <strong>Cerrar</strong> y escriba una nota de cierre. Los registros no se borran.</li>
 </ol>
 <p>Los compromisos vencidos y los bloqueos abiertos aparecen en Alertas y en el resumen semanal que llega por correo los lunes.</p>
-<figure class="shot"><a href="ver.php?f=app_tareas_op.jpg" target="_blank"><img src="ver.php?f=app_tareas_op.jpg" alt="Ventana Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 17.</b> Ventana 📝 Tareas de la O.P.: formulario arriba; abajo los registros abiertos (los vencidos resaltados) y los cerrados con su nota de cierre.</figcaption></figure>
+<p><strong>Correo al responsable.</strong> Si el responsable tiene correo, al guardar le llega un correo con la tarea (tipo, área, descripción, fecha compromiso), los datos de la O.P. (nombre, cliente, comercial, planta y entrega) y quién la anotó, <strong>con copia a quien la anotó</strong>. Mientras escribe, la ventana avisa lo que va a pasar:</p>
+<table>
+<thead>
+<tr>
+<th>Aviso</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>📧 Se enviará un correo a … (con copia para ti)</td>
+<td>El responsable tiene correo y se notificará</td>
+</tr>
+<tr>
+<td>⚠ Sin correo: se guarda, pero no se notificará</td>
+<td>Solo se escribió un nombre; se guarda sin enviar correo</td>
+</tr>
+<tr>
+<td>❌ Solo correos @polyuprotec.com</td>
+<td>No se aceptan correos externos</td>
+</tr>
+</tbody>
+</table>
+<p>Después de guardar, la App confirma, por ejemplo: "✅ Guardado · 📧 correo enviado a … (copia a …)". Si el correo falla, la anotación queda guardada igual.</p>
+<figure class="shot"><a href="ver.php?f=app_tareas_op.jpg" target="_blank"><img src="ver.php?f=app_tareas_op.jpg" alt="Ventana Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 18.</b> Ventana 📝 Tareas de la O.P.: al escoger el responsable de la lista, avisa que se le enviará un correo. Abajo, los registros abiertos (los vencidos resaltados) y los cerrados con su nota de cierre.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_tarea_op.jpg" target="_blank"><img src="ver.php?f=correo_tarea_op.jpg" alt="Correo al responsable de una tarea" loading="lazy"></a><figcaption><b>Figura 19.</b> Correo que recibe el responsable al anotarle una tarea (con copia a quien la anotó): la tarea y los datos de la O.P.</figcaption></figure>
 <h3 id="77-entregas">7.7 Entregas</h3>
 <p>Muestra por OP la fecha original, la vigente y la real, los días de diferencia y si cumplió. El indicador oficial se mide contra la fecha <strong>original</strong> con tolerancia de 0 días. El botón de reprogramaciones muestra cada cambio con su motivo.</p>
-<figure class="shot"><a href="ver.php?f=app_entregas.jpg" target="_blank"><img src="ver.php?f=app_entregas.jpg" alt="Vista Entregas: indicadores, tendencia mensual y detalle por OP." loading="lazy"></a><figcaption><b>Figura 18.</b> Vista Entregas: indicadores, tendencia mensual y detalle por OP.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_entregas.jpg" target="_blank"><img src="ver.php?f=app_entregas.jpg" alt="Vista Entregas: indicadores, tendencia mensual y detalle por OP." loading="lazy"></a><figcaption><b>Figura 20.</b> Vista Entregas: indicadores, tendencia mensual y detalle por OP.</figcaption></figure>
 <h3 id="78-historial">7.8 Historial</h3>
 <p>Lista los cambios de estado, fechas y kg, los cambios autorizados, los intentos bloqueados y lo anotado en las Tareas de la O.P. Filtre por OP, área, tipo, usuario o fecha. Los cambios hechos en un archivo de Producción llevan su planta y respetan el filtro Planta. Los registros anteriores guardados como "Bitácora" se muestran como "Tareas de la O.P.", así que en el filtro de tipo hay un solo nombre.</p>
-<figure class="shot"><a href="ver.php?f=app_historial.jpg" target="_blank"><img src="ver.php?f=app_historial.jpg" alt="Vista Historial" loading="lazy"></a><figcaption><b>Figura 19.</b> Vista Historial: cada cambio con su tipo, usuario, planta y valores anterior y nuevo. Lo anotado en Tareas de la O.P. también queda aquí.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_historial.jpg" target="_blank"><img src="ver.php?f=app_historial.jpg" alt="Vista Historial" loading="lazy"></a><figcaption><b>Figura 21.</b> Vista Historial: cada cambio con su tipo, usuario, planta y valores anterior y nuevo. Lo anotado en Tareas de la O.P. también queda aquí.</figcaption></figure>
 <h3 id="79-quien-esta-en-linea">7.9 🟢 Quién está en línea</h3>
 <p>En la barra superior, junto al correo del usuario, el botón <strong>🟢 N en línea</strong> muestra cuántas personas tienen la Torre de Control abierta en ese momento. Al pulsarlo se abre una ventana con dos partes:</p>
 <table>
@@ -959,7 +1032,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li>"Hoy entraron" se reinicia cada día a medianoche (hora de Colombia).</li>
 <li>Todos los usuarios con sesión ven esta lista. El nombre y el correo salen del inicio de sesión de Google, así que nadie puede aparecer con otro nombre.</li>
 </ul>
-<figure class="shot"><a href="ver.php?f=app_en_linea.jpg" target="_blank"><img src="ver.php?f=app_en_linea.jpg" alt="Ventana En línea" loading="lazy"></a><figcaption><b>Figura 20.</b> Ventana 🟢 En línea: quién tiene la Torre abierta, en qué vista y planta, y quién entró hoy.</figcaption></figure>
+<figure class="shot"><a href="ver.php?f=app_en_linea.jpg" target="_blank"><img src="ver.php?f=app_en_linea.jpg" alt="Ventana En línea" loading="lazy"></a><figcaption><b>Figura 22.</b> Ventana 🟢 En línea: quién tiene la Torre abierta, en qué vista y planta, y quién entró hoy.</figcaption></figure>
 <h2 id="8-indicadores-y-reglas-de-calculo">8. Indicadores y reglas de cálculo</h2>
 <p>Todos los indicadores se calculan en la Maestra a partir de los cronogramas. La App solo los muestra, así que la misma regla aplica en todas las vistas.</p>
 <h3 id="81-avance-de-la-op">8.1 Avance de la OP</h3>
@@ -1001,6 +1074,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <p>Las reglas se evalúan en ese orden; la primera que se cumple define el color y se muestra como motivo.</p>
 <h3 id="83-cumplimiento-y-eficiencia">8.3 Cumplimiento y eficiencia</h3>
 <ul>
+<li><strong>Cumplimiento Prom.</strong> (Vista Ejecutiva) se calcula <strong>por O.P.</strong>: solo aparece al escoger una O.P. en el filtro y cada tarea cuenta máximo 100 %, la misma regla que usa la hoja de la OP en Comercial. Así un dato atípico (por ejemplo, una duración real mucho más corta que la planeada) no infla el promedio.</li>
 <li><strong>Cumplimiento %</strong> solo se calcula si hay evidencia de avance: al menos una tarea Terminado o Reproceso, o kg mayores a 0. Sin evidencia la OP aparece como "sin avance" y no como 0 % ni 100 %.</li>
 <li><strong>Cumpl. %</strong> por tarea solo se muestra en tareas Terminado.</li>
 <li><strong>Eficiencia</strong> compara duración real contra planeada en tareas Terminado; sin tareas terminadas queda vacía.</li>
@@ -1109,6 +1183,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Comercial</td>
 <td>Cada reprogramación con motivo, usuario y fecha</td>
 </tr>
+<tr>
+<td>CAMBIOS_NUMERO_OP</td>
+<td>Comercial</td>
+<td>Cada cambio de número de O.P. con motivo, usuario, fecha y hora</td>
+</tr>
 </tbody>
 </table>
 <p>Estas hojas pueden ocultarse sin afectar el funcionamiento, pero no deben renombrarse, borrarse ni editarse a mano.</p>
@@ -1137,11 +1216,21 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Lunes a las 7:00: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos</td>
 <td>todos@polyuprotec.com</td>
 </tr>
+<tr>
+<td>📝 Tarea asignada</td>
+<td>Al guardar una nota, compromiso o bloqueo con responsable que tiene correo</td>
+<td>El responsable, con copia a quien la anotó</td>
+</tr>
+<tr>
+<td>🔢 Cambio de número de O.P.</td>
+<td>Al terminar un cambio de número desde Comercial (solo si todo quedó guardado)</td>
+<td>todos@polyuprotec.com</td>
+</tr>
 </tbody>
 </table>
 <p>Los correos salen de la cuenta de notificaciones del servidor de la Torre de Control. Las credenciales están solo en el servidor y no se incluyen en este documento.</p>
-<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 21.</b> Correo “Cambios críticos registrados”.</figcaption></figure>
-<figure class="shot correo"><a href="ver.php?f=correo_tareas_op.jpg" target="_blank"><img src="ver.php?f=correo_tareas_op.jpg" alt="Correo semanal Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 22.</b> Correo semanal 📝 Tareas de la O.P.: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_cambios.jpg" target="_blank"><img src="ver.php?f=correo_cambios.jpg" alt="Correo “Cambios críticos registrados”." loading="lazy"></a><figcaption><b>Figura 23.</b> Correo “Cambios críticos registrados”.</figcaption></figure>
+<figure class="shot correo"><a href="ver.php?f=correo_tareas_op.jpg" target="_blank"><img src="ver.php?f=correo_tareas_op.jpg" alt="Correo semanal Tareas de la O.P." loading="lazy"></a><figcaption><b>Figura 24.</b> Correo semanal 📝 Tareas de la O.P.: compromisos vencidos, los que vencen en 7 días y bloqueos abiertos.</figcaption></figure>
 <h3 id="94-seguridad-de-acceso">9.4 Seguridad de acceso</h3>
 <ul>
 <li>La App y las Tareas de la O.P. exigen sesión Google del dominio polyuprotec.com.</li>
@@ -1164,12 +1253,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Macro Comercial</td>
 <td>MACRO_COMERCIAL</td>
-<td>v14.10</td>
+<td>v14.11</td>
 </tr>
 <tr>
-<td>Maestra (API, semáforo, protección, historial, Tareas de la O.P.)</td>
+<td>Maestra (API, semáforo, protección, historial, Tareas de la O.P., cambio de número)</td>
 <td>MAESTRA_POLYUPROTEC</td>
-<td>v4.7</td>
+<td>v4.8</td>
 </tr>
 <tr>
 <td>Producción V2 (mismo código en Bogotá y Barranquilla)</td>
@@ -1178,8 +1267,8 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>App web</td>
-<td>app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php)</td>
-<td>12/11/2026</td>
+<td>app.html + PHP (bitacora.php, notificar_cambios.php, notificar_bitacora.php, notificar_op.php, presencia.php, notificar_tarea_op.php, notificar_cambio_op.php)</td>
+<td>13/11/2026</td>
 </tr>
 </tbody>
 </table>
@@ -1280,6 +1369,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>IDS_PRODUCCION_PLANTA</td>
 <td>Comercial</td>
 <td>ID del archivo de Producción de cada planta (Bogotá y Barranquilla)</td>
+</tr>
+<tr>
+<td>AUTORIZADOS_CAMBIO_OP</td>
+<td>Comercial</td>
+<td>jdmonroy@polyuprotec.com, jbuelvas@polyuprotec.com</td>
 </tr>
 </tbody>
 </table>
@@ -1392,6 +1486,26 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Desde v14.9 la OP se carga igual y se escoge el comercial en C6</td>
 </tr>
 <tr>
+<td>No se puede cambiar el número de una O.P.</td>
+<td>Usuario no autorizado, número nuevo ya usado, O.P. terminada o con entrega real, o un archivo de área sin acceso</td>
+<td>El mensaje dice la causa; no se cambió nada. Corregir la causa o pedirlo a un autorizado</td>
+</tr>
+<tr>
+<td>El cambio de número "quedó a medias"</td>
+<td>Un archivo o la Maestra no respondieron en ese momento</td>
+<td>Volver a pulsar Guardar cambios con el mismo número nuevo: continúa donde quedó y envía un solo correo</td>
+</tr>
+<tr>
+<td>No le llegó el correo al responsable de una tarea</td>
+<td>Se escribió solo el nombre, sin correo</td>
+<td>Escoger a la persona de la lista o escribir su correo; revisar también el correo no deseado</td>
+</tr>
+<tr>
+<td>Cumplimiento Prom. muestra "—"</td>
+<td>Está con "Todas las OPs"</td>
+<td>Escoger una O.P. en el filtro "OP"</td>
+</tr>
+<tr>
 <td>No aparece el botón 🟢 en línea</td>
 <td>La App se abrió sin sesión o es una versión guardada en caché</td>
 <td>Iniciar sesión con la cuenta @polyuprotec.com y recargar con Ctrl + F5</td>
@@ -1466,6 +1580,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <li><strong>Responsable:</strong> Desarrollo Full Stack. <strong>Frecuencia:</strong> cada cambio.</li>
 <li><strong>Pasos:</strong> 1) Recibir la solicitud. 2) Explicar el cambio antes de programarlo. 3) Partir del original funcional y aplicar solo las modificaciones. 4) Probar comparando original vs. final. 5) Publicar (10.2) y actualizar la tabla de versiones.</li>
 <li><strong>Registros:</strong> archivos de versión, este documento.</li>
+</ul>
+<h3 id="pr-10-cambio-del-numero-de-una-op">PR-10 Cambio del número de una O.P.</h3>
+<ul>
+<li><strong>Responsable:</strong> Comercial autorizado (AUTORIZADOS_CAMBIO_OP). <strong>Frecuencia:</strong> excepcional.</li>
+<li><strong>Pasos:</strong> 1) Confirmar que el número nuevo es correcto y que la O.P. no está terminada ni entregada. 2) Cargar la O.P. para editar y escribir el número nuevo en C3. 3) Escribir el motivo y confirmar el resumen. 4) Verificar el correo de notificación y la hoja CAMBIOS_NUMERO_OP.</li>
+<li><strong>Registros:</strong> CAMBIOS_NUMERO_OP, REGISTRO_CAMBIOS, HISTORIAL (Maestra), correo de notificación.</li>
 </ul>
 <h2 id="13-glosario-y-anexos">13. Glosario y anexos</h2>
 <h3 id="131-glosario">13.1 Glosario</h3>
@@ -1562,7 +1682,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tbody>
 <tr>
 <td>A</td>
-<td>Código fuente: MACRO_COMERCIAL v14.10, MAESTRA_POLYUPROTEC v4.7, PRODUCCION_V2 v4.5</td>
+<td>Código fuente: MACRO_COMERCIAL v14.11, MAESTRA_POLYUPROTEC v4.8, PRODUCCION_V2 v4.5</td>
 </tr>
 <tr>
 <td>B</td>
@@ -1610,6 +1730,12 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>1.2</td>
 <td>12/11/2026</td>
 <td>Indicador 🟢 en línea (sección 7.9) y enlace 📘 Manual de usuario en el menú de la App</td>
+<td>Jeider Buelvas — Desarrollo Full Stack</td>
+</tr>
+<tr>
+<td>1.3</td>
+<td>17/11/2026</td>
+<td>Cambio del número de O.P. (5.8 y PR-10), correo al responsable de Tareas de la O.P. (7.6), Cumplimiento Prom. por O.P. (7.2 y 8.3), notificaciones y versiones</td>
 <td>Jeider Buelvas — Desarrollo Full Stack</td>
 </tr>
 <tr>
