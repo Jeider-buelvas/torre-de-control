@@ -349,6 +349,32 @@ footer b{color:var(--accent);font-weight:600;}
 .rs-bar>div{height:100%;border-radius:4px;background:var(--brand-gradient);}
 @media(max-width:1100px){.resumen-band{grid-template-columns:repeat(3,minmax(0,1fr));}}
 @media(max-width:600px){.resumen-band{grid-template-columns:repeat(2,minmax(0,1fr));}.rs-value{font-size:24px;}}
+/* ── 📊 Resumen de tareas de las O.P. (solo consulta; lee los mismos registros de 📝 Tareas de la O.P.) ── */
+.rt-band .rs-tile.on{border-color:var(--rc,var(--accent));box-shadow:0 0 0 2px var(--rc,var(--accent)) inset,var(--card-shadow);}
+.rt-filtros{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;}
+.rt-filtros .filter-input{flex:1 1 220px;min-width:180px;}
+.rt-filtros .filter-select{flex:0 1 auto;max-width:220px;}
+.rt-fechas{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);}
+.rt-fechas input{padding:7px 8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;}
+.rt-acc{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin-bottom:10px;font-size:12px;color:var(--muted);}
+.rt-btn{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:999px;padding:7px 14px;font-family:'DM Sans',sans-serif;font-size:12.5px;font-weight:600;cursor:pointer;transition:all .15s;}
+.rt-btn:hover{border-color:var(--accent);color:var(--accent);}
+.rt-btn.prim{background:var(--brand-gradient);color:#fff;border-color:transparent;}
+.rt-btn.prim:hover{color:#fff;filter:brightness(1.05);}
+.rt-btn:disabled{opacity:.6;cursor:wait;}
+#page-resumentareas th.rt-sort{cursor:pointer;user-select:none;white-space:nowrap;}
+#page-resumentareas th.rt-sort:hover{color:var(--accent);}
+#page-resumentareas tbody tr.rt-fila{cursor:pointer;}
+#page-resumentareas tbody tr.rt-fila:hover td{background:var(--surface2);}
+tr.rt-venc td:first-child{box-shadow:inset 4px 0 0 var(--red);}
+tr.rt-prox td:first-child{box-shadow:inset 4px 0 0 var(--yellow);}
+tr.rt-abie td:first-child{box-shadow:inset 4px 0 0 var(--accent);}
+tr.rt-cerr td{opacity:.72;}
+tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
+.rt-desc{max-width:340px;white-space:normal;line-height:1.35;}
+.rt-dias{font-weight:700;white-space:nowrap;}
+#page-resumentareas .bit-chip{white-space:nowrap;}
+.nav-item.nav-rt{white-space:normal;line-height:1.25;}
 /* ── Cumplimiento de entrega al cliente ── */
 .ent-kpis{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin-bottom:16px;}
 .ent-kpi{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;box-shadow:var(--card-shadow);}
@@ -542,6 +568,7 @@ footer b{color:var(--accent);font-weight:600;}
     <button class="nav-item" onclick="showPage('alertas',this)"><span class="nav-icon">🚨</span>Alertas</button>
     <button class="nav-item" onclick="showPage('tabla',this)"><span class="nav-icon">🔎</span>Tabla Detalle</button>
     <button class="nav-item" onclick="showPage('historial',this)"><span class="nav-icon">📜</span>Historial</button>
+    <button class="nav-item nav-rt" onclick="showPage('resumentareas',this);rtAbrir()"><span class="nav-icon">📊</span>Resumen de tareas de las O.P.</button>
   </nav>
   <div class="sidebar-ayuda">
     <a class="nav-item nav-manual" href="manual_torre_control/" target="_blank" rel="noopener" title="Abre el manual de usuario en una pestaña nueva"><span class="nav-icon">📘</span>Manual de usuario<span class="nav-ext">↗</span></a>
@@ -870,6 +897,45 @@ footer b{color:var(--accent);font-weight:600;}
     <div class="pagination-bar">
       <div class="page-size-wrap"><span id="histCount">0 registros</span></div>
       <div class="pager" id="histPagerControls"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 📊 RESUMEN DE TAREAS DE LAS O.P. (solo consulta) -->
+<div class="page" id="page-resumentareas">
+  <div class="section-title">📊 RESUMEN DE TAREAS DE LAS O.P.</div>
+  <div class="section-sub">Todas las 📝 Tareas de la O.P. en un solo lugar · solo consulta · haz clic en una fila para abrir las tareas de esa O.P.</div>
+  <div class="resumen-band rt-band" id="rtBand"></div>
+  <div class="card">
+    <div class="rt-filtros">
+      <input class="filter-input" id="rtTexto" placeholder="🔍 Buscar tarea, O.P., responsable, área…" oninput="rtRender()">
+      <select class="filter-select" id="rtPlanta" onchange="rtRender()"><option value="all">Todas las plantas</option><option value="BOGOTÁ">Bogotá</option><option value="BARRANQUILLA">Barranquilla</option></select>
+      <select class="filter-select" id="rtOP" onchange="rtRender()"><option value="">Todas las O.P.</option></select>
+      <select class="filter-select" id="rtResp" onchange="rtRender()"><option value="">Todos los responsables</option></select>
+      <select class="filter-select" id="rtEstado" onchange="rtRender()"><option value="">Todos los estados</option><option value="abiertas">Abiertas</option><option value="vencidas">Vencidas</option><option value="porvencer">Por vencer (7 días)</option><option value="cerradas">Cerradas</option><option value="bloqueos">Bloqueos abiertos</option></select>
+      <select class="filter-select" id="rtTipo" onchange="rtRender()"><option value="">Todos los tipos</option><option>Nota</option><option>Compromiso</option><option>Bloqueo</option></select>
+      <span class="rt-fechas" title="Fecha de vencimiento (fecha compromiso)">Vence <input type="date" id="rtDesde" onchange="rtRender()"> a <input type="date" id="rtHasta" onchange="rtRender()"></span>
+    </div>
+    <div class="rt-acc">
+      <span id="rtCount">0 tareas</span>
+      <span style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="rt-btn" onclick="rtLimpiar()">✕ Limpiar filtros</button>
+        <button class="rt-btn prim" id="rtExportar" onclick="rtExportar()">⬇ Exportar a Excel</button>
+      </span>
+    </div>
+    <div class="table-wrap">
+      <table><thead><tr>
+        <th class="rt-sort" data-k="op" onclick="rtOrden('op')">O.P.</th>
+        <th class="rt-sort" data-k="planta" onclick="rtOrden('planta')">Planta</th>
+        <th class="rt-sort" data-k="tipo" onclick="rtOrden('tipo')">Tipo · Área</th>
+        <th>Tarea / compromiso</th>
+        <th class="rt-sort" data-k="resp" onclick="rtOrden('resp')">Responsable</th>
+        <th class="rt-sort" data-k="reg" onclick="rtOrden('reg')">Registro</th>
+        <th class="rt-sort" data-k="venc" onclick="rtOrden('venc')">Vence</th>
+        <th class="rt-sort" data-k="estado" onclick="rtOrden('estado')">Estado</th>
+        <th class="rt-sort" data-k="dias" onclick="rtOrden('dias')">Días</th>
+      </tr></thead>
+      <tbody id="rtBody"><tr><td colspan="9" class="empty">Sin datos</td></tr></tbody></table>
     </div>
   </div>
 </div>
@@ -2408,6 +2474,7 @@ function renderAlertasPage(){
   renderAlertList();
   renderAlertasEntrega();
   renderAlertasBitacora();
+  rtRender();   // 📊 Resumen de tareas de las O.P.
 }
 function renderAlertasEntrega(){
   var box=document.getElementById('alertEntregas');if(!box)return;
@@ -2968,6 +3035,7 @@ function bitCerrar(id,btn){
 }
 function bitRefrescarVistas(){
   var pag=opsCurrentPage;renderEjecutiva();opsCurrentPage=pag;renderOpsGrid();renderAlertasBitacora();
+  rtRender();   // 📊 Resumen de tareas de las O.P.
 }
 function renderAlertasBitacora(){
   var box=document.getElementById('alertBitacora');if(!box)return;
@@ -2978,6 +3046,127 @@ function renderAlertasBitacora(){
     return '<div class="alert-item '+(bloq?'alert-warning':'alert-critical')+'" style="cursor:pointer" onclick="abrirBitacora(\''+esc(b.op)+'\')">'+
       '<div class="alert-icon">'+(bloq?'⛔':'⏰')+'</div><div><div class="alert-title">OP '+esc(b.op)+' — '+esc(o.nombre||'—')+' · '+(bloq?'Bloqueo abierto':'Compromiso vencido el '+esc(b.fechaCompromiso))+'</div>'+
       '<div class="alert-desc">'+esc(b.descripcion)+' · 👤 '+esc(b.responsable||'—')+(b.area?' · '+esc(b.area):'')+' · anotado por '+esc(b.autor)+'</div></div></div>';}).join(''):'<div class="empty">✅ Sin compromisos vencidos ni bloqueos abiertos</div>';
+}
+
+// ── 📊 RESUMEN DE TAREAS DE LAS O.P. ──
+// Solo consulta: lee state.bitacora (los mismos registros de 📝 Tareas de la O.P., hoja BITACORA_OP).
+// No guarda nada. La planta sale de la O.P. (una O.P. MIXTO aparece en Bogotá y en Barranquilla).
+var RT_DIAS_PROX=7,rtSort={k:'',dir:1},rtIniciado=false,rtVista=[];
+function rtHoy(){var h=new Date();h.setHours(0,0,0,0);return h;}
+function rtPlantaDe(o){if(!o)return '';var p=plantasOP(o);if(p.length>1||p.indexOf('MIXTO')!==-1||normPlanta(o.sede)==='MIXTO')return 'MIXTO';return p[0]||'';}
+function rtFilas(){
+  var hoy=rtHoy(),vistos={},out=[];
+  (state.bitacora||[]).forEach(function(b){
+    if(!b||vistos[b.id])return;vistos[b.id]=1;                 // sin duplicados: un registro = una fila
+    var o=opPorNumero(b.op),fv=parseD(b.fechaCompromiso),ab=b.estado==='Abierto',dias=null,cl;
+    if(fv&&ab)dias=Math.round((fv-hoy)/864e5);
+    if(b.estado==='Cerrado')cl='Cerrada';
+    else if(ab&&dias!==null&&dias<0)cl='Vencida';
+    else if(ab&&dias!==null&&dias<=RT_DIAS_PROX)cl='Por vencer';
+    else if(ab)cl='Abierta';
+    else cl=b.estado||'—';
+    var fr=b.fecha?String(b.fecha).split(' '):[],reg=fr.length?parseD(fr[0]):null;
+    if(reg&&fr[1]){var hm=fr[1].split(':');reg=new Date(reg.getTime());reg.setHours(+hm[0]||0,+hm[1]||0);}
+    out.push({b:b,o:o,planta:rtPlantaDe(o),venc:fv,reg:reg,dias:dias,clase:cl});
+  });
+  return out;
+}
+function rtEnPlanta(f,p){return p==='all'||f.planta===p||f.planta==='MIXTO';}
+function rtAbrir(){
+  if(!rtIniciado){rtIniciado=true;var sel=document.getElementById('rtPlanta');if(sel&&currentSede&&currentSede!=='all'&&sel.querySelector('option[value="'+currentSede+'"]'))sel.value=currentSede;}
+  rtRender();
+}
+function rtEstadoTile(v){var e=document.getElementById('rtEstado');if(!e)return;e.value=(e.value===v?'':v);rtRender();}
+function rtLimpiar(){['rtTexto','rtOP','rtResp','rtEstado','rtTipo','rtDesde','rtHasta'].forEach(function(id){var e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('rtPlanta').value='all';rtRender();}
+function rtOrden(k){rtSort=rtSort.k===k?{k:k,dir:-rtSort.dir}:{k:k,dir:1};rtRender();}
+function rtOpciones(id,vals,primera){
+  var e=document.getElementById(id);if(!e)return;var cur=e.value;
+  e.innerHTML='<option value="">'+primera+'</option>'+vals.map(function(v){return '<option value="'+esc(v).replace(/"/g,'&quot;')+'">'+esc(v)+'</option>';}).join('');
+  if(cur&&vals.indexOf(cur)!==-1)e.value=cur;else e.value='';
+}
+function rtRender(){
+  var body=document.getElementById('rtBody');if(!body)return;
+  var todas=rtFilas(),g=function(id){var e=document.getElementById(id);return e?e.value:'';};
+  var pl=g('rtPlanta')||'all';
+  var enPl=todas.filter(function(f){return rtEnPlanta(f,pl);});
+  // listas de los filtros (con lo que existe en la planta elegida)
+  var ops={},resps={};enPl.forEach(function(f){ops[f.b.op]=1;if(f.b.responsable)resps[f.b.responsable]=1;});
+  rtOpciones('rtOP',Object.keys(ops).sort(function(a,b){return (parseFloat(b)||0)-(parseFloat(a)||0)||a.localeCompare(b);}),'Todas las O.P.');
+  rtOpciones('rtResp',Object.keys(resps).sort(function(a,b){return a.localeCompare(b,'es');}),'Todos los responsables');
+  var txt=g('rtTexto').trim().toLowerCase(),fop=g('rtOP'),frs=g('rtResp'),fes=g('rtEstado'),fti=g('rtTipo');
+  var de=g('rtDesde')?parseD(g('rtDesde')):null,ha=g('rtHasta')?parseD(g('rtHasta')):null;
+  var base=enPl.filter(function(f){var b=f.b;
+    if(fop&&String(b.op)!==fop)return false;
+    if(frs&&b.responsable!==frs)return false;
+    if(fti&&b.tipo!==fti)return false;
+    if((de||ha)&&(!f.venc||(de&&f.venc<de)||(ha&&f.venc>ha)))return false;
+    if(txt){var h=[b.op,b.descripcion,b.responsable,b.area,b.tipo,b.autor,b.notaCierre,f.planta,f.o&&f.o.nombre,f.o&&f.o.cliente].join(' ').toLowerCase();if(h.indexOf(txt)===-1)return false;}
+    return true;});
+  var cnt={total:base.length,abiertas:0,cerradas:0,vencidas:0,porvencer:0,bloqueos:0};
+  base.forEach(function(f){if(f.b.estado==='Abierto')cnt.abiertas++;if(f.clase==='Cerrada')cnt.cerradas++;if(f.clase==='Vencida')cnt.vencidas++;if(f.clase==='Por vencer')cnt.porvencer++;if(f.b.tipo==='Bloqueo'&&f.b.estado==='Abierto')cnt.bloqueos++;});
+  var est=function(f){return fes==='abiertas'?f.b.estado==='Abierto':fes==='vencidas'?f.clase==='Vencida':fes==='porvencer'?f.clase==='Por vencer':fes==='cerradas'?f.clase==='Cerrada':fes==='bloqueos'?(f.b.tipo==='Bloqueo'&&f.b.estado==='Abierto'):true;};
+  var filas=base.filter(est);
+  var tiles=[['','📋','Total de tareas',cnt.total,'registradas','var(--accent)'],['abiertas','🟣','Abiertas',cnt.abiertas,'sin cerrar','var(--grad-1)'],
+    ['cerradas','✔','Cerradas',cnt.cerradas,'con nota de cierre','var(--green)'],['vencidas','⏰','Vencidas',cnt.vencidas,'fecha compromiso pasada','var(--red)'],
+    ['porvencer','⏳','Por vencer',cnt.porvencer,'en los próximos '+RT_DIAS_PROX+' días','var(--yellow)'],['bloqueos','⛔','Bloqueos abiertos',cnt.bloqueos,'frenan el avance','var(--orange,#f97316)']];
+  document.getElementById('rtBand').innerHTML=tiles.map(function(t){
+    return '<div class="rs-tile'+(fes===t[0]&&t[0]?' on':'')+'" style="--rc:'+t[5]+'" onclick="rtEstadoTile(\''+t[0]+'\')" title="Filtrar por '+t[2].toLowerCase()+'">'+
+      '<div class="rs-label">'+t[1]+' '+t[2]+'</div><div class="rs-value">'+t[3]+'</div><div class="rs-desc">'+t[4]+'</div></div>';}).join('');
+  var rk={'Vencida':0,'Por vencer':1,'Abierta':2,'Cerrada':3};
+  var cmpNum=function(a,b){return (a==null?Infinity:a)-(b==null?Infinity:b);};
+  var key={op:function(f){return parseFloat(f.b.op)||0;},planta:function(f){return f.planta||'~';},tipo:function(f){return (f.b.tipo||'')+' '+(f.b.area||'');},
+    resp:function(f){return (f.b.responsable||'~').toLowerCase();},reg:function(f){return f.reg?f.reg.getTime():null;},venc:function(f){return f.venc?f.venc.getTime():null;},
+    estado:function(f){return rk[f.clase]!=null?rk[f.clase]:4;},dias:function(f){return f.dias;}};
+  filas.sort(function(a,b){
+    if(rtSort.k){var ka=key[rtSort.k](a),kb=key[rtSort.k](b),r;
+      if(typeof ka==='string'||typeof kb==='string')r=String(ka).localeCompare(String(kb),'es');else r=cmpNum(ka,kb);
+      if(r)return r*rtSort.dir;}
+    return ((rk[a.clase]!=null?rk[a.clase]:4)-(rk[b.clase]!=null?rk[b.clase]:4))||cmpNum(a.venc&&a.venc.getTime(),b.venc&&b.venc.getTime())||String(b.b.id).localeCompare(String(a.b.id));
+  });
+  rtVista=filas;
+  document.querySelectorAll('#page-resumentareas th.rt-sort').forEach(function(th){var k=th.getAttribute('data-k');th.textContent=th.textContent.replace(/ [▲▼]$/,'')+(rtSort.k===k?(rtSort.dir>0?' ▲':' ▼'):'');});
+  document.getElementById('rtCount').textContent=filas.length+' tarea'+(filas.length===1?'':'s')+(filas.length!==todas.length?' de '+todas.length+' registradas':'');
+  var chip=function(c){var m={'Vencida':['⏰ Vencida','var(--red)','var(--tint-red)'],'Por vencer':['⏳ Por vencer','var(--yellow)','var(--tint-yellow)'],'Abierta':['Abierta','var(--accent)','var(--tint-accent)'],'Cerrada':['✔ Cerrada','var(--green)','var(--tint-green)']}[c]||[c,'var(--muted)','var(--surface2)'];
+    return '<span class="bit-chip" style="--bc:'+m[1]+';--bb:'+m[2]+'">'+esc(m[0])+'</span>';};
+  var diasTxt=function(f){if(f.dias===null)return '<span style="color:var(--muted)">—</span>';
+    if(f.dias<0)return '<span class="rt-dias" style="color:var(--red)">'+(-f.dias)+' día'+(f.dias===-1?'':'s')+' de retraso</span>';
+    if(f.dias===0)return '<span class="rt-dias" style="color:var(--yellow)">Vence hoy</span>';
+    return '<span class="rt-dias" style="color:'+(f.dias<=RT_DIAS_PROX?'var(--yellow)':'var(--muted)')+'">Faltan '+f.dias+' día'+(f.dias===1?'':'s')+'</span>';};
+  var cls={'Vencida':'rt-venc','Por vencer':'rt-prox','Abierta':'rt-abie','Cerrada':'rt-cerr'};
+  body.innerHTML=filas.length?filas.map(function(f){var b=f.b,t=BIT_TIPOS[b.tipo]||BIT_TIPOS.Nota;
+    return '<tr class="rt-fila '+(cls[f.clase]||'')+'" onclick="abrirBitacora(\''+esc(b.op)+'\')" title="Abrir las Tareas de la O.P. '+esc(b.op)+'">'+
+      '<td><strong>'+esc(b.op)+'</strong>'+(f.o&&f.o.nombre?'<div style="font-size:11px;color:var(--muted);max-width:160px;white-space:normal">'+esc(f.o.nombre)+'</div>':'')+'</td>'+
+      '<td>'+(f.planta?plantaBadge(f.planta):'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+t[0]+' '+esc(b.tipo)+(b.area?'<div><span class="area-tag">'+esc(b.area)+'</span></div>':'')+'</td>'+
+      '<td class="rt-desc">'+esc(b.descripcion)+(b.estado==='Cerrado'&&b.notaCierre?'<div style="font-size:11px;color:var(--green);margin-top:3px">✔ '+esc(b.notaCierre)+'</div>':'')+'</td>'+
+      '<td>'+(b.responsable?esc(b.responsable):'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td style="white-space:nowrap">'+esc(b.fecha||'—')+'<div style="font-size:11px;color:var(--muted)">'+esc(b.autor||b.correo||'')+'</div></td>'+
+      '<td style="white-space:nowrap">'+(b.fechaCompromiso?esc(b.fechaCompromiso):'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td>'+chip(f.clase)+'</td><td>'+diasTxt(f)+'</td></tr>';}).join(''):
+    '<tr><td colspan="9" class="empty">'+(todas.length?'Ninguna tarea cumple los filtros':'Aún no hay tareas registradas en las O.P.')+'</td></tr>';
+}
+// Exportar a Excel (.xlsx) lo que se está viendo, con los filtros aplicados. La librería se carga solo al pulsar.
+var RT_XLSX_URL='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function rtCargarXLSX(){return new Promise(function(ok,mal){if(window.XLSX)return ok();var sc=document.createElement('script');sc.src=RT_XLSX_URL;sc.onload=function(){ok();};sc.onerror=function(){mal();};document.head.appendChild(sc);});}
+function rtExportar(){
+  var btn=document.getElementById('rtExportar');btn.disabled=true;var txt0=btn.textContent;btn.textContent='Preparando…';
+  rtCargarXLSX().then(function(){
+    var enc=['O.P.','Nombre O.P.','Cliente','Planta','Tipo','Área','Tarea / compromiso','Responsable','Anotado por','Fecha de registro','Fecha de vencimiento','Estado','Días (negativo = retraso)','Nota de cierre','Cerrado por','Fecha de cierre'];
+    var filas=rtVista.map(function(f){var b=f.b;return [isNaN(+b.op)?b.op:+b.op,f.o&&f.o.nombre||'',f.o&&f.o.cliente||'',f.planta,b.tipo||'',b.area||'',b.descripcion||'',b.responsable||'',b.autor||b.correo||'',
+      b.fecha||'',b.fechaCompromiso||'',f.clase,f.dias===null?'':f.dias,b.notaCierre||'',b.cerradoPor||'',b.fechaCierre||''];});
+    var ws=XLSX.utils.aoa_to_sheet([enc].concat(filas));
+    ws['!cols']=[8,28,24,13,12,14,50,24,24,17,13,11,12,40,22,17].map(function(w){return {wch:w};});
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(filas.length,1),c:enc.length-1}})};
+    var g=function(id){var e=document.getElementById(id);return e&&e.value?(e.options?e.options[e.selectedIndex].text:e.value):'';};
+    var fil=[['Resumen de tareas de las O.P. — Torre de Control Polyuprotec'],['Exportado',fmtDMY(new Date())+' '+new Date().toTimeString().slice(0,5)],['Tareas exportadas',filas.length],[''],['Filtro','Valor'],
+      ['Planta',g('rtPlanta')],['O.P.',g('rtOP')||'Todas'],['Responsable',g('rtResp')||'Todos'],['Estado',g('rtEstado')||'Todos'],['Tipo',g('rtTipo')||'Todos'],
+      ['Vence desde',g('rtDesde')||'—'],['Vence hasta',g('rtHasta')||'—'],['Búsqueda',document.getElementById('rtTexto').value||'—']];
+    var ws2=XLSX.utils.aoa_to_sheet(fil);ws2['!cols']=[{wch:20},{wch:50}];
+    var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Tareas');XLSX.utils.book_append_sheet(wb,ws2,'Filtros');
+    var h=new Date();XLSX.writeFile(wb,'Resumen_tareas_OP_'+h.getFullYear()+'-'+('0'+(h.getMonth()+1)).slice(-2)+'-'+('0'+h.getDate()).slice(-2)+'.xlsx');
+    btn.disabled=false;btn.textContent=txt0;
+  }).catch(function(){btn.disabled=false;btn.textContent='❌ No se pudo cargar el exportador';setTimeout(function(){btn.textContent=txt0;},4000);});
 }
 
 // ── HISTORIAL DE CAMBIOS (solo consulta) ──
