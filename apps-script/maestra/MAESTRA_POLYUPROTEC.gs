@@ -1,4 +1,13 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.8
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.9
+// v4.9 — CAPACIDAD DE LAS ÁREAS (para el 📊 Embudo de O.P. de la App):
+//   • Hoja CAPACIDAD_AREAS (protegida): ÁREA · PLANTA · MÁX. O.P. SIMULTÁNEAS · KG POR SEMANA ·
+//     ESTADO · NOTA. Una sola configuración para todos. Celda vacía = sin capacidad (no se
+//     marca sobrecarga). Menú "📊 Crear / proteger hoja de capacidades".
+//   • API: "capacidades" en ?tipo=todos y ?tipo=capacidades. Solo lectura: la App no
+//     escribe aquí y el Embudo no cambia ninguna fecha ni cronograma.
+//   • Todo lo demás, igual que v4.8.
+//
+// (v4.8)
 // v4.8 — CAMBIO DEL NÚMERO DE O.P. (pedido por Comercial v14.11 vía doPost, con el token):
 //   accion 'renombrarOP' {viejo, nuevo, motivo, usuario}. Cambia el número en
 //   BITACORA_OP (Tareas de la O.P.), LINEA_BASE (clave y columna OP), LOOKER_MAESTRA
@@ -121,6 +130,8 @@ function onOpen() {
     .addItem('📝 Ver Tareas de la O.P.', 'verBitacora')
     .addItem('📅 Activar correo semanal de Tareas de la O.P. (una sola vez)', 'activarCorreoBitacora')
     .addItem('✉️ Probar correo de Tareas de la O.P.', 'probarCorreoBitacora')
+    .addSeparator()
+    .addItem('📊 Crear / proteger hoja de capacidades (Embudo)', 'crearHojaCapacidades')   // v4.9
     .addToUi();
 }
 
@@ -446,6 +457,7 @@ function doGet(e) {
     case 'historial':  output = getDatosHistorial();  break;   // v4
     case 'entregas':   output = getDatosEntregas();   break;   // v4.1
     case 'bitacora':   output = getDatosBitacora();   break;   // v4.4
+    case 'capacidades': output = getDatosCapacidades(); break; // v4.9
     default:      output = getTodosDatos();  break;
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
@@ -461,7 +473,8 @@ function getTodosDatos() {
     produccion: getDatosProduccion(),     // v3
     historial: getDatosHistorial(),       // v4
     entregas: getDatosEntregas(),         // v4.1
-    bitacora: getDatosBitacora()          // v4.4
+    bitacora: getDatosBitacora(),         // v4.4
+    capacidades: getDatosCapacidades()    // v4.9
   };
 }
 
@@ -1800,4 +1813,50 @@ function conectarProduccionBogota() {
     '1. Abre la hoja ' + HOJA_PROD_BOGOTA + ' y, si aparece "#REF!", pulsa "Permitir acceso".\n' +
     '2. 🔄 Actualizar LOOKER_MAESTRA.\n' +
     '3. 🛡 Instalar protección de nuevo, para que también vigile el archivo de Bogotá.');
+}
+
+// ════════════════════════════════════════════════════════════
+//  v4.9 — CAPACIDAD DE LAS ÁREAS (📊 Embudo de O.P. de la App)
+// ════════════════════════════════════════════════════════════
+var HOJA_CAPACIDAD = 'CAPACIDAD_AREAS';
+var ENC_CAPACIDAD = ['ÁREA', 'PLANTA', 'MÁX. O.P. SIMULTÁNEAS', 'KG POR SEMANA', 'ESTADO', 'NOTA'];
+// Valores iniciales tomados de la plantilla del Embudo de OPs (BMadre del Cronograma). POR VALIDAR.
+var CAPACIDAD_INICIAL = [
+  ['DISEÑO', 'AMBAS', 3, '', 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['DIBUJO', 'AMBAS', 3, '', 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['COMPRAS', 'AMBAS', 5, '', 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['PRODUCCION', 'BOGOTÁ', 3, 40000, 'Por validar', 'La plantilla trae un solo valor para Producción; ajustar por planta'],
+  ['PRODUCCION', 'BARRANQUILLA', 3, 40000, 'Por validar', 'La plantilla trae un solo valor para Producción; ajustar por planta'],
+  ['GALVANIZADO', 'AMBAS', 4, 50000, 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['PINTURA', 'AMBAS', 3, 40000, 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['LOGISTICA', 'AMBAS', 4, '', 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['MONTAJE', 'AMBAS', 3, 35000, 'Por validar', 'Valor de la plantilla del Embudo'],
+  ['ADMINISTRACION', 'AMBAS', '', '', 'Sin dato', 'La plantilla del Embudo no trae esta área']
+];
+
+function crearHojaCapacidades() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), sh = ss.getSheetByName(HOJA_CAPACIDAD), nueva = !sh;
+  if (nueva) {
+    sh = ss.insertSheet(HOJA_CAPACIDAD);
+    sh.getRange(1, 1, 1, ENC_CAPACIDAD.length).setValues([ENC_CAPACIDAD]).setFontWeight('bold').setBackground('#4c1d95').setFontColor('#ffffff');
+    sh.getRange(2, 1, CAPACIDAD_INICIAL.length, ENC_CAPACIDAD.length).setValues(CAPACIDAD_INICIAL);
+    sh.setFrozenRows(1); sh.autoResizeColumns(1, ENC_CAPACIDAD.length);
+  }
+  sh.getProtections(SpreadsheetApp.ProtectionType.SHEET).forEach(function(p) { p.remove(); });
+  var p = sh.protect().setDescription('Capacidad de las áreas (Embudo de O.P.) — solo administradores');
+  var yo = Session.getEffectiveUser();
+  p.addEditor(yo); p.removeEditors(p.getEditors().filter(function(u) { return u.getEmail() !== yo.getEmail(); }));
+  if (p.canDomainEdit()) p.setDomainEdit(false);
+  SpreadsheetApp.getUi().alert((nueva ? '📊 Hoja CAPACIDAD_AREAS creada con los valores de la plantilla del Embudo (por validar).' : '📊 La hoja CAPACIDAD_AREAS ya existía: no se cambió ningún valor.') +
+    '\n\nQuedó protegida: solo la editan los administradores. Celda vacía = sin capacidad (no se marca sobrecarga).');
+}
+
+function getDatosCapacidades() {
+  var sh = SpreadsheetApp.openById(ID_MAESTRA).getSheetByName(HOJA_CAPACIDAD);
+  if (!sh || sh.getLastRow() < 2) return [];
+  var num = function(v) { if (v === '' || v === null) return null; if (typeof v === 'number') return v > 0 ? v : null; var n = Number(String(v).replace(/[^0-9.,-]/g, '').replace(/\./g, '').replace(',', '.')); return isFinite(n) && n > 0 ? n : null; };
+  return sh.getRange(2, 1, sh.getLastRow() - 1, ENC_CAPACIDAD.length).getValues()
+    .filter(function(r) { return String(r[0]).trim(); })
+    .map(function(r) { return { area: String(r[0]).trim().toUpperCase(), planta: String(r[1]).trim().toUpperCase() || 'AMBAS',
+      capOps: num(r[2]), capKg: num(r[3]), estado: String(r[4]).trim(), nota: String(r[5]).trim() }; });
 }

@@ -569,6 +569,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
     <button class="nav-item" onclick="showPage('tabla',this)"><span class="nav-icon">🔎</span>Tabla Detalle</button>
     <button class="nav-item" onclick="showPage('historial',this)"><span class="nav-icon">📜</span>Historial</button>
     <button class="nav-item nav-rt" onclick="showPage('resumentareas',this);rtAbrir()"><span class="nav-icon">📊</span>Resumen de tareas de las O.P.</button>
+    <button class="nav-item" onclick="showPage('embudo',this);embAbrir()"><span class="nav-icon">📊</span>Embudo de O.P.</button>
   </nav>
   <div class="sidebar-ayuda">
     <a class="nav-item nav-manual" href="manual_torre_control/" target="_blank" rel="noopener" title="Abre el manual de usuario en una pestaña nueva"><span class="nav-icon">📘</span>Manual de usuario<span class="nav-ext">↗</span></a>
@@ -940,6 +941,24 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
   </div>
 </div>
 
+<!-- 📊 EMBUDO DE O.P. (módulo en embudo.js · solo consulta) -->
+<div class="page" id="page-embudo">
+  <div class="section-title">📊 EMBUDO DE O.P.</div>
+  <div class="section-sub">Todas las O.P. en el tiempo, cruces entre áreas y carga contra la capacidad · fechas de los cronogramas · solo consulta, no cambia ninguna fecha</div>
+  <div class="resumen-band" id="embKpis"></div>
+  <div class="emb-filtros">
+    <input class="filter-input" id="embTxt" placeholder="🔍 Buscar O.P., cliente, proyecto, comercial…" oninput="embRender()">
+    <select class="filter-select" id="embCli" onchange="embRender()"><option value="">Todos los clientes</option></select>
+    <select class="filter-select" id="embEst" onchange="embRender()"><option value="">Todos los estados</option></select>
+    <select class="filter-select" id="embArea" onchange="embRender()"><option value="">Todas las áreas</option></select>
+    <label class="emb-chk"><input type="checkbox" id="embTerm" onchange="embRender()"> Incluir terminadas</label>
+    <button class="emb-btn" onclick="embLimpiar()">✕ Limpiar</button>
+    <button class="emb-btn prim" id="embExportar" onclick="embExportar()">⬇ Exportar a Excel</button>
+  </div>
+  <div class="emb-tabs" id="embTabs"></div>
+  <div id="embBody"><div class="empty">Cargando…</div></div>
+</div>
+
 <!-- ALERTAS -->
 <div class="page" id="page-alertas">
   <div class="section-title">PANEL DE ALERTAS ACTIVAS</div>
@@ -1103,6 +1122,7 @@ async function cargarDatos(){
     state.historial=(data.historial||[]).map(histNombreTareas);   // Maestra v4 (solo consulta) · «Bitácora» se muestra como «Tareas de la O.P.»
     state.entregas=data.entregas||null;   // Maestra v4.1 (desde Comercial)
     state.bitacora=(data.bitacora||[]).map(function(b){b.op=String(b.op).replace(/\.0$/,'');return b;});   // Maestra v4.4
+    state.capacidades=Array.isArray(data.capacidades)?data.capacidades:[];   // Maestra v4.9 (📊 Embudo de O.P.)
     var ts=data.timestamp?new Date(data.timestamp).toLocaleString('es-CO'):'Ahora';
     document.getElementById('timestampEl').textContent='📡 '+ts;
     document.getElementById('btnConectar').textContent='✅ Conectado';
@@ -1591,6 +1611,7 @@ function renderAll(){
   renderEjecutiva();renderKgPage();renderObeya();renderGantt();
   renderAreas();renderCurvaS();renderAlertasPage();renderTabla();
   renderProduccion();renderHistorial();renderEntregas();
+  if(window.embRender)embRender();   // 📊 Embudo de O.P. (embudo.js)
 }
 
 // ── EJECUTIVA ──
@@ -3363,6 +3384,7 @@ function festivosCO(y){
   var mas=function(d,n){var x=new Date(d.getTime());x.setDate(x.getDate()+n);return x;};
   [[0,1],[4,1],[6,20],[7,7],[11,8],[11,25]].forEach(function(p){add(new Date(y,p[0],p[1]));});
   [[0,6],[2,19],[5,29],[7,15],[9,12],[10,1],[10,11]].forEach(function(p){add(lunes(new Date(y,p[0],p[1])));});
+  if(y>=2026)add(lunes(new Date(y,6,9)));   // Virgen de Chiquinquirá (Ley 2578 de 2026), se corre al lunes
   var a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
       h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),kk=c%4,l=(32+2*e+2*i-h-kk)%7,m=Math.floor((a+11*h+22*l)/451),
       mes=Math.floor((h+l-7*m+114)/31),dia=((h+l-7*m+114)%31)+1,p=new Date(y,mes-1,dia);
@@ -3740,5 +3762,6 @@ function renderEnLinea(){
   body.innerHTML=h;
 }
 </script>
+<script src="embudo.js?v=20261117"></script>
 </body>
 </html>
