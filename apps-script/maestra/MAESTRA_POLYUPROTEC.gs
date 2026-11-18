@@ -1,4 +1,18 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.10
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.11
+// v4.11 — O.P. FINALIZADAS (📁 OPs Terminadas / Histórico de la App):
+//   • Estado_OP: una tarea "No aplica" ya no impide que la O.P. quede Terminada (mismo criterio
+//     que el avance desde v4.1). Nada más cambia en LOOKER_MAESTRA.
+//   • Una O.P. es FINALIZADA cuando se cumplen las tres: (a) Estado_OP = Terminado, (b) entrega
+//     real registrada en Comercial (ENTREGAS_CLIENTE) y (c) sin compromisos ni bloqueos abiertos
+//     en Tareas de la O.P. Si falta (b) o (c) queda "Lista para cierre" y sigue en el tablero.
+//   • Hoja OPS_FINALIZADAS (protegida): una fila por O.P. con su resumen al cerrar. Nunca se
+//     escribe dos veces la misma O.P.; si deja de cumplir, se marca "Reabierta" (no se borra) y
+//     al volver a cumplir pasa otra vez a "Finalizada" (cuenta las reaperturas). Si la O.P. ya no
+//     está en LOOKER_MAESTRA, el registro se conserva tal cual.
+//   • API: "finalizadas" (registro) y "listasCierre" (O.P. terminadas a las que les falta algo).
+//   • No se borran O.P. ni se cambian fechas, avances, cumplimiento ni historial.
+//
+// (v4.10)
 // v4.10 — MEDICIÓN DE TIEMPOS (Fase 1 del diagnóstico de lentitud). Solo mide, no cambia datos:
 //   • ?tipo=todos mide cuánto tarda cada parte (ops, áreas, tareas, …), el armado del JSON y su tamaño.
 //   • La respuesta trae "_ms" con esos tiempos. Se guardan en la hoja RENDIMIENTO_API (máx. 1 fila
@@ -216,6 +230,7 @@ function actualizarLookerMaestra() {
       const op     = lastOPHoja;
       const estado = String(f[15] || '').trim();
       if (!op || !estado) continue;
+      if (estado === 'No aplica') continue;   // v4.11: "No aplica" no deja la O.P. pendiente (como el avance desde v4.1)
       if (_deOtraPlanta(plantaDe[nombreHoja], sedeHoja)) continue;   // v4.6: la cuenta el archivo de su planta
       if (!estadoPorOP[op]) estadoPorOP[op] = 'Sin Iniciar';
       if (estadoPorOP[op] !== 'Terminado') {
@@ -468,6 +483,7 @@ function doGet(e) {
     case 'entregas':   output = getDatosEntregas();   break;   // v4.1
     case 'bitacora':   output = getDatosBitacora();   break;   // v4.4
     case 'capacidades': output = getDatosCapacidades(); break; // v4.9
+    case 'finalizadas': output = _leerFinalizadas(); break;    // v4.11 (solo lectura del registro)
     default:      output = getTodosDatos(e);  break;   // v4.10: mide tiempos
   }
   if (tipo === 'todos' || !e || !e.parameter || !e.parameter.tipo) {
@@ -494,6 +510,9 @@ function getTodosDatos(e) {
     bitacora: med('bitacora', getDatosBitacora),           // v4.4
     capacidades: med('capacidades', getDatosCapacidades)   // v4.9
   };
+  var cierre = med('finalizadas', function() { return _cierreOPs(out); });   // v4.11
+  out.finalizadas = cierre.finalizadas;
+  out.listasCierre = cierre.listasCierre;
   ms.datos = Date.now() - t0;
   out._ms = ms;
   out._prev = e && e.parameter && e.parameter.prev ? String(e.parameter.prev).slice(0, 80) : '';
@@ -1899,4 +1918,120 @@ function getDatosCapacidades() {
     .filter(function(r) { return String(r[0]).trim(); })
     .map(function(r) { return { area: String(r[0]).trim().toUpperCase(), planta: String(r[1]).trim().toUpperCase() || 'AMBAS',
       capOps: num(r[2]), capKg: num(r[3]), estado: String(r[4]).trim(), nota: String(r[5]).trim() }; });
+}
+
+// ════════════════════════════════════════════════════════════
+//  v4.11 — O.P. FINALIZADAS (registro de cierre)
+// ════════════════════════════════════════════════════════════
+var HOJA_FINALIZADAS = 'OPS_FINALIZADAS';
+var ENC_FINALIZADAS = ['OP', 'ESTADO_REGISTRO', 'FECHA_CIERRE', 'NOMBRE', 'CLIENTE', 'COMERCIAL', 'PLANTA', 'INICIO_PLAN', 'FIN_PLAN',
+  'INICIO_REAL', 'FIN_REAL', 'ENTREGA_COMPROMETIDA', 'ENTREGA_REAL', 'AVANCE_FINAL_%', 'KG_TOTAL', 'AREAS', 'TAREAS', 'REAPERTURAS',
+  'ULTIMO_CAMBIO', 'DETALLE_AREAS'];
+
+function _fechaDMY(s) { var p = String(s || '').split('/'); return p.length === 3 && +p[2] >= 2000 ? new Date(+p[2], +p[1] - 1, +p[0]) : null; }   // fechas vacías de Sheets (1899/1900) = sin fecha
+
+/** Decide qué O.P. están finalizadas con los datos que ya se leyeron para la App (no vuelve a leer LOOKER). */
+function _cierreOPs(out) {
+  var res = { finalizadas: [], listasCierre: [] };
+  try {
+    var entregas = {}; ((out.entregas && out.entregas.entregas) || []).forEach(function(e) { entregas[e.op] = e; });
+    var abiertas = {}; (out.bitacora || []).forEach(function(b) { if (b.estado === 'Abierto') abiertas[b.op] = (abiertas[b.op] || 0) + 1; });
+    var porOP = {}; (out.tareas || []).forEach(function(t) { (porOP[t.op] = porOP[t.op] || []).push(t); });
+    var cumple = {}, ops = {};
+    (out.ops || []).forEach(function(o) {
+      ops[o.op] = o;
+      if (o.estado !== 'Terminado') return;
+      var e = entregas[o.op], faltan = [];
+      if (!e || !e.real) faltan.push('registrar la entrega real al cliente');
+      if (abiertas[o.op]) faltan.push(abiertas[o.op] + (abiertas[o.op] === 1 ? ' compromiso o bloqueo abierto' : ' compromisos o bloqueos abiertos') + ' en Tareas de la O.P.');
+      if (faltan.length) res.listasCierre.push({ op: o.op, faltan: faltan });
+      else cumple[o.op] = true;
+    });
+    // Registro: leer (con caché corta), y escribir solo si algo cambió
+    var reg = _leerFinalizadas(), porReg = {}; reg.forEach(function(r) { porReg[r.op] = r; });
+    var cambios = Object.keys(cumple).some(function(op) { return !porReg[op] || porReg[op].estado !== 'Finalizada'; }) ||
+      reg.some(function(r) { return r.estado === 'Finalizada' && ops[r.op] && !cumple[r.op]; });
+    if (cambios) reg = _actualizarFinalizadas(out, ops, cumple, porOP, entregas);
+    res.finalizadas = reg;
+  } catch (err) { res.error = String(err && err.message || err); }
+  return res;
+}
+
+function _leerFinalizadas() {
+  var cache = CacheService.getScriptCache(), c = cache.get('FINALIZADAS_V1');
+  if (c) { try { return JSON.parse(c); } catch (e) {} }
+  var sh = SpreadsheetApp.openById(ID_MAESTRA).getSheetByName(HOJA_FINALIZADAS), out = [];
+  if (sh && sh.getLastRow() > 1) {
+    var tz = Session.getScriptTimeZone(), f = function(v, fmt) { return v instanceof Date ? Utilities.formatDate(v, tz, fmt || 'dd/MM/yyyy') : String(v || ''); };
+    out = sh.getRange(2, 1, sh.getLastRow() - 1, ENC_FINALIZADAS.length).getValues().filter(function(r) { return String(r[0]).trim(); }).map(function(r) {
+      var det = []; try { det = JSON.parse(r[19] || '[]'); } catch (e) {}
+      return { op: String(r[0]).trim().replace(/\.0$/, ''), estado: String(r[1]), fechaCierre: f(r[2], 'dd/MM/yyyy HH:mm'), nombre: String(r[3]), cliente: String(r[4]),
+        comercial: String(r[5]), planta: String(r[6]), inicioPlan: f(r[7]), finPlan: f(r[8]), inicioReal: f(r[9]), finReal: f(r[10]),
+        entregaComprometida: f(r[11]), entregaReal: f(r[12]), avance: Number(r[13]) || 0, kg: Number(r[14]) || 0, areas: String(r[15]),
+        tareas: Number(r[16]) || 0, reaperturas: Number(r[17]) || 0, ultimoCambio: f(r[18], 'dd/MM/yyyy HH:mm'), detalle: det };
+    });
+  }
+  try { var txt = JSON.stringify(out); if (txt.length < 90000) cache.put('FINALIZADAS_V1', txt, 300); } catch (e) {}
+  return out;
+}
+
+/** Escribe altas y cambios de estado. Con bloqueo, para que dos consultas al mismo tiempo no dupliquen filas. */
+function _actualizarFinalizadas(out, ops, cumple, porOP, entregas) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return _leerFinalizadas();
+  try {
+    var ss = SpreadsheetApp.openById(ID_MAESTRA), sh = ss.getSheetByName(HOJA_FINALIZADAS);
+    if (!sh) {
+      sh = ss.insertSheet(HOJA_FINALIZADAS);
+      sh.getRange(1, 1, 1, ENC_FINALIZADAS.length).setValues([ENC_FINALIZADAS]).setFontWeight('bold').setBackground('#4c1d95').setFontColor('#ffffff');
+      sh.setFrozenRows(1);
+      try { var p = sh.protect().setDescription('Registro de O.P. finalizadas — lo escribe el script'); p.setWarningOnly(true); } catch (e) {}
+    }
+    var ahora = new Date(), filas = sh.getLastRow() > 1 ? sh.getRange(2, 1, sh.getLastRow() - 1, ENC_FINALIZADAS.length).getValues() : [];
+    var idx = {}; filas.forEach(function(r, i) { var op = String(r[0]).trim().replace(/\.0$/, ''); if (op && idx[op] === undefined) idx[op] = i; });
+    var nuevas = [];
+    Object.keys(cumple).forEach(function(op) {
+      var fila = _filaFinalizada(ops[op], porOP[op] || [], entregas[op], ahora);
+      if (idx[op] === undefined) { nuevas.push(fila); idx[op] = -1; return; }
+      if (idx[op] < 0) return;
+      var r = filas[idx[op]];
+      if (String(r[1]) === 'Finalizada') return;                    // ya registrada: no se escribe dos veces
+      fila[17] = Number(r[17]) || 0; fila[2] = ahora;                // vuelve a cerrar: conserva el conteo de reaperturas
+      sh.getRange(idx[op] + 2, 1, 1, ENC_FINALIZADAS.length).setValues([fila]);
+    });
+    filas.forEach(function(r, i) {
+      var op = String(r[0]).trim().replace(/\.0$/, '');
+      if (String(r[1]) === 'Finalizada' && ops[op] && !cumple[op]) {   // solo si la O.P. sigue en la Maestra y ya no cumple
+        sh.getRange(i + 2, 2).setValue('Reabierta');
+        sh.getRange(i + 2, 18).setValue((Number(r[17]) || 0) + 1);
+        sh.getRange(i + 2, 19).setValue(ahora);
+      }
+    });
+    if (nuevas.length) sh.getRange(sh.getLastRow() + 1, 1, nuevas.length, ENC_FINALIZADAS.length).setValues(nuevas);
+    SpreadsheetApp.flush();
+    CacheService.getScriptCache().remove('FINALIZADAS_V1');
+  } finally { lock.releaseLock(); }
+  return _leerFinalizadas();
+}
+
+function _filaFinalizada(o, ts, e, ahora) {
+  var min = function(a, b) { return !a ? b : !b ? a : (a < b ? a : b); }, max = function(a, b) { return !a ? b : !b ? a : (a > b ? a : b); };
+  var ip = null, fp = null, ir = null, fr = null, kgSub = {}, areas = {}, n = 0;
+  ts.forEach(function(t) {
+    if (String(t.estado) === 'No aplica') return;
+    n++;
+    ip = min(ip, _fechaDMY(t.fechaIniPlan)); fp = max(fp, _fechaDMY(t.fechaFinPlan));
+    ir = min(ir, _fechaDMY(t.fechaIniReal)); fr = max(fr, _fechaDMY(t.fechaFinReal));
+    var sk = t.op + '|' + (t.subEstructura || ''); if (kgSub[sk] === undefined) kgSub[sk] = Number(t.pesoKgSub) || 0;
+    var A = areas[t.area] = areas[t.area] || { area: t.area, tareas: 0, ini: null, fin: null, iniR: null, finR: null };
+    A.tareas++; A.ini = min(A.ini, _fechaDMY(t.fechaIniPlan)); A.fin = max(A.fin, _fechaDMY(t.fechaFinPlan));
+    A.iniR = min(A.iniR, _fechaDMY(t.fechaIniReal)); A.finR = max(A.finR, _fechaDMY(t.fechaFinReal));
+  });
+  var tz = Session.getScriptTimeZone(), F = function(d) { return d ? Utilities.formatDate(d, tz, 'dd/MM/yyyy') : ''; };
+  var kg = Object.keys(kgSub).reduce(function(s, k) { return s + kgSub[k]; }, 0);
+  var det = Object.keys(areas).map(function(k) { var A = areas[k]; return { area: A.area, tareas: A.tareas, ini: F(A.ini), fin: F(A.fin), iniR: F(A.iniR), finR: F(A.finR) }; });
+  var plantas = (o.plantas || []).filter(Boolean), planta = plantas.length > 1 ? 'MIXTO' : (plantas[0] || o.sede || '');
+  return [o.op, 'Finalizada', ahora, o.nombre || '', o.cliente || '', o.comercial || '', planta, ip || '', fp || '', ir || '', fr || '',
+    e ? (_fechaDMY(e.vigente) || _fechaDMY(e.original) || '') : '', e ? (_fechaDMY(e.real) || '') : '', Number(o.avanceReal) || 0, Math.round(kg),
+    (o.areas || []).join(', '), n, 0, ahora, JSON.stringify(det).slice(0, 45000)];
 }

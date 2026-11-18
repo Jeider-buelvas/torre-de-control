@@ -570,6 +570,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
     <button class="nav-item" onclick="showPage('historial',this)"><span class="nav-icon">📜</span>Historial</button>
     <button class="nav-item nav-rt" onclick="showPage('resumentareas',this);rtAbrir()"><span class="nav-icon">📊</span>Resumen de tareas de las O.P.</button>
     <button class="nav-item" onclick="showPage('embudo',this);embAbrir()"><span class="nav-icon">📊</span>Embudo de O.P.</button>
+    <button class="nav-item nav-rt" onclick="showPage('historico',this);hisAbrir()"><span class="nav-icon">📁</span>OPs Terminadas / Histórico</button>
   </nav>
   <div class="sidebar-ayuda">
     <a class="nav-item nav-manual" href="manual_torre_control/" target="_blank" rel="noopener" title="Abre el manual de usuario en una pestaña nueva"><span class="nav-icon">📘</span>Manual de usuario<span class="nav-ext">↗</span></a>
@@ -625,7 +626,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
   <div class="resumen-band" id="resumenBand"></div>
   <div class="kpi-grid kpi-grid-6">
     <div class="kpi" style="--kpi-color:var(--accent)" onclick="openKpiModal('total')"><div class="kpi-icon">📁</div><div class="kpi-body"><div class="kpi-label">Total Proyectos</div><div class="kpi-value" id="kpiTotal">—</div><div class="kpi-desc">OPs registradas</div></div></div>
-    <div class="kpi" style="--kpi-color:var(--green)" onclick="openKpiModal('terminados')"><div class="kpi-icon">✅</div><div class="kpi-body"><div class="kpi-label">Terminados</div><div class="kpi-value" id="kpiTerminados">—</div><div class="kpi-desc">OPs completadas</div></div></div>
+    <div class="kpi" style="--kpi-color:var(--green)" onclick="irAHistorico()" title="Abrir 📁 OPs Terminadas / Histórico"><div class="kpi-icon">📁</div><div class="kpi-body"><div class="kpi-label">Finalizadas</div><div class="kpi-value" id="kpiTerminados">—</div><div class="kpi-desc" id="kpiTermDesc">ver histórico</div></div></div>
     <div class="kpi" style="--kpi-color:var(--accent)" onclick="openKpiModal('cumplimiento')"><div class="kpi-icon">🎯</div><div class="kpi-body"><div class="kpi-label">Cumplimiento Prom.</div><div class="kpi-value" id="kpiCumplimiento">—</div><div class="kpi-desc" id="kpiCumplDesc">vs cronograma</div></div></div>
     <div class="kpi" style="--kpi-color:var(--red)" onclick="openKpiModal('desviados')"><div class="kpi-icon">📉</div><div class="kpi-body"><div class="kpi-label">Procesos Desviados</div><div class="kpi-value" id="kpiDesviados">—</div><div class="kpi-desc">Cumplimiento &lt; 90%</div></div></div>
     <div class="kpi" style="--kpi-color:var(--grad-1)" onclick="openKpiModal('entregas')"><div class="kpi-icon">🏁</div><div class="kpi-body"><div class="kpi-label">Entregas próximas</div><div class="kpi-value" id="kpiEntregas">—</div><div class="kpi-desc" id="kpiEntregasDesc">próximos 15 días</div></div></div>
@@ -959,6 +960,30 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
   <div id="embBody"><div class="empty">Cargando…</div></div>
 </div>
 
+<!-- 📁 OPs TERMINADAS / HISTÓRICO (módulo en historico.js · solo consulta) -->
+<div class="page" id="page-historico">
+  <div class="section-title">📁 OPs TERMINADAS / HISTÓRICO</div>
+  <div class="section-sub">O.P. con todas sus tareas terminadas, la entrega real registrada y sin compromisos abiertos · ya no aparecen en el tablero de seguimiento · haz clic en una fila para ver el detalle</div>
+  <div class="resumen-band" id="hisKpis"></div>
+  <div id="hisListas"></div>
+  <div class="card">
+    <div class="his-filtros">
+      <input class="filter-input" id="hisTexto" placeholder="🔍 Buscar O.P., cliente o proyecto…" oninput="hisRender()">
+      <select class="filter-select" id="hisPlanta" onchange="hisRender()"><option value="all">Todas las plantas</option><option value="BOGOTÁ">Bogotá</option><option value="BARRANQUILLA">Barranquilla</option></select>
+      <select class="filter-select" id="hisCom" onchange="hisRender()"><option value="">Todos los comerciales</option></select>
+      <select class="filter-select" id="hisMes" onchange="hisRender()"><option value="">Cualquier mes de cierre</option></select>
+      <button class="his-btn" onclick="hisLimpiar()">✕ Limpiar</button>
+      <button class="his-btn prim" id="hisExportar" onclick="hisExportar()">⬇ Exportar a Excel</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px" id="hisCount">0 O.P.</div>
+    <div class="table-wrap"><table><thead><tr>
+      <th class="his-sort" data-k="op" onclick="hisOrden('op')">O.P.</th><th class="his-sort" data-k="nombre" onclick="hisOrden('nombre')">Proyecto · cliente</th><th class="his-sort" data-k="planta" onclick="hisOrden('planta')">Planta</th>
+      <th class="his-sort" data-k="inicio" onclick="hisOrden('inicio')">Inicio</th><th class="his-sort" data-k="fin" onclick="hisOrden('fin')">Fin</th><th>Entrega comprometida</th>
+      <th class="his-sort" data-k="er" onclick="hisOrden('er')">Entrega real</th><th class="his-sort" data-k="avance" onclick="hisOrden('avance')">Avance</th><th class="his-sort" data-k="kg" onclick="hisOrden('kg')">Kg</th><th class="his-sort" data-k="cierre" onclick="hisOrden('cierre')">Cierre</th>
+    </tr></thead><tbody id="hisBody"><tr><td colspan="10" class="empty">Sin datos</td></tr></tbody></table></div>
+  </div>
+</div>
+
 <!-- ALERTAS -->
 <div class="page" id="page-alertas">
   <div class="section-title">PANEL DE ALERTAS ACTIVAS</div>
@@ -1102,6 +1127,16 @@ function conectarManual(){document.getElementById('btnConectar').textContent='�
 // la pantalla y, si falla, se conservan los datos reales (nunca se pasa a DEMO). Se mide cuánto tarda
 // cada parte (red, descarga, pantalla) y se envía en la siguiente consulta para la hoja RENDIMIENTO_API.
 var TC_CARGA={activa:false,ok:false,prev:'',hora:''};
+// 📁 O.P. finalizadas (las decide la Maestra v4.11: tareas terminadas + entrega real + sin compromisos abiertos).
+// Salen del tablero de seguimiento: state.ops / state.tareas quedan con las activas y los datos completos
+// se conservan en state.opsTodas / state.tareasTodas para el histórico. No se borra ni cambia ningún dato.
+function tcSepararFinalizadas(){
+  var fin={};(state.finalizadas||[]).forEach(function(f){if(f&&f.estado==='Finalizada')fin[String(f.op)]=true;});
+  state.opsTodas=state.ops;state.tareasTodas=state.tareas;
+  state.ops=state.ops.filter(function(o){return !fin[String(o.op)];});
+  state.tareas=state.tareas.filter(function(t){return !fin[String(t.op)];});
+  var lc={};(state.listasCierre||[]).forEach(function(x){lc[String(x.op)]=x.faltan||[];});state.cierreMapa=lc;
+}
 var TC_TIMEOUT_MS=45000;   // antes 20 s: con la Maestra lenta pasaba a DEMO aunque los datos sí iban a llegar
 function tcAviso(html,tipo,ms){
   var el=document.getElementById('tcAviso');
@@ -1146,6 +1181,9 @@ async function cargarDatos(){
     state.entregas=data.entregas||null;   // Maestra v4.1 (desde Comercial)
     state.bitacora=(data.bitacora||[]).map(function(b){b.op=String(b.op).replace(/\.0$/,'');return b;});   // Maestra v4.4
     state.capacidades=Array.isArray(data.capacidades)?data.capacidades:[];   // Maestra v4.9 (📊 Embudo de O.P.)
+    state.finalizadas=Array.isArray(data.finalizadas)?data.finalizadas:[];     // Maestra v4.11 (📁 OPs Terminadas / Histórico)
+    state.listasCierre=Array.isArray(data.listasCierre)?data.listasCierre:[];
+    tcSepararFinalizadas();
     var ts=data.timestamp?new Date(data.timestamp).toLocaleString('es-CO'):'Ahora';
     document.getElementById('timestampEl').textContent='📡 '+ts;
     document.getElementById('btnConectar').textContent='✅ Conectado';
@@ -1509,7 +1547,8 @@ function plantasOP(o){
   if(o.plantas&&o.plantas.length)return o.plantas.map(normPlanta).filter(Boolean);
   var p=normPlanta(o.sede);return p?[p]:[];
 }
-function opPorNumero(op){op=String(op);for(var i=0;i<state.ops.length;i++)if(String(state.ops[i].op)===op)return state.ops[i];return null;}
+function opPorNumero(op){op=String(op);for(var i=0;i<state.ops.length;i++)if(String(state.ops[i].op)===op)return state.ops[i];
+  var t=state.opsTodas||[];for(var j=0;j<t.length;j++)if(String(t[j].op)===op)return t[j];return null;}   // + finalizadas (histórico)
 // OP en la planta elegida (una OP MIXTO está en las dos)
 function opEnPlanta(o){
   if(currentSede==='all')return true;
@@ -1652,6 +1691,7 @@ function renderAll(){
   renderAreas();renderCurvaS();renderAlertasPage();renderTabla();
   renderProduccion();renderHistorial();renderEntregas();
   if(window.embRender)embRender();   // 📊 Embudo de O.P. (embudo.js)
+  if(window.hisRender)hisRender();   // 📁 OPs Terminadas / Histórico (historico.js)
 }
 
 // ── EJECUTIVA ──
@@ -1676,7 +1716,8 @@ function renderEjecutiva(){
   });
 
   document.getElementById('kpiTotal').textContent=ops.length;
-  document.getElementById('kpiTerminados').textContent=term;
+  document.getElementById('kpiTerminados').textContent=window.hisContar?hisContar():term;   // 📁 finalizadas (histórico)
+  var nLc=window.hisListasCierre?hisListasCierre():0;document.getElementById('kpiTermDesc').textContent=nLc?nLc+' lista'+(nLc===1?'':'s')+' para cierre · ver histórico':'ver histórico';
   // «En progreso» y «En riesgo» se quitaron: repetían «OP activas» y «OP en riesgo» de la banda de resumen
   document.getElementById('kpiCumplimiento').textContent=currentOP==='all'?'—':(cumplArr.length?cumplProm+'%':'—');
   document.getElementById('kpiCumplDesc').textContent=currentOP==='all'?'Filtra una O.P. para verlo':(cumplArr.length?'O.P. '+currentOP+' vs cronograma':'Sin tareas terminadas para medir');
@@ -1713,7 +1754,8 @@ function opCardHtml(op){
       '<div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:'+(op.avanceReal||0)+'%"></div></div>'+
       '<div class="op-meta"><span>'+(op.avanceReal||0)+'% avance</span>'+
         '<span>'+(op.tareas?op.tareas.terminadas+'/'+op.tareas.total+' tareas':'')+'</span></div>'+
-      '<div class="op-areas">'+areas+'</div>'+bitBotonHtml(op)+'</div>';
+      '<div class="op-areas">'+areas+'</div>'+
+      (state.cierreMapa&&state.cierreMapa[String(op.op)]?'<div class="op-cierre" title="Pasa a 📁 OPs Terminadas cuando se complete">🏁 Lista para cierre: falta '+esc(state.cierreMapa[String(op.op)].join(' y '))+'</div>':'')+bitBotonHtml(op)+'</div>';
 }
 function renderOpsGrid(){
   var grid=document.getElementById('opsGrid');
@@ -3565,7 +3607,7 @@ function renderProduccion(){
 
   // Tabla por OP y subestructura (mes) + acumulado total
   var pesos={};
-  state.tareas.forEach(function(t){if(String(t.area).toUpperCase()==='PRODUCCION'&&cN(t.pesoKgSub)>0)pesos[t.op+'|'+(t.subEstructura||'')]=cN(t.pesoKgSub);});
+  (state.tareasTodas||state.tareas).forEach(function(t){if(String(t.area).toUpperCase()==='PRODUCCION'&&cN(t.pesoKgSub)>0)pesos[t.op+'|'+(t.subEstructura||'')]=cN(t.pesoKgSub);});   // incluye finalizadas (dato histórico)
   var filas={};
   base.forEach(function(r){
     var k=r.subId||r.op,o=filas[k]||(filas[k]={op:r.op,subId:k,sub:r.sub,proyecto:r.proyecto,linea:r.linea,pr:0,rr:0,acum:0,ult:null});
@@ -3803,5 +3845,6 @@ function renderEnLinea(){
 }
 </script>
 <script src="embudo.js?v=20261117"></script>
+<script src="historico.js?v=20261118"></script>
 </body>
 </html>
