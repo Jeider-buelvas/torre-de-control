@@ -15,6 +15,8 @@
 //    completos (sus 3 o 4 filas) con sus kg y fórmulas; los totales se reescriben.
 //  - La sincronización con el Cronograma y la Torre leen las O.P por su etiqueta, no por la
 //    posición: no cambian.
+//  - Colores de la celda Línea/Lote: LINEA naranja (como antes), LOTE azul, prioridad dorado.
+//    ↕️ Ordenar las O.P de este mes también repinta los bloques que ya existían.
 //
 // (v4.5)
 // v4.5 (dos plantas: Bogotá y Barranquilla, cada una con su archivo y el MISMO código):
@@ -1423,6 +1425,9 @@ function separarPorPlanta() {
 // ============================================================
 const PROP_PRIORIDAD = 'PRIORIDAD_OP';
 const COLOR_PRIORIDAD = '#ffd966';
+const COLOR_LOTE = '#9fc5e8';   // azul: distinto del naranja de LINEA
+/** Color de la celda Línea/Lote: LOTE azul; LINEA y cualquier otro texto, el naranja de siempre. */
+function colorLinea_(txt) { return grupoLinea_(txt) === 1 ? COLOR_LOTE : CONFIG.COLOR.linea; }
 const RE_HOJA_MES = new RegExp('^(' + MESES.join('|') + ') \\d{4}$');
 
 function leerPrioridades_() { try { return JSON.parse(PropertiesService.getDocumentProperties().getProperty(PROP_PRIORIDAD) || '{}'); } catch (e) { return {}; } }
@@ -1467,9 +1472,9 @@ function filaDestino_(sh, f, sep) {
 function marcarVisualPrioridad_(sh, token) {
   const pri = leerPrioridades_();
   bloquesMes_(sh).filter(function (b) { return b.token === token; }).forEach(function (b) {
-    const c = sh.getRange(b.fila, COL.LINEA);
-    if (pri[token]) c.setBackground(COLOR_PRIORIDAD).setNote('⭐ Prioridad ' + pri[token]);
-    else c.setBackground(CONFIG.COLOR.linea).setNote('');
+    const c = sh.getRange(b.fila, COL.LINEA, b.n, 1);   // la celda combinada de todo el bloque
+    if (pri[token]) { c.setBackground(COLOR_PRIORIDAD); sh.getRange(b.fila, COL.LINEA).setNote('⭐ Prioridad ' + pri[token]); }
+    else { c.setBackground(colorLinea_(b.linea)); sh.getRange(b.fila, COL.LINEA).setNote(''); }
   });
 }
 
@@ -1502,9 +1507,9 @@ function ordenarMesActivo() {
   if (!lock.tryLock(20000)) { ui.alert('Otra persona está modificando el archivo. Intenta de nuevo.'); return; }
   try {
     const n = ordenarHojaMes_(sh, true);
-    bloquesMes_(sh).forEach(function (b) { marcarVisualPrioridad_(sh, b.token); });
+    bloquesMes_(sh).forEach(function (b) { marcarVisualPrioridad_(sh, b.token); });   // también repinta LINEA / LOTE
     ui.alert(n ? '↕️ Listo: se reorganizaron las O.P de "' + sh.getName() + '".\n\nOrden: ⭐ prioritarias (1, 2, 3…), luego LINEA, luego LOTE, y por número de O.P.\nSi necesitas volver atrás, la copia está en la hoja oculta "RESPALDO_ORDEN · ' + sh.getName() + '".'
-      : '✅ Las O.P de "' + sh.getName() + '" ya estaban en orden.');
+      : '✅ Las O.P de "' + sh.getName() + '" ya estaban en orden (se actualizaron los colores de LINEA y LOTE).');
   } finally { lock.releaseLock(); }
 }
 

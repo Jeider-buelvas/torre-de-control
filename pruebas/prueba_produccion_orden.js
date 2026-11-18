@@ -62,3 +62,12 @@ const y=abrir(V45),z=abrir(V46);[y,z].forEach(w=>{const l=L(w);bloques(w).forEac
 z.ss.setActiveSheet(z.sh);z.F.ordenarMesActivo();
 const norm=o=>JSON.stringify(Object.keys(o).sort().map(k=>[k,o[k]]));
 ok(norm(y.F.leerDiario_(y.ss))===norm(z.F.leerDiario_(z.ss)),'Los kg que lee la sincronización son idénticos a v4.5 aunque el orden cambie');
+// 8) colores: LINEA naranja, LOTE azul, prioridad dorado
+const fnd=w=>(global.FONDOS||{})[w.sh.name]||{};
+global.FONDOS={};x.ss.setActiveSheet(x.sh);x.F.ordenarMesActivo();console.log('     '+x.env.alertas.slice(-1)[0].split('\n')[0]);const F8=fnd(x),b8=bloques(x);
+const colorDe=b=>F8[b.r+',2'];
+const pri=JSON.parse(x.op.docProps.PRIORIDAD_OP||'{}');
+const malos=b8.filter(b=>{const c=colorDe(b);return pri[b.tok]?c!=='#ffd966':b.lin==='LOTE'?c!=='#9fc5e8':c!=='#fabf8f';});
+console.log('     colores: '+b8.map(b=>b.lin+' '+b.tok+'='+colorDe(b)).join(' | '));
+ok(malos.length===0,'LINEA naranja, LOTE azul y prioritarias doradas'+(malos.length?' — mal: '+malos.map(b=>b.tok).join(','):''));
+const filaLote=b8.find(b=>b.lin==='LOTE'&&!pri[b.tok]);ok([0,1,2].every(i=>F8[(filaLote.r+i)+',2']==='#9fc5e8'),'Se pinta todo el bloque (celda combinada), no solo la primera fila');

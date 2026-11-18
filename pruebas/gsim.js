@@ -31,6 +31,7 @@ class Range {
     if (val === '' || val === null || val === undefined) { this.sh.cells.delete(r + ',' + c); return; }
     if (typeof val === 'string' && val.startsWith('=')) this.sh.cells.set(r + ',' + c, { v: undefined, f: val });
     else this.sh.cells.set(r + ',' + c, { v: val instanceof Date ? new Date(val.getTime()) : val, f: null }); }
+  setBackground(col) { const nm = this.sh.name; const F = (global.FONDOS = global.FONDOS || {}); F[nm] = F[nm] || {}; this._each((r, c) => { F[nm][r + ',' + c] = col; }); return this._px; }
   setValue(v) { this._each((r, c) => this._set(r, c, v)); return this._px; }
   setValues(m) { if (m.length !== this.nr || m.some(f => f.length !== this.nc)) throw new Error('setValues: dimensiones'); this._each((r, c) => this._set(r, c, m[r - this.r][c - this.c])); return this._px; }
   setFormula(f) { return this.setValue(f); }
