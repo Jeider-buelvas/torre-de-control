@@ -591,7 +591,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
     <button class="btn btn-connect" id="btnInstallApp" onclick="installApp()" style="display:none">📲 Instalar App</button>
     <button class="btn btn-theme" id="btnTheme" onclick="toggleTheme()" title="Cambiar tema">🌙</button>
     <button class="btn btn-connect" id="btnConectar" onclick="conectarManual()">⬤ Conectar</button>
-    <button class="btn btn-primary" onclick="cargarDatos()">⟳ Actualizar</button>
+    <button class="btn btn-primary" id="btnActualizar" onclick="cargarDatos()">⟳ Actualizar</button>
     <button class="btn btn-ai" id="btnAnalizarIA" onclick="analizarConGemini()">✦ Analizar con IA</button>
     <button class="btn btn-connect btn-enlinea" id="btnEnLinea" onclick="abrirEnLinea()" style="display:none" title="Quién está viendo la Torre de Control"><span class="pres-dot"></span><span id="enLineaN">0</span>&nbsp;en línea</button>
     <span class="timestamp" id="userEmailEl" style="display:none"></span>
@@ -1098,21 +1098,44 @@ var alertPageSize=10, alertCurrentPage=1, alertItemsAll=[];
 // ══════════════════════════════════════════
 function conectarManual(){document.getElementById('btnConectar').textContent='↻ Conectando…';cargarDatos();}
 
+// Rendimiento (Fase 1): una sola actualización a la vez; si ya hay datos reales, se actualiza sin congelar
+// la pantalla y, si falla, se conservan los datos reales (nunca se pasa a DEMO). Se mide cuánto tarda
+// cada parte (red, descarga, pantalla) y se envía en la siguiente consulta para la hoja RENDIMIENTO_API.
+var TC_CARGA={activa:false,ok:false,prev:'',hora:''};
+var TC_TIMEOUT_MS=45000;   // antes 20 s: con la Maestra lenta pasaba a DEMO aunque los datos sí iban a llegar
+function tcAviso(html,tipo,ms){
+  var el=document.getElementById('tcAviso');
+  if(!el){el=document.createElement('div');el.id='tcAviso';el.setAttribute('role','status');
+    el.style.cssText='position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:9999;max-width:min(92vw,620px);padding:10px 16px;border-radius:12px;font:600 13px DM Sans,sans-serif;box-shadow:0 8px 28px rgba(0,0,0,.22);display:flex;gap:10px;align-items:center;transition:opacity .2s';
+    document.body.appendChild(el);}
+  var c={info:['var(--surface)','var(--text)','var(--accent)'],ok:['var(--surface)','var(--green)','var(--green)'],err:['var(--surface)','var(--red)','var(--red)']}[tipo||'info'];
+  el.style.background=c[0];el.style.color=c[1];el.style.border='1px solid '+c[2];el.innerHTML=html;el.style.opacity='1';el.style.display='flex';
+  clearTimeout(tcAviso.t);if(ms)tcAviso.t=setTimeout(function(){el.style.opacity='0';setTimeout(function(){el.style.display='none';},250);},ms);
+}
 async function cargarDatos(){
-  showLoading('Conectando con Google Sheets...');
+  if(TC_CARGA.activa)return;            // evita actualizaciones simultáneas por clics repetidos
+  TC_CARGA.activa=true;
+  var refresco=TC_CARGA.ok,btnA=document.getElementById('btnActualizar');
+  if(btnA){btnA.disabled=true;btnA.textContent='⟳ Actualizando…';}
+  if(refresco)tcAviso('⟳ Actualizando datos… puedes seguir usando la Torre','info');
+  else showLoading('Conectando con Google Sheets...');
+  var lento=setTimeout(function(){if(!refresco)showLoading('La Maestra está tardando en responder… seguimos esperando');},10000);
+  var t0=performance.now(),tRed=0,tDesc=0;
   try{
     // Si Google Apps Script se demora demasiado (hoja grande, cold start, etc.),
-    // no dejar al usuario esperando indefinidamente — cae a modo demo tras 20s.
+    // no dejar al usuario esperando indefinidamente.
     var ctrl=new AbortController();
-    var timeoutId=setTimeout(function(){ctrl.abort();},20000);
-    var resp;
+    var timeoutId=setTimeout(function(){ctrl.abort();},TC_TIMEOUT_MS);
+    var resp,data;
     try{
-      resp=await fetch(WEB_APP_URL+'?tipo=todos',{method:'GET',redirect:'follow',signal:ctrl.signal});
+      resp=await fetch(WEB_APP_URL+'?tipo=todos'+(TC_CARGA.prev?'&prev='+encodeURIComponent(TC_CARGA.prev):''),{method:'GET',redirect:'follow',signal:ctrl.signal});
+      tRed=performance.now()-t0;
+      if(!resp.ok)throw new Error('HTTP '+resp.status);
+      data=await resp.json();
+      tDesc=performance.now()-t0-tRed;
     }finally{
       clearTimeout(timeoutId);
     }
-    if(!resp.ok)throw new Error('HTTP '+resp.status);
-    var data=await resp.json();
     state.ops=(data.ops||[]).map(function(o){o.op=String(o.op).replace(/\.0$/,'');delete o._entrega;return o;});
     state.areas=data.areas||[];
     state.curva=data.curva||[];
@@ -1128,12 +1151,29 @@ async function cargarDatos(){
     document.getElementById('btnConectar').textContent='✅ Conectado';
     document.getElementById('btnConectar').style.color='var(--green)';
     document.getElementById('btnConectar').style.borderColor='var(--green)';
+    var t1=performance.now();
     populateFilters();renderAll();hideLoading();
+    var tPant=performance.now()-t1,tot=performance.now()-t0,seg=function(x){return (x/1000).toLocaleString('es-CO',{maximumFractionDigits:1})+' s';};
+    TC_CARGA.ok=true;TC_CARGA.hora=new Date().toTimeString().slice(0,5);TC_CARGA.prev=[tRed,tDesc,tPant,tot].map(Math.round).join(',');
+    var ms=data._ms||{};
+    document.getElementById('timestampEl').title='Última carga: '+seg(tot)+' (servidor y red '+seg(tRed)+' · descarga '+seg(tDesc)+' · pantalla '+seg(tPant)+')'+(ms.datos?' · la Maestra tardó '+seg(ms.datos)+' en leer los datos':'');
+    try{console.info('[Torre] carga',{total_ms:Math.round(tot),red_ms:Math.round(tRed),descarga_ms:Math.round(tDesc),pantalla_ms:Math.round(tPant),maestra_ms:ms});}catch(e){}
+    tcAviso('✅ '+(refresco?'Datos actualizados':'Conectado')+' en '+seg(tot),'ok',4000);
   }catch(e){
     hideLoading();
-    document.getElementById('timestampEl').textContent='📊 DEMO — '+e.message;
-    document.getElementById('btnConectar').textContent='⟳ Reintentar';
-    cargarDatosDemo();
+    var motivo=e&&e.name==='AbortError'?'la Maestra no respondió en '+Math.round(TC_TIMEOUT_MS/1000)+' s':(e&&e.message)||'error de conexión';
+    if(refresco){
+      // Se conservan los últimos datos reales: no se reemplazan por datos de ejemplo.
+      tcAviso('⚠ No se pudo actualizar ('+esc(motivo)+'). Sigues viendo los datos de las '+esc(TC_CARGA.hora)+'. <button class="btn btn-primary" style="padding:5px 12px" onclick="cargarDatos()">⟳ Reintentar</button>','err');
+    }else{
+      document.getElementById('timestampEl').textContent='📊 DEMO — '+motivo;
+      document.getElementById('btnConectar').textContent='⟳ Reintentar';
+      tcAviso('⚠ No se pudo conectar con la Maestra ('+esc(motivo)+'). Se muestran datos de EJEMPLO. <button class="btn btn-primary" style="padding:5px 12px" onclick="cargarDatos()">⟳ Reintentar</button>','err');
+      try{cargarDatosDemo();}catch(err){console.error('Error en cargarDatosDemo:',err);}
+    }
+  }finally{
+    clearTimeout(lento);TC_CARGA.activa=false;
+    if(btnA){btnA.disabled=false;btnA.textContent='⟳ Actualizar';}
   }
 }
 

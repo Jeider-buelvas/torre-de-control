@@ -1,4 +1,12 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.9
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.10
+// v4.10 — MEDICIÓN DE TIEMPOS (Fase 1 del diagnóstico de lentitud). Solo mide, no cambia datos:
+//   • ?tipo=todos mide cuánto tarda cada parte (ops, áreas, tareas, …), el armado del JSON y su tamaño.
+//   • La respuesta trae "_ms" con esos tiempos. Se guardan en la hoja RENDIMIENTO_API (máx. 1 fila
+//     por minuto, hasta 3000 filas). La App manda en "prev" lo que tardó su carga anterior
+//     (red + descarga + pantalla) para tener el tiempo completo del usuario.
+//   • Los datos que se entregan son exactamente los mismos que en v4.9.
+//
+// (v4.9)
 // v4.9 — CAPACIDAD DE LAS ÁREAS (para el 📊 Embudo de O.P. de la App):
 //   • Hoja CAPACIDAD_AREAS (protegida): ÁREA · PLANTA · MÁX. O.P. SIMULTÁNEAS · KG POR SEMANA ·
 //     ESTADO · NOTA. Una sola configuración para todos. Celda vacía = sin capacidad (no se
@@ -445,7 +453,9 @@ function generarCurvaS() {
 // ============================================================
 //  WEB APP — API JSON para el Dashboard
 // ============================================================
+var _T_INICIO_DOGET = 0;   // v4.10
 function doGet(e) {
+  _T_INICIO_DOGET = Date.now();
   var tipo = e && e.parameter && e.parameter.tipo ? e.parameter.tipo : 'todos';
   var output;
   switch (tipo) {
@@ -458,24 +468,54 @@ function doGet(e) {
     case 'entregas':   output = getDatosEntregas();   break;   // v4.1
     case 'bitacora':   output = getDatosBitacora();   break;   // v4.4
     case 'capacidades': output = getDatosCapacidades(); break; // v4.9
-    default:      output = getTodosDatos();  break;
+    default:      output = getTodosDatos(e);  break;   // v4.10: mide tiempos
+  }
+  if (tipo === 'todos' || !e || !e.parameter || !e.parameter.tipo) {
+    var tj = Date.now(), txt = JSON.stringify(output), jsonMs = Date.now() - tj;
+    _registrarRendimiento(output, Date.now() - _T_INICIO_DOGET, jsonMs, Math.round(txt.length / 1024));
+    return ContentService.createTextOutput(txt).setMimeType(ContentService.MimeType.JSON);
   }
   return ContentService.createTextOutput(JSON.stringify(output)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function getTodosDatos() {
-  return {
+function getTodosDatos(e) {
+  // v4.10: mismas funciones y mismo orden que v4.9; solo se mide cuánto tarda cada una.
+  var ms = {}, t = Date.now(), t0 = t;
+  var med = function(k, fn) { var a = Date.now(), v = fn(); ms[k] = Date.now() - a; return v; };
+  var out = {
     timestamp: new Date().toISOString(),
-    ops:    getDatosOPs(),
-    areas:  getDatosAreas(),
-    curva:  getDatosCurvaS(),
-    tareas: getDatosTareas(),
-    produccion: getDatosProduccion(),     // v3
-    historial: getDatosHistorial(),       // v4
-    entregas: getDatosEntregas(),         // v4.1
-    bitacora: getDatosBitacora(),         // v4.4
-    capacidades: getDatosCapacidades()    // v4.9
+    ops:    med('ops', getDatosOPs),
+    areas:  med('areas', getDatosAreas),
+    curva:  med('curva', getDatosCurvaS),
+    tareas: med('tareas', getDatosTareas),
+    produccion: med('produccion', getDatosProduccion),     // v3
+    historial: med('historial', getDatosHistorial),        // v4
+    entregas: med('entregas', getDatosEntregas),           // v4.1
+    bitacora: med('bitacora', getDatosBitacora),           // v4.4
+    capacidades: med('capacidades', getDatosCapacidades)   // v4.9
   };
+  ms.datos = Date.now() - t0;
+  out._ms = ms;
+  out._prev = e && e.parameter && e.parameter.prev ? String(e.parameter.prev).slice(0, 80) : '';
+  return out;
+}
+
+// v4.10 — hoja RENDIMIENTO_API (solo medición; máx. 1 fila por minuto para no sumar demora)
+var HOJA_RENDIMIENTO = 'RENDIMIENTO_API';
+var ENC_RENDIMIENTO = ['FECHA', 'TOTAL_SERVIDOR_MS', 'DATOS_MS', 'JSON_MS', 'KB', 'OPS_MS', 'AREAS_MS', 'CURVA_MS', 'TAREAS_MS',
+  'PRODUCCION_MS', 'HISTORIAL_MS', 'ENTREGAS_MS', 'BITACORA_MS', 'CAPACIDADES_MS', 'N_TAREAS', 'APP_CARGA_ANTERIOR (red_ms,descarga_ms,pantalla_ms,total_ms)'];
+function _registrarRendimiento(out, totalMs, jsonMs, kb) {
+  try {
+    var cache = CacheService.getScriptCache();
+    if (cache.get('REND_ULT')) return;
+    cache.put('REND_ULT', '1', 60);
+    var ss = SpreadsheetApp.openById(ID_MAESTRA), sh = ss.getSheetByName(HOJA_RENDIMIENTO);
+    if (!sh) { sh = ss.insertSheet(HOJA_RENDIMIENTO); sh.appendRow(ENC_RENDIMIENTO); sh.setFrozenRows(1); sh.getRange(1, 1, 1, ENC_RENDIMIENTO.length).setFontWeight('bold'); }
+    if (sh.getLastRow() > 3000) return;
+    var m = out._ms || {};
+    sh.appendRow([new Date(), totalMs, m.datos, jsonMs, kb, m.ops, m.areas, m.curva, m.tareas, m.produccion, m.historial, m.entregas, m.bitacora, m.capacidades,
+      (out.tareas || []).length, out._prev || '']);
+  } catch (err) { /* la medición nunca debe afectar la respuesta */ }
 }
 
 function getDatosOPs() {

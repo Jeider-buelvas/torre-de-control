@@ -14,7 +14,7 @@ const bit=[
 const errs=[];const ok=(c,m)=>{console.log((c?'✔':'✘ FALLA')+' '+m);if(!c)process.exitCode=1;};
 (async()=>{const b=await chromium.launch();
  const ctx=await b.newContext({acceptDownloads:true});
- const abrir=async(vp)=>{const p=await ctx.newPage({viewport:vp});p.setViewportSize(vp);p.on('pageerror',e=>errs.push(e.message));
+ const abrir=async(vp)=>{const p=await ctx.newPage({viewport:vp});await p.clock.setFixedTime(new Date('2026-11-17T10:00:00-05:00'));p.setViewportSize(vp);p.on('pageerror',e=>errs.push(e.message));
  await p.route('**/*',r=>{const u=r.request().url();if(u.includes('chart.umd'))return r.fulfill({path:'/home/claude/trabajo/sim/node_modules/chart.js/dist/chart.umd.js',contentType:'application/javascript'});
    if(u.includes('xlsx.full.min.js'))return r.fulfill({path:'/tmp/xl/node_modules/xlsx/dist/xlsx.full.min.js',contentType:'application/javascript'});
    if(u.startsWith('http://127.0.0.1:8130'))return r.continue();return r.abort();});
