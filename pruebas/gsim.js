@@ -46,7 +46,7 @@ class Sheet {
   getMaxRows() { return this.maxR; } getMaxColumns() { return this.maxC; }
   getLastRow() { let m = 0; for (const [k, x] of this.cells) { if ((x.v === '' || x.v == null) && !x.f) continue; const r = +k.split(',')[0]; if (r > m) m = r; } return m; }
   getLastColumn() { let m = 0; for (const [k, x] of this.cells) { if ((x.v === '' || x.v == null) && !x.f) continue; const c = +k.split(',')[1]; if (c > m) m = c; } return m; }
-  getRange(a, b, c, d) { if (typeof a === 'string') { const m = a.match(/^([A-Z]+)(\d+)$/); return new Range(this._px, +m[2], colNum(m[1]), 1, 1); }
+  getRange(a, b, c, d) { if (typeof a === 'string') { const fr = a.match(/^(\d+):(\d+)$/); if (fr) return new Range(this._px, +fr[1], 1, +fr[2] - +fr[1] + 1, this.maxC); const m = a.match(/^([A-Z]+)(\d+)$/); return new Range(this._px, +m[2], colNum(m[1]), 1, 1); }
     if (a < 1 || b < 1 || (c !== undefined && c < 1) || (d !== undefined && d < 1)) throw new Error('getRange fuera de límites: ' + [a, b, c, d]); return new Range(this._px, a, b, c || 1, d || 1); }
   _moverFilas(desde, n) { const nuevo = new Map();
     for (const [k, x] of this.cells) { const [r, c] = k.split(',').map(Number);
@@ -57,6 +57,11 @@ class Sheet {
     for (const sh of this.ss.sheets) for (const x of sh.cells.values()) if (x.f) x.f = moverFormula(x.f, sh.name, this.name, fn, fnR); }
   getDataRange() { return this.getRange(1, 1, Math.max(1, this.getLastRow()), Math.max(1, this.getLastColumn())); }
   getRangeList(l) { const rs = l.map(a => this.getRange(a)); return { setValue: v => { rs.forEach(r => r.setValue(v)); } }; }
+  moveRows(rg, dest) { const a = rg.r !== undefined ? rg.r : rg.getRow(), n = rg.nr !== undefined ? rg.nr : rg.getNumRows(), b = a + n - 1;
+    const f = r => { if (dest < a) { if (r >= a && r <= b) return dest + (r - a); if (r >= dest && r < a) return r + n; return r; }
+      if (dest > b + 1) { if (r >= a && r <= b) return dest - n + (r - a); if (r > b && r < dest) return r - n; return r; } return r; };
+    const nuevo = new Map(); for (const [k, x] of this.cells) { const [r, c] = k.split(',').map(Number); nuevo.set(f(r) + ',' + c, x); } this.cells = nuevo;
+    for (const sh of this.ss.sheets) for (const x of sh.cells.values()) if (x.f) x.f = moverFormula(x.f, sh.name, this.name, f, (p, q) => [f(p), f(q)]); this.movimientos = (this.movimientos || 0) + 1; return this._px; }
   insertRowsBefore(r, n) { this._moverFilas(r, n); return this._px; } insertRowsAfter(r, n) { this._moverFilas(r + 1, n); return this._px; }
   deleteRows(r, n) { this._moverFilas(r, -n); return this._px; }
   clearContents() { this.cells = new Map(); return this._px; }

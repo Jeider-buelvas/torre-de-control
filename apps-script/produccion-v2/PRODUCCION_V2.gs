@@ -1,5 +1,22 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.5 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.6 (fusionada)
 //
+// v4.6 (solicitud de Producción — orden del reporte diario):
+//  - ⭐ PRIORIDAD por número (1 = la más urgente): campo "Prioridad" en el formulario
+//    (menú ⚙️ Configurar formulario lo agrega) y menú "⭐ Marcar / quitar prioridad" para las
+//    O.P que ya están en el mes (se selecciona una celda del bloque). Se guarda en el archivo
+//    (no cambia ningún texto de las celdas): la celda Línea/Lote queda dorada con la nota
+//    "⭐ Prioridad N".
+//  - ORDEN de las O.P en la hoja del mes: primero las prioritarias (1, 2, 3…), luego por
+//    Línea/Lote (LINEA, después LOTE, después otros textos en orden alfabético) y dentro de
+//    cada grupo por número de O.P y subestructura.
+//  - 📤 Enviar / Crear O.P pone el bloque nuevo en su lugar (antes siempre al final).
+//  - Menú "↕️ Ordenar las O.P de este mes": reordena los bloques existentes. Antes guarda
+//    una copia "RESPALDO_ORDEN · <MES>" (una sola vez por hoja). Los bloques se mueven
+//    completos (sus 3 o 4 filas) con sus kg y fórmulas; los totales se reescriben.
+//  - La sincronización con el Cronograma y la Torre leen las O.P por su etiqueta, no por la
+//    posición: no cambian.
+//
+// (v4.5)
 // v4.5 (dos plantas: Bogotá y Barranquilla, cada una con su archivo y el MISMO código):
 //  - Menú "🏭 Planta de este archivo": se indica una vez si el archivo es de BOGOTÁ o
 //    BARRANQUILLA (queda guardado en el archivo; si no, se toma del nombre del archivo).
@@ -146,6 +163,9 @@ function onOpen() {
     .addItem('🧹 Borrar de los meses las OP que no vienen de comercial', 'limpiarOPsSinComercial')
     .addItem('➕ Agregar fila ENTREGA MATERIAL EN NEGRO a las OP programadas', 'agregarFilaEntregaExistentes')   // v4.4
     .addSeparator()
+    .addItem('⭐ Marcar / quitar prioridad de la O.P seleccionada', 'marcarPrioridad')   // v4.6
+    .addItem('↕️ Ordenar las O.P de este mes', 'ordenarMesActivo')                        // v4.6
+    .addSeparator()
     .addItem('🔗 Preparar Cronograma (una sola vez)', 'prepararCronograma')
     .addItem('⏱ Activar sincronización automática (cada hora)', 'activarSincronizacionAutomatica')
     .addSeparator()
@@ -191,6 +211,8 @@ function enviarOP() {
     const subs = subsElegidas_(opC, form.sub).filter(function (s) { return !s.otraPlanta; });   // v4.5
     if (!subs.length) { ui.alert('⚠ No encontré la subestructura "' + form.sub + '" en la OP ' + form.op + '.'); return; }
 
+    // v4.6: prioridad del formulario (para todas las subestructuras que se envían)
+    if (form.prioridad) { const pri = leerPrioridades_(); subs.forEach(function (sub) { pri[form.op + '_' + sub.n] = form.prioridad; }); guardarPrioridades_(pri); }
     const creadas = [], agregadas = [], duplicadas = [];
     form.meses.forEach(function (mes) {
       const nombre = nombreHoja_(form.anio, mes);
@@ -212,6 +234,7 @@ function enviarOP() {
           // ponía el total de la O.P al escoger una sola subestructura).
           peso: (opC.subs.length === 1 && form.peso) ? form.peso : sub.kg
         });
+        marcarVisualPrioridad_(sh, token);   // v4.6
         agregadas.push(etiqueta);
       });
     });
@@ -240,7 +263,8 @@ const CAMPOS = {
   'cliente': 'cliente',
   'descripcion': 'descripcion',
   'peso kilos planeados': 'peso', 'peso kilos planeados kg': 'peso',
-  'subestructura': 'sub', 'subestructuras': 'sub'          // v3
+  'subestructura': 'sub', 'subestructuras': 'sub',         // v3
+  'prioridad': 'prioridad', 'prioridad 1 2 3': 'prioridad'   // v4.6
 };
 const MESES_NORM = MESES.map(function (m) { return norm_(m); });
 
@@ -291,6 +315,8 @@ function leerFormulario_(ss) {
   form.descripcion = String(form.descripcion || '').trim();
   form.peso = Number(form.peso) || 0;
   form.sub = String(form.sub || '').trim();                  // v3
+  const pr = parseInt(form.prioridad, 10);                     // v4.6
+  form.prioridad = pr > 0 && pr < 1000 ? pr : null;
   const a = parseInt(form.anio, 10);
   form.anio = a > 2000 && a < 2100 ? a : null;
   form.tieneCampoAnio = 'anio' in form.celdas;
@@ -311,7 +337,7 @@ function validar_(f) {
 
 function limpiarFormulario_(ss, f) {
   const sh = hojaFormulario_(ss);
-  ['op', 'nombre', 'cliente', 'descripcion', 'peso'].forEach(function (k) {
+  ['op', 'nombre', 'cliente', 'descripcion', 'peso', 'prioridad'].forEach(function (k) {   // v4.6: + prioridad
     const c = f.celdas[k];
     if (c) sh.getRange(c.fila, c.col).clearContent();
   });
@@ -333,7 +359,8 @@ function configurarFormulario() {
     { k: 'sub', etq: 'Subestructura' },
     { k: 'cliente', etq: 'Cliente' },
     { k: 'descripcion', etq: 'Descripción' },
-    { k: 'peso', etq: 'Peso Kilos Planeados' }
+    { k: 'peso', etq: 'Peso Kilos Planeados' },
+    { k: 'prioridad', etq: 'Prioridad' }                      // v4.6
   ].filter(function (n) { return !(n.k in form.celdas); });
 
   if (!nuevos.length) {
@@ -357,6 +384,9 @@ function configurarFormulario() {
       celda.setDataValidation(SpreadsheetApp.newDataValidation()
         .requireValueInList(anios, true).setAllowInvalid(false).build());
       celda.setValue(String(anioActual));
+    } else if (n.k === 'prioridad') {                         // v4.6: número 1, 2, 3… (vacío = sin prioridad)
+      celda.setDataValidation(SpreadsheetApp.newDataValidation()
+        .requireNumberBetween(1, 999).setAllowInvalid(false).setHelpText('1 = la más urgente. Vacío = sin prioridad').build());
     } else if (n.k === 'peso') {
       celda.setDataValidation(SpreadsheetApp.newDataValidation()
         .requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).build());
@@ -684,8 +714,8 @@ function existeOP_(sh, op) {
 function agregarOP_(sh, f) {
   const lay = layoutDeHoja_(sh);
   const sep = filaResumen_(sh) - 1;    // fila en blanco antes del resumen
-  sh.insertRowsBefore(sep, 3);         // los rangos SUMIF del resumen se amplían solos
-  const r = sep;                       // primera fila del nuevo bloque
+  const r = filaDestino_(sh, f, sep);  // v4.6: en su lugar según prioridad, Línea/Lote y O.P (antes: siempre al final)
+  sh.insertRowsBefore(r, 3);           // los totales del resumen se reescriben al final (escribirTotales_)
   const c0 = COL.LINEA, ancho = lay.colEtiqueta - c0 + 1;
   const L = letra_;
   const M = [new Array(ancho).fill(''), new Array(ancho).fill(''), new Array(ancho).fill('')];
@@ -1386,4 +1416,117 @@ function separarPorPlanta() {
   Logger.log(msg);
   if (ui) ui.alert(msg);
   return r;
+}
+
+// ============================================================
+//  v4.6 — PRIORIDAD Y ORDEN DE LAS O.P EN LA HOJA DEL MES
+// ============================================================
+const PROP_PRIORIDAD = 'PRIORIDAD_OP';
+const COLOR_PRIORIDAD = '#ffd966';
+const RE_HOJA_MES = new RegExp('^(' + MESES.join('|') + ') \\d{4}$');
+
+function leerPrioridades_() { try { return JSON.parse(PropertiesService.getDocumentProperties().getProperty(PROP_PRIORIDAD) || '{}'); } catch (e) { return {}; } }
+function guardarPrioridades_(p) { PropertiesService.getDocumentProperties().setProperty(PROP_PRIORIDAD, JSON.stringify(p)); }
+
+/** Token "4113_1" a partir de la etiqueta "OP 4113_1 · …" */
+function tokenDeEtiqueta_(txt) { const m = String(txt || '').trim().match(/^OP\.?\s*([^\s·]+)/i); return m ? m[1] : ''; }
+
+/** Grupo de Línea/Lote: LINEA = 0, LOTE = 1, otro texto = 2 (luego alfabético). */
+function grupoLinea_(txt) { const n = norm_(txt); return /^linea/.test(n) ? 0 : /^lote/.test(n) ? 1 : 2; }
+
+/** Clave de orden: prioritarias primero (1, 2, 3…), luego Línea/Lote, luego número de O.P y subestructura. */
+function claveOrden_(token, linea, pri) {
+  const p = pri[token], partes = String(token).split('_'), op = parseFloat(partes[0]), sub = parseFloat(partes[1]);
+  return [p ? 0 : 1, p || 0, grupoLinea_(linea), norm_(linea), isNaN(op) ? 1e12 : op, String(partes[0]), isNaN(sub) ? 0 : sub];
+}
+function compararClaves_(a, b) { for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; } return 0; }
+
+/** Bloques de O.P de la hoja del mes: [{fila, n, token, linea}] (3 o 4 filas cada uno). */
+function bloquesMes_(sh) {
+  const sep = filaResumen_(sh) - 1, ini = CONFIG.FILA_INICIO;
+  if (sep < ini) return [];
+  const v = sh.getRange(ini, COL.LINEA, sep - ini + 1, 2).getValues(), out = [];
+  for (let i = 0; i < v.length; i++) {
+    const tok = tokenDeEtiqueta_(v[i][1]);
+    if (!tok) continue;
+    if (out.length) out[out.length - 1].n = (ini + i) - out[out.length - 1].fila;
+    out.push({ fila: ini + i, n: 0, token: tok, linea: String(v[i][0] || '').trim() });
+  }
+  if (out.length) { const u = out[out.length - 1]; let fin = sep; while (fin > u.fila && !String(v[fin - ini][1] || '').trim()) fin--; u.n = fin - u.fila + 1; }
+  return out;
+}
+
+/** Fila donde va un bloque nuevo: antes del primer bloque que debe ir después de él. */
+function filaDestino_(sh, f, sep) {
+  const pri = leerPrioridades_(), clave = claveOrden_(f.op, f.linea, pri);
+  const b = bloquesMes_(sh).find(function (x) { return compararClaves_(claveOrden_(x.token, x.linea, pri), clave) > 0; });
+  return b ? b.fila : sep;
+}
+
+/** Pinta (o despinta) la celda Línea/Lote de los bloques de la O.P según su prioridad. */
+function marcarVisualPrioridad_(sh, token) {
+  const pri = leerPrioridades_();
+  bloquesMes_(sh).filter(function (b) { return b.token === token; }).forEach(function (b) {
+    const c = sh.getRange(b.fila, COL.LINEA);
+    if (pri[token]) c.setBackground(COLOR_PRIORIDAD).setNote('⭐ Prioridad ' + pri[token]);
+    else c.setBackground(CONFIG.COLOR.linea).setNote('');
+  });
+}
+
+/** Reordena los bloques de una hoja del mes. Devuelve cuántos bloques se movieron. */
+function ordenarHojaMes_(sh, conRespaldo) {
+  const pri = leerPrioridades_(), bloques = bloquesMes_(sh);
+  if (bloques.length < 2) return 0;
+  const deseado = bloques.slice().sort(function (a, b) { return compararClaves_(claveOrden_(a.token, a.linea, pri), claveOrden_(b.token, b.linea, pri)) || (a.fila - b.fila); });
+  if (deseado.every(function (b, i) { return b === bloques[i]; })) return 0;
+  if (conRespaldo) {
+    const ss = sh.getParent(), nom = 'RESPALDO_ORDEN · ' + sh.getName();
+    if (!ss.getSheetByName(nom)) { const c = sh.copyTo(ss).setName(nom); c.hideSheet(); }
+  }
+  let pos = CONFIG.FILA_INICIO, movidos = 0;
+  deseado.forEach(function (d) {
+    const act = bloquesMes_(sh).find(function (x) { return x.token === d.token && x.linea === d.linea; });
+    if (!act) return;
+    if (act.fila !== pos) { sh.moveRows(sh.getRange(act.fila + ':' + (act.fila + act.n - 1)), pos); movidos++; }
+    pos += act.n;
+  });
+  escribirTotales_(sh, layoutDeHoja_(sh));
+  return movidos;
+}
+
+/** Menú: ordena la hoja del mes activa. */
+function ordenarMesActivo() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
+  if (!RE_HOJA_MES.test(sh.getName())) { ui.alert('Abre primero la hoja del mes que quieres ordenar (por ejemplo "NOVIEMBRE 2026").'); return; }
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) { ui.alert('Otra persona está modificando el archivo. Intenta de nuevo.'); return; }
+  try {
+    const n = ordenarHojaMes_(sh, true);
+    bloquesMes_(sh).forEach(function (b) { marcarVisualPrioridad_(sh, b.token); });
+    ui.alert(n ? '↕️ Listo: se reorganizaron las O.P de "' + sh.getName() + '".\n\nOrden: ⭐ prioritarias (1, 2, 3…), luego LINEA, luego LOTE, y por número de O.P.\nSi necesitas volver atrás, la copia está en la hoja oculta "RESPALDO_ORDEN · ' + sh.getName() + '".'
+      : '✅ Las O.P de "' + sh.getName() + '" ya estaban en orden.');
+  } finally { lock.releaseLock(); }
+}
+
+/** Menú: marca o quita la prioridad de la O.P del bloque seleccionado y ordena las hojas donde está. */
+function marcarPrioridad() {
+  const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
+  if (!RE_HOJA_MES.test(sh.getName())) { ui.alert('Selecciona una celda de la O.P en la hoja del mes (por ejemplo "NOVIEMBRE 2026").'); return; }
+  const fila = sh.getActiveRange().getRow();
+  const b = bloquesMes_(sh).find(function (x) { return fila >= x.fila && fila < x.fila + x.n; });
+  if (!b) { ui.alert('Selecciona una celda dentro del bloque de la O.P (cualquiera de sus filas).'); return; }
+  const pri = leerPrioridades_();
+  const r = ui.prompt('⭐ Prioridad de la O.P ' + b.token, 'Escribe el número de prioridad (1 = la más urgente).\nDéjalo vacío para quitar la prioridad.' + (pri[b.token] ? '\n\nPrioridad actual: ' + pri[b.token] : ''), ui.ButtonSet.OK_CANCEL);
+  if (r.getSelectedButton() !== ui.Button.OK) return;
+  const txt = String(r.getResponseText() || '').trim(), n = parseInt(txt, 10);
+  if (txt && !(n > 0 && n < 1000)) { ui.alert('Escribe un número entero (1, 2, 3…) o déjalo vacío.'); return; }
+  const lock = LockService.getDocumentLock();
+  if (!lock.tryLock(20000)) { ui.alert('Otra persona está modificando el archivo. Intenta de nuevo.'); return; }
+  try {
+    if (txt) pri[b.token] = n; else delete pri[b.token];
+    guardarPrioridades_(pri);
+    const hojas = ss.getSheets().filter(function (h) { return RE_HOJA_MES.test(h.getName()) && bloquesMes_(h).some(function (x) { return x.token === b.token; }); });
+    hojas.forEach(function (h) { marcarVisualPrioridad_(h, b.token); ordenarHojaMes_(h, true); });
+    ui.alert((txt ? '⭐ O.P ' + b.token + ' con prioridad ' + n : 'Se quitó la prioridad de la O.P ' + b.token) + '.\nSe ordenó en: ' + hojas.map(function (h) { return h.getName(); }).join(', ') + '.');
+  } finally { lock.releaseLock(); }
 }
