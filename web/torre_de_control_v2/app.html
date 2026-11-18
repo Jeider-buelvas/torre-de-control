@@ -1115,7 +1115,7 @@ var currentOP='all',currentSub='all',currentSede='all',currentComercial='all';
 var pageSize=10, currentPage=1;
 var ganttPageSize=10, ganttCurrentPage=1, ganttFirmaOps='';   // paginador del Gantt (solo visualización)
 var kgPageSize=10, kgCurrentPage=1, kgItemsAll=[];
-var opsPageSize=9, opsCurrentPage=1, opsItemsAll=[];
+var opsPageSize=9, opsCurrentPage=1, opsItemsAll=[], opsTermOcultas=0;
 var alertPageSize=10, alertCurrentPage=1, alertItemsAll=[];
 
 // ══════════════════════════════════════════
@@ -1729,7 +1729,10 @@ function renderEjecutiva(){
   document.getElementById('kpiEntregasDesc').textContent=venc?venc+' vencida'+(venc>1?'s':'')+' · ≤ 15 días':'próximos 15 días';
 
   // Paginador de tarjetas (vuelve a la página 1 cuando cambian filtros o datos)
-  opsItemsAll=ops;
+  // Las O.P. terminadas no se muestran como tarjeta en la Vista Ejecutiva (salvo que se filtre esa O.P.).
+  // Las que aún esperan entrega o compromisos se ven en 📁 OPs Terminadas → «Listas para cierre».
+  opsItemsAll=currentOP!=='all'?ops:ops.filter(function(o){return o.estado!=='Terminado';});
+  opsTermOcultas=ops.length-opsItemsAll.length;
   opsCurrentPage=1;
   renderOpsGrid();
 }
@@ -1765,7 +1768,8 @@ function renderOpsGrid(){
   var startIdx=(opsCurrentPage-1)*opsPageSize;
   var pageItems=opsItemsAll.slice(startIdx,startIdx+opsPageSize);
   grid.innerHTML=pageItems.length?pageItems.map(opCardHtml).join(''):'<div class="empty">Sin datos.</div>';
-  document.getElementById('opsCount').textContent=total?('Mostrando '+(startIdx+1)+'–'+Math.min(startIdx+opsPageSize,total)+' de '+total+' proyectos'):'0 proyectos';
+  document.getElementById('opsCount').innerHTML=(total?('Mostrando '+(startIdx+1)+'–'+Math.min(startIdx+opsPageSize,total)+' de '+total+' proyectos'):'0 proyectos')+
+    (opsTermOcultas?' · <a href="#" onclick="irAHistorico();return false" style="color:var(--accent)">'+opsTermOcultas+' terminada'+(opsTermOcultas===1?'':'s')+' en 📁 OPs Terminadas</a>':'');
   document.getElementById('opsPagerControls').innerHTML=pagerButtonsHtml(opsCurrentPage,totalPages,'goToOpsPage');
 }
 function goToOpsPage(p){

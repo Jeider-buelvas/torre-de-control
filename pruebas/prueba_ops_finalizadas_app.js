@@ -57,6 +57,6 @@ const errs=[];
  // sin finalizadas (Maestra anterior): todo igual que antes
  const p1=await abrir('app_manual.html',false);const r1=await p1.evaluate(()=>({n:state.ops.length,kpi:document.getElementById('kpiTerminados').textContent,grid:document.getElementById('opsGrid').textContent}));
  const r0=await p0.evaluate(()=>({n:state.ops.length,grid:document.getElementById('opsGrid').textContent}));
- ok(r1.n===23&&r1.grid===r0.grid&&r1.kpi==='0','Sin registro de finalizadas: el tablero queda igual que antes');
+ ok(r1.n===23&&r1.kpi==='0'&&!/OP 4027/.test(r1.grid)&&/OP 3949/.test(r1.grid),'Sin registro de finalizadas: no se archiva nada (23 O.P.); solo se ocultan las tarjetas terminadas');
  ok(errs.length===0,'sin errores de JavaScript '+errs.join(' ; '));
  await b.close();})();
