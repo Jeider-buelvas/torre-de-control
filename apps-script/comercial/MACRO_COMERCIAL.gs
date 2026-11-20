@@ -1,5 +1,17 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.11
+//  MACRO_COMERCIAL — v14.12
+//  v14.12: ESTADO AUTOMÁTICO POR KG en las áreas (todas menos Diseño y Dibujo):
+//          al escribir KG_AVANCE_ACUMULADO (col S) en el Cronograma de un área, el ESTADO
+//          (col P) de esa tarea se ajusta solo, comparando con PESO_KG_SUBESTRUCTURA (col L
+//          de la subestructura): sin kg = Abierto · kg > 0 y menor al peso = En pausa ·
+//          kg ≥ peso = Terminado. SOLO AVANZA: nunca baja un estado que el área ya puso
+//          (las diferencias salen en el reporte). No toca "No aplica" ni "Reproceso", ni
+//          fechas, fórmulas o kg. Sin peso válido: no cambia el estado y queda "pendiente
+//          de validación" (nota en la celda y en el reporte).
+//          Menú ⚖️: Revisar (solo reporte, no cambia nada), Activar (vigila los 8 archivos
+//          con un activador onEdit instalable y aplica una vez a lo existente) y Desactivar.
+//
+//  (v14.11)
 //  v14.11: CAMBIO DEL NÚMERO DE O.P. desde Editar OP (solo AUTORIZADOS_CAMBIO_OP).
 //          Si en modo edición el número de C3 es distinto, se pide el motivo y el
 //          cambio se aplica en todo lo que usa el número: cronogramas de las áreas
@@ -432,6 +444,10 @@ function onOpen() {
     .addSeparator()
     .addItem('🔁 Migrar Producción a Kg Fabricados + Entrega en negro (una vez)', 'migrarProduccionDosTareas')   // v14.7
     .addItem('🩹 Corregir fórmulas: #DIV/0!, 01/01/1900 y días No aplica', 'repararFormulasAreas')   // v14.9
+    .addSeparator()
+    .addItem('⚖️ Estados por kg: revisar (no cambia nada)', 'revisarEstadosKg')          // v14.12
+    .addItem('⚖️ Estados por kg: activar en las áreas', 'activarEstadosKg')              // v14.12
+    .addItem('⚖️ Estados por kg: desactivar', 'desactivarEstadosKg')                    // v14.12
     .addToUi();
   // v14.2: buscador de hojas de OP
   SpreadsheetApp.getUi()
@@ -3531,4 +3547,161 @@ function _prepararPlantasMixto(ws) {
     ws.getRange(fila, 7).setValue('').setDataValidation(regla).setBackground('#fff2cc')
       .setNote('OP MIXTO: elige la planta que fabrica esta subestructura');
   });
+}
+
+// ════════════════════════════════════════════════════════════
+//  v14.12 — ESTADO AUTOMÁTICO POR KG (todas las áreas menos Diseño y Dibujo)
+// ════════════════════════════════════════════════════════════
+var EKG = { COL_SUB: 11, COL_PESO: 12, COL_TAREA: 14, COL_ESTADO: 16, COL_KG: 19, COL_PCT: 20, FILA_INI: 5, HOJA: 'Cronograma',
+  HOJA_REPORTE: 'REPORTE_ESTADOS_KG', TOL: 0.005,   // tolerancia de redondeo: medio gramo (no es aproximación de avance)
+  NIVEL: { '': 0, 'Abierto': 0, 'En pausa': 1, 'Terminado': 2 }, ESTADO: ['Abierto', 'En pausa', 'Terminado'],
+  NO_TOCAR: { 'No aplica': 1, 'Reproceso': 1 } };
+
+/** Archivos que miden por kg: todas las áreas menos Diseño y Dibujo, y Producción de las dos plantas. */
+function _archivosEstadoKg() {
+  var out = [];
+  Object.keys(IDS_AREAS).forEach(function(a) {
+    if (a === 'Diseño' || a === 'Dibujo' || a === 'Produccion') return;
+    var id = IDS_AREAS[a]; if (id && !/PON_AQUI/.test(id)) out.push({ area: a, id: id });
+  });
+  Object.keys(IDS_PRODUCCION_PLANTA).forEach(function(p) { var id = IDS_PRODUCCION_PLANTA[p]; if (id && !/PON_AQUI/.test(id)) out.push({ area: 'Producción ' + p, id: id }); });
+  return out;
+}
+
+function _numKg(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  var t = String(v).replace(/kg/ig, '').replace(/\s/g, ''); if (!t) return null;
+  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(/,/g, '');
+  var n = Number(t); return isFinite(n) ? n : null;
+}
+
+/** Estado que corresponde a los kg. {nivel, estado} o {pendiente:true} si el peso no es válido. */
+function _estadoPorKg(kg, peso) {
+  if (!(peso > 0)) return { pendiente: true };
+  if (kg === null || kg <= 0) return { nivel: 0, estado: 'Abierto' };
+  if (kg + EKG.TOL < peso) return { nivel: 1, estado: 'En pausa' };
+  return { nivel: 2, estado: 'Terminado' };
+}
+
+/** Fila de la subestructura de una tarea: se toma de la fórmula de la col T (=S12/L$9 → 9); si no, se busca hacia arriba. */
+function _filaSubDe(formulaT, filas, i, base) {
+  var m = String(formulaT || '').match(/\/\s*\$?L\$?(\d+)/i);
+  if (m) return +m[1];
+  for (var k = i; k >= 0; k--) { if (String(filas[k][EKG.COL_SUB - 1]).trim() || _numKg(filas[k][EKG.COL_PESO - 1]) !== null) return base + k; }
+  return null;
+}
+
+/** Evalúa las filas [r1, r2] del Cronograma. Devuelve [{fila, op, sub, tarea, peso, kg, actual, nuevo, accion}]. */
+function _evaluarEstadosKg(sh, r1, r2) {
+  var last = sh.getLastRow(); if (last < EKG.FILA_INI) return [];
+  r1 = Math.max(r1 || EKG.FILA_INI, EKG.FILA_INI); r2 = Math.min(r2 || last, last); if (r2 < r1) return [];
+  // se leen también las filas de arriba para encontrar la subestructura y la OP
+  var desde = Math.max(EKG.FILA_INI, r1 - 60), n = r2 - desde + 1, anchoV = EKG.COL_KG;
+  var vals = sh.getRange(desde, 1, n, anchoV).getValues(), fT = sh.getRange(desde, EKG.COL_PCT, n, 1).getFormulas();
+  var pesoFila = function(f) { if (f >= desde) return _numKg(vals[f - desde][EKG.COL_PESO - 1]); var v = sh.getRange(f, EKG.COL_PESO).getValue(); return _numKg(v); };
+  var out = [], op = '', sub = '';
+  for (var i = 0; i < n; i++) {
+    var row = vals[i], fila = desde + i;
+    if (String(row[1]).trim()) op = String(row[1]).trim();
+    if (String(row[EKG.COL_SUB - 1]).trim()) sub = String(row[EKG.COL_SUB - 1]).trim();
+    if (fila < r1) continue;
+    var tarea = String(row[EKG.COL_TAREA - 1] || '').trim(), actual = String(row[EKG.COL_ESTADO - 1] || '').trim();
+    if (!tarea) continue;
+    var kg = _numKg(row[EKG.COL_KG - 1]), fs = _filaSubDe(fT[i][0], vals, i, desde), peso = fs ? pesoFila(fs) : null;
+    var r = { fila: fila, op: op, sub: sub, tarea: tarea, peso: peso, kg: kg, actual: actual, nuevo: '', accion: '' };
+    if (EKG.NO_TOCAR[actual]) { r.accion = 'Sin cambio (' + actual + ')'; out.push(r); continue; }
+    var e = _estadoPorKg(kg, peso);
+    if (e.pendiente) { r.accion = 'PENDIENTE DE VALIDACIÓN: la subestructura no tiene un peso válido'; out.push(r); continue; }
+    r.nuevo = e.estado;
+    var nivAct = EKG.NIVEL.hasOwnProperty(actual) ? EKG.NIVEL[actual] : null;
+    if (nivAct === null) r.accion = 'Sin cambio (estado "' + actual + '" no se ajusta por kg)';
+    else if (e.nivel > nivAct) r.accion = 'CAMBIA: ' + (actual || '(vacío)') + ' → ' + e.estado;
+    else if (e.nivel < nivAct) r.accion = 'REVISAR: el estado "' + actual + '" está más avanzado que los kg (' + (kg === null ? 'sin kg' : kg) + ' de ' + peso + ')';
+    else r.accion = 'Sin cambio';
+    out.push(r);
+  }
+  return out;
+}
+
+/** Aplica los cambios "solo avanza" y marca las celdas sin peso válido. Devuelve cuántas tareas cambió. */
+function _aplicarEstadosKg(sh, evals) {
+  var n = 0;
+  evals.forEach(function(r) {
+    var celdaKg = sh.getRange(r.fila, EKG.COL_KG);
+    if (/^PENDIENTE/.test(r.accion)) { celdaKg.setNote('⚠ Peso de la subestructura vacío o en cero: el estado no se calcula por kg. Pendiente de validación.'); return; }
+    if (/^CAMBIA/.test(r.accion)) { sh.getRange(r.fila, EKG.COL_ESTADO).setValue(r.nuevo); n++; }
+    if (celdaKg.getNote && /Pendiente de validación/.test(celdaKg.getNote() || '')) celdaKg.setNote('');
+  });
+  return n;
+}
+
+/** Activador onEdit instalable (uno por archivo de área): ajusta el estado de las filas editadas. */
+function _onEditEstadoKg(e) {
+  try {
+    if (!e || !e.range) return;
+    var sh = e.range.getSheet(); if (sh.getName() !== EKG.HOJA) return;
+    var c1 = e.range.getColumn(), c2 = c1 + e.range.getNumColumns() - 1;
+    var tocaKg = c1 <= EKG.COL_KG && c2 >= EKG.COL_KG, tocaEstado = c1 <= EKG.COL_ESTADO && c2 >= EKG.COL_ESTADO;
+    if (!tocaKg && !tocaEstado) return;
+    var r1 = e.range.getRow(), r2 = Math.min(r1 + e.range.getNumRows() - 1, r1 + 500);
+    if (r2 < EKG.FILA_INI) return;
+    _aplicarEstadosKg(sh, _evaluarEstadosKg(sh, r1, r2));
+  } catch (err) { console.error('Estado por kg: ' + err); }
+}
+
+/** Revisa todos los archivos y escribe el reporte. aplicar=true también cambia los estados (solo avanza). */
+function _recorrerEstadosKg(aplicar) {
+  var filas = [], resumen = {}, errores = [];
+  _archivosEstadoKg().forEach(function(x) {
+    try {
+      var sh = SpreadsheetApp.openById(x.id).getSheetByName(EKG.HOJA);
+      if (!sh) { errores.push(x.area + ': no tiene hoja "' + EKG.HOJA + '"'); return; }
+      var ev = _evaluarEstadosKg(sh, EKG.FILA_INI, sh.getLastRow());
+      var cambiadas = aplicar ? _aplicarEstadosKg(sh, ev) : 0;
+      var R = resumen[x.area] = { tareas: ev.length, cambia: 0, revisar: 0, pendiente: 0, cambiadas: cambiadas };
+      ev.forEach(function(r) {
+        if (/^CAMBIA/.test(r.accion)) R.cambia++; else if (/^REVISAR/.test(r.accion)) R.revisar++; else if (/^PENDIENTE/.test(r.accion)) R.pendiente++;
+        if (!/^Sin cambio/.test(r.accion)) filas.push([x.area, r.op, r.sub, r.tarea, r.peso === null ? '' : r.peso, r.kg === null ? '' : r.kg, r.actual, r.nuevo, r.accion, r.fila]);
+      });
+    } catch (err) { errores.push(x.area + ': ' + err.message); }
+  });
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), rep = ss.getSheetByName(EKG.HOJA_REPORTE) || ss.insertSheet(EKG.HOJA_REPORTE);
+  rep.clear();
+  var tz = Session.getScriptTimeZone(), cab = [['Reporte de estados por kg — ' + (aplicar ? 'APLICADO (solo avanza)' : 'REVISIÓN, no se cambió nada') + ' — ' + Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm'), '', '', '', '', '', '', '', '', '']];
+  var res = [['ÁREA', 'TAREAS', aplicar ? 'CAMBIADAS' : 'CAMBIARÍAN', 'A REVISAR (estado > kg)', 'PENDIENTES (sin peso)', '', '', '', '', '']];
+  Object.keys(resumen).forEach(function(a) { var R = resumen[a]; res.push([a, R.tareas, aplicar ? R.cambiadas : R.cambia, R.revisar, R.pendiente, '', '', '', '', '']); });
+  errores.forEach(function(t) { res.push(['⚠ ' + t, '', '', '', '', '', '', '', '', '']); });
+  var enc = [['ÁREA', 'OP', 'SUBESTRUCTURA', 'TAREA', 'PESO_KG_SUBESTRUCTURA', 'KG_AVANCE_ACUMULADO', 'ESTADO ACTUAL', 'ESTADO SEGÚN KG', 'ACCIÓN', 'FILA']];
+  var todo = cab.concat([['', '', '', '', '', '', '', '', '', '']], res, [['', '', '', '', '', '', '', '', '', '']], enc, filas);
+  rep.getRange(1, 1, todo.length, 10).setValues(todo);
+  rep.getRange(1, 1).setFontWeight('bold'); rep.getRange(3, 1, 1, 10).setFontWeight('bold'); rep.getRange(res.length + 4, 1, 1, 10).setFontWeight('bold');
+  rep.setFrozenRows(res.length + 4);
+  return { resumen: resumen, errores: errores, filas: filas.length };
+}
+
+function revisarEstadosKg() {
+  var r = _recorrerEstadosKg(false), ui = SpreadsheetApp.getUi();
+  var t = Object.keys(r.resumen).map(function(a) { var R = r.resumen[a]; return '• ' + a + ': ' + R.cambia + ' cambiarían, ' + R.revisar + ' a revisar, ' + R.pendiente + ' sin peso'; }).join('\n');
+  ui.alert('⚖️ Revisión de estados por kg (no se cambió nada)', t + (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') + '\n\nDetalle en la hoja ' + EKG.HOJA_REPORTE + '.', ui.ButtonSet.OK);
+}
+
+function activarEstadosKg() {
+  var ui = SpreadsheetApp.getUi();
+  var ok = ui.alert('⚖️ Activar estados por kg', 'Desde ahora, cuando alguien escriba KG_AVANCE_ACUMULADO en el Cronograma de Compras, Galvanizado, Logística, Montaje, Pintura, Administración o Producción, el estado de esa tarea se ajustará solo (Abierto / En pausa / Terminado).\n\nSolo avanza: nunca baja un estado que el área ya puso. Diseño y Dibujo no cambian.\n\nAhora se aplicará también a lo que ya está escrito. ¿Continuar?', ui.ButtonSet.YES_NO);
+  if (ok !== ui.Button.YES) return;
+  ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_onEditEstadoKg') ScriptApp.deleteTrigger(t); });
+  var activos = [], errores = [];
+  _archivosEstadoKg().forEach(function(x) {
+    try { ScriptApp.newTrigger('_onEditEstadoKg').forSpreadsheet(x.id).onEdit().create(); activos.push(x.area); }
+    catch (err) { errores.push(x.area + ': ' + err.message); }
+  });
+  var r = _recorrerEstadosKg(true);
+  var t = Object.keys(r.resumen).map(function(a) { var R = r.resumen[a]; return '• ' + a + ': ' + R.cambiadas + ' tareas actualizadas, ' + R.revisar + ' a revisar, ' + R.pendiente + ' sin peso'; }).join('\n');
+  ui.alert('✅ Estados por kg activados', 'Vigilando: ' + activos.join(', ') + '\n\n' + t + (errores.concat(r.errores).length ? '\n\n⚠ ' + errores.concat(r.errores).join('\n⚠ ') : '') + '\n\nDetalle en la hoja ' + EKG.HOJA_REPORTE + '.', ui.ButtonSet.OK);
+}
+
+function desactivarEstadosKg() {
+  var n = 0; ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_onEditEstadoKg') { ScriptApp.deleteTrigger(t); n++; } });
+  SpreadsheetApp.getUi().alert(n ? '⛔ Estados por kg desactivados (' + n + ' archivos). Los estados ya escritos no cambian.' : 'No estaba activado.');
 }
