@@ -4,7 +4,7 @@ const ok=(c,m)=>{console.log((c?'  ✔ ':'  ✘ FALLA ')+m); if(!c) process.exit
 const GS='/home/claude/trabajo/MACRO_COMERCIAL_v14_12.gs';
 // Cronograma de un área: fila 5 = subestructura A (peso 10.000), filas 5-9 tareas; fila 10 = subestructura B sin peso
 const filas=[];const T=(r,sub,peso,tarea,estado,kg,subRow)=>{const f={};f[2]=r===5?'4200':'';f[11]=sub;f[12]=peso;f[14]=tarea;f[16]=estado;f[19]=kg;f[20]='=S'+r+'/L$'+subRow;filas.push([r,f]);};
-T(5,'SUB A',10000,'Recepción material','Abierto','',5);
+filas.push([4,{2:'OP',11:'NOMBRE_SUBESTRUCTURA',14:'DESCRIPCION_TAREAS',16:'ESTADO'}]);T(5,'SUB A',10000,'Recepción material','Abierto','',5);
 T(6,'','','Corte','Abierto',3000,5);
 T(7,'','','Armado','Abierto',7500,5);
 T(8,'','','Soldadura','Abierto',10000,5);
@@ -28,7 +28,7 @@ ok(est(6)==='En pausa'&&est(7)==='En pausa','2. 3.000 y 7.500 de 10.000 → En p
 ok(est(8)==='Terminado','3. 10.000 de 10.000 → Terminado');
 ok(est(9)==='Terminado'&&kgv(9)===12000,'4. 12.000 de 10.000 → Terminado, sin tocar el valor (sigue 12.000)');
 ok(est(10)==='Abierto','5. Sin peso válido → no cambia (sigue Abierto), nunca Terminado');
-const ev=F._evaluarEstadosKg(sh,5,14);ok(/PENDIENTE/.test(ev.find(x=>x.fila===10).accion),'5b. …y queda "pendiente de validación" en el reporte');
+const ev=F._evaluarEstadosKg(sh,4,14);ok(/PENDIENTE/.test(ev.find(x=>x.fila===10).accion),'5b. …y queda "pendiente de validación" en el reporte');
 ok(est(12)==='No aplica','"No aplica" no se toca aunque tenga kg');
 ok(est(11)==='Terminado','Solo avanza: un Terminado sin kg no se baja');
 ok(/REVISAR/.test(ev.find(x=>x.fila===13).accion),'…y sale en el reporte para revisar');
@@ -43,4 +43,4 @@ sh.getRange(5,19).setValue(10000);sh.getRange(6,19).setValue(10000);F._onEditEst
 const antes=JSON.stringify([5,6,7,8,9].map(est));F._onEditEstadoKg({range:{getSheet:()=>sh,getColumn:()=>21,getNumColumns:()=>1,getRow:()=>6,getNumRows:()=>1}});ok(JSON.stringify([5,6,7,8,9].map(est))===antes,'Editar otra columna (fechas) no cambia estados');
 const ar=F._archivosEstadoKg().map(x=>x.area);ok(!ar.includes('Diseño')&&!ar.includes('Dibujo')&&ar.length===8,'6. Diseño y Dibujo no se vigilan; sí los otros 8 archivos: '+ar.join(', '));
 // las fórmulas de % y fechas no cambian
-ok(sh.getRange(6,20).getFormula()==='=S6/L$5','Las fórmulas del cronograma no se tocan');
+ok(!F._evaluarEstadosKg(sh,4,14).some(x=>x.fila===4),'La fila de encabezados no se evalúa');ok(sh.getRange(6,20).getFormula()==='=S6/L$5','Las fórmulas del cronograma no se tocan');

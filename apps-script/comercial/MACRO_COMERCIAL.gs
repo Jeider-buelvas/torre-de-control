@@ -3607,7 +3607,7 @@ function _evaluarEstadosKg(sh, r1, r2) {
     if (String(row[EKG.COL_SUB - 1]).trim()) sub = String(row[EKG.COL_SUB - 1]).trim();
     if (fila < r1) continue;
     var tarea = String(row[EKG.COL_TAREA - 1] || '').trim(), actual = String(row[EKG.COL_ESTADO - 1] || '').trim();
-    if (!tarea) continue;
+    if (!tarea || /^DESCRIPCION_TAREAS$/i.test(tarea) || /^ESTADO$/i.test(actual)) continue;   // fila de encabezados del Cronograma
     var kg = _numKg(row[EKG.COL_KG - 1]), fs = _filaSubDe(fT[i][0], vals, i, desde), peso = fs ? pesoFila(fs) : null;
     var r = { fila: fila, op: op, sub: sub, tarea: tarea, peso: peso, kg: kg, actual: actual, nuevo: '', accion: '' };
     if (EKG.NO_TOCAR[actual]) { r.accion = 'Sin cambio (' + actual + ')'; out.push(r); continue; }
