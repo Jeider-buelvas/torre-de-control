@@ -1032,7 +1032,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
     <select class="filter-input" id="filtroSub" onchange="filtrarTabla()" style="max-width:170px;flex:0"><option value="">Todas las SubEst.</option></select>
     <select class="filter-input" id="filtroEstado" onchange="filtrarTabla()" style="max-width:155px;flex:0">
       <option value="">Todos los Estados</option>
-      <option>Terminado</option><option>En pausa</option><option>Reproceso</option><option>Abierto</option><option>No aplica</option>
+      <option>Terminado</option><option value="En pausa">En Proceso</option><option>Reproceso</option><option>Abierto</option><option>No aplica</option>
     </select>
   </div>
   <div class="card">
@@ -1233,6 +1233,9 @@ function pC(p){return p>=.9?'pok':p>=.6?'pwarn':'pbad';}
 function fC(p){return p>=.9?'fok':p>=.6?'fwarn':'fbad';}
 function cN(v){var n=parseFloat(v);return isNaN(n)?0:n;}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+// El estado se guarda como «En pausa» en los cronogramas (fórmulas, sincronizaciones e historial no cambian);
+// en la Torre se muestra como «En Proceso». Solo presentación.
+function verEstado(s){return String(s==null?'':s).replace(/\ben pausa\b/gi,'En Proceso');}
 
 // ── Fecha de entrega al cliente y comercial de cada OP ──
 function comercialOP(o){
@@ -2362,11 +2365,11 @@ function renderAreas(){
     return '<div class="area-item">'+
       '<div class="area-header"><span>'+(AREA_ICONS[a.area]||'📌')+' '+a.area+'</span><span class="area-pct">'+a.avancePct+'%</span></div>'+
       '<div class="area-bar"><div class="area-bar-fill" style="width:'+a.avancePct+'%"></div></div>'+
-      '<div class="area-sub"><span>✅ '+(t.terminadas||0)+'</span><span>⏸ '+(t.enPausa||0)+'</span><span>🔄 '+(t.reproceso||0)+'</span></div></div>';
+      '<div class="area-sub"><span>✅ '+(t.terminadas||0)+'</span><span title="En Proceso">⏳ '+(t.enPausa||0)+'</span><span>🔄 '+(t.reproceso||0)+'</span></div></div>';
   }).join('');
   destroyChart('chartEstados');
   charts['chartEstados']=new Chart(document.getElementById('chartEstados').getContext('2d'),{type:'doughnut',data:{
-    labels:['Terminado','En Pausa','Reproceso','Abierto'],
+    labels:['Terminado','En Proceso','Reproceso','Abierto'],
     datasets:[{data:[areas.reduce(function(s,a){return s+a.tareas.terminadas;},0),areas.reduce(function(s,a){return s+a.tareas.enPausa;},0),areas.reduce(function(s,a){return s+a.tareas.reproceso;},0),areas.reduce(function(s,a){return s+a.tareas.abierto;},0)],
       backgroundColor:['#22c55e44','#f59e0b44','#ef444444','#64748b44'],borderColor:['#22c55e','#f59e0b','#ef4444','#64748b'],borderWidth:2}]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:lc(),font:{size:12}}}}}});
@@ -2805,7 +2808,7 @@ function renderBodyTabla(){
       '<td style="font-size:12px;color:var(--accent)">'+(t.subEstructura||'—')+'</td>'+
       '<td>'+(t.tarea||'')+'</td>'+
       '<td style="font-size:12px">'+(t.asignado||'')+'</td>'+
-      '<td><span class="estado-badge '+ec+'">'+(t.estado||'')+'</span></td>'+
+      '<td><span class="estado-badge '+ec+'">'+esc(verEstado(t.estado||''))+'</span></td>'+
       '<td style="font-family:\'JetBrains Mono\',monospace">'+(cN(t.pct)||0)+'%</td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(t.fechaFinPlan||'—')+'</td>'+
       '<td style="font-size:12px;color:var(--muted)">'+(t.fechaFinReal||'—')+'</td>'+
@@ -2830,7 +2833,7 @@ function obsItemHtml(t,principal){
     '<div class="obs-meta"><span class="area-tag">'+esc(t.area||'')+'</span>'+
       (t.subEstructura?'<span class="obs-sub">'+esc(t.subEstructura)+'</span>':'')+
       '<span class="obs-tarea">'+esc(t.tarea||'')+'</span>'+
-      (t.estado?'<span class="estado-badge '+({'Terminado':'eT','En pausa':'eP','Reproceso':'eR'}[t.estado]||'eA')+'">'+esc(t.estado)+'</span>':'')+'</div>'+
+      (t.estado?'<span class="estado-badge '+({'Terminado':'eT','En pausa':'eP','Reproceso':'eR'}[t.estado]||'eA')+'">'+esc(verEstado(t.estado))+'</span>':'')+'</div>'+
     '<div class="obs-text">'+esc(textoObs(t))+'</div>'+
     (t.asignado?'<div class="obs-who">Asignado: '+esc(t.asignado)+'</div>':'')+
   '</div>';
@@ -3316,7 +3319,7 @@ function renderHistBody(){
   var i0=(histPage-1)*HIST_PAGE;
   body.innerHTML=histFiltrados.slice(i0,i0+HIST_PAGE).map(function(h){
     var st=HIST_ESTILO[h.tipo]||['✏️','var(--accent)','var(--tint-accent)'];
-    var val=(h.anterior||h.nuevo)?'<span class="hist-val"><span class="hist-ant">'+esc(h.anterior||'(vacío)')+'</span> → <b>'+esc(h.nuevo||'(vacío)')+'</b></span>':'—';
+    var val=(h.anterior||h.nuevo)?'<span class="hist-val"><span class="hist-ant">'+esc(verEstado(h.anterior)||'(vacío)')+'</span> → <b>'+esc(verEstado(h.nuevo)||'(vacío)')+'</b></span>':'—';
     if(h.tipo==='Diferencia entre áreas')val='<span class="hist-val" style="color:var(--yellow);font-weight:700">'+esc((h.anterior+' '+h.nuevo).trim())+'</span>';
     return '<tr><td style="font-family:\'JetBrains Mono\',monospace;font-size:12px;white-space:nowrap">'+esc(h.fecha)+'</td>'+
       '<td style="font-size:12px"><div style="font-weight:600">'+esc(h.usuario||'—')+'</div>'+(h.correo?'<div style="color:var(--muted);font-size:11px">'+esc(h.correo)+'</div>':'')+'</td>'+

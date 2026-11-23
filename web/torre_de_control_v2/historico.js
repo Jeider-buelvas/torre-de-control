@@ -122,7 +122,7 @@ window.hisDetalle=function(op){
   h+='<div class="his-sec">Áreas y tareas</div>';
   if(f.tareas.length){
     h+='<table><thead><tr><th>Área</th><th>Tarea</th><th>Subestructura</th><th>Plan</th><th>Real</th><th>Estado</th></tr></thead><tbody>'+
-      ordenarAreas(Object.keys(porArea)).map(function(a){return porArea[a].map(function(t){return '<tr><td>'+e(a)+'</td><td>'+e(t.tarea)+'</td><td>'+e(t.subEstructura||'')+'</td><td>'+e((t.fechaIniPlan||'—')+' – '+(t.fechaFinPlan||'—'))+'</td><td>'+e((t.fechaIniReal||'—')+' – '+(t.fechaFinReal||'—'))+'</td><td>'+e(t.estado||'')+'</td></tr>';}).join('');}).join('')+'</tbody></table>';
+      ordenarAreas(Object.keys(porArea)).map(function(a){return porArea[a].map(function(t){return '<tr><td>'+e(a)+'</td><td>'+e(t.tarea)+'</td><td>'+e(t.subEstructura||'')+'</td><td>'+e((t.fechaIniPlan||'—')+' – '+(t.fechaFinPlan||'—'))+'</td><td>'+e((t.fechaIniReal||'—')+' – '+(t.fechaFinReal||'—'))+'</td><td>'+e(verEstado(t.estado||''))+'</td></tr>';}).join('');}).join('')+'</tbody></table>';
   }else if(f.r.detalle&&f.r.detalle.length){
     h+='<p style="font-size:12px;color:var(--muted);margin:0 0 6px">La O.P. ya no está en los cronogramas. Resumen guardado al cerrar:</p><table><thead><tr><th>Área</th><th>Tareas</th><th>Plan</th><th>Real</th></tr></thead><tbody>'+
       f.r.detalle.map(function(A){return '<tr><td>'+e(A.area)+'</td><td>'+e(A.tareas)+'</td><td>'+e((A.ini||'—')+' – '+(A.fin||'—'))+'</td><td>'+e((A.iniR||'—')+' – '+(A.finR||'—'))+'</td></tr>';}).join('')+'</tbody></table>';
@@ -141,7 +141,7 @@ window.hisDetalle=function(op){
   if(obs.length)h+='<div class="his-sec">Observaciones ('+obs.length+')</div><table><tbody>'+obs.map(function(t){return '<tr><td>'+e(String(t.area))+' · '+e(t.tarea)+'</td><td>'+e(t.observaciones)+'</td></tr>';}).join('')+'</tbody></table>';
   // historial de cambios
   var hist=(state.historial||[]).filter(function(x){return String(x.op)===f.op;});
-  h+='<div class="his-sec">Historial de cambios ('+hist.length+')</div>'+(hist.length?'<table><tbody>'+hist.slice(0,30).map(function(x){return '<tr><td style="white-space:nowrap">'+e(x.fecha)+'</td><td>'+e(x.tipo)+'</td><td>'+e([x.area,x.tarea,x.campo].filter(Boolean).join(' · '))+'</td><td>'+e((x.anterior||'')+(x.nuevo?' → '+x.nuevo:''))+'</td></tr>';}).join('')+'</tbody></table>'+(hist.length>30?'<p style="font-size:11px;color:var(--muted)">Se muestran los 30 más recientes; el resto está en 📜 Historial.</p>':''):'<div class="empty">Sin cambios registrados</div>');
+  h+='<div class="his-sec">Historial de cambios ('+hist.length+')</div>'+(hist.length?'<table><tbody>'+hist.slice(0,30).map(function(x){return '<tr><td style="white-space:nowrap">'+e(x.fecha)+'</td><td>'+e(x.tipo)+'</td><td>'+e([x.area,x.tarea,x.campo].filter(Boolean).join(' · '))+'</td><td>'+e((verEstado(x.anterior)||'')+(x.nuevo?' → '+verEstado(x.nuevo):''))+'</td></tr>';}).join('')+'</tbody></table>'+(hist.length>30?'<p style="font-size:11px;color:var(--muted)">Se muestran los 30 más recientes; el resto está en 📜 Historial.</p>':''):'<div class="empty">Sin cambios registrados</div>');
   document.getElementById('hisBodyDet').innerHTML=h;ov.classList.add('active');
 };
 window.hisCerrar=function(){var ov=document.getElementById('hisOverlay');if(ov)ov.classList.remove('active');};
