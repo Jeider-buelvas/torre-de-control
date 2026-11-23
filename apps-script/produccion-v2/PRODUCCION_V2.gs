@@ -1,5 +1,11 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.6 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.7 (fusionada)
 //
+// v4.7 — «En pausa» pasa a llamarse «En Proceso» y la sincronización diaria usa la misma regla de kg
+//  que las demás áreas: sin kg = Abierto · kg parciales = En Proceso · kg completos = Terminado.
+//  Solo avanza: nunca baja un Terminado y respeta Reproceso y No aplica. (Antes dejaba "Abierto"
+//  con kg parciales y trataba "En pausa" como sin empezar.) Un "En pausa" antiguo se lee como En Proceso.
+//
+// (v4.6)
 // v4.6 (solicitud de Producción — orden del reporte diario):
 //  - ⭐ PRIORIDAD por número (1 = la más urgente): campo "Prioridad" en el formulario
 //    (menú ⚙️ Configurar formulario lo agrega) y menú "⭐ Marcar / quitar prioridad" para las
@@ -1171,11 +1177,12 @@ function sincronizarTarea_(sh, C, filaTarea, kgSub, real, ini, fin) {
           const dur = Math.max(1, diasHabiles_(usaIniDiario ? ini : iniActual, fin));
           if (dur !== durActual) { sh.getRange(r, C.DUR_REAL).setValue(dur); cambio = true; }
         }
-        // Estado: En pausa → Abierto → Terminado. Nunca se baja un "Terminado"
-        // y "Reproceso" se respeta mientras no se complete el peso.
+        // v4.7 — Estado por kg (igual que las demás áreas): sin kg = Abierto · kg parciales = En Proceso ·
+        // kg completos = Terminado. Solo avanza: nunca se baja un "Terminado" y "Reproceso" se respeta.
         let nuevo = actual;
         if (s.kg > 0 && kgFinal >= s.kg) nuevo = 'Terminado';
-        else if (actual === '' || actual === 'En pausa') nuevo = 'Abierto';
+        else if (kgFinal > 0 && (actual === '' || actual === 'Abierto' || actual === 'En pausa')) nuevo = 'En Proceso';
+        else if (kgFinal <= 0 && actual === '') nuevo = 'Abierto';
         if (nuevo !== actual) { sh.getRange(r, C.ESTADO).setValue(nuevo); cambio = true; }
         return { cambio: cambio, terminada: nuevo === 'Terminado' };
 }

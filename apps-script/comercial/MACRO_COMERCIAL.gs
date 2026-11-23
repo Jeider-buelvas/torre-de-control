@@ -1,9 +1,22 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.12
+//  MACRO_COMERCIAL — v14.13
+//  v14.13: «En pausa» pasa a llamarse «En Proceso» en todo el sistema (solo el nombre):
+//          · Las fórmulas %_APORTE nuevas comparan "En Proceso"; el estado por kg escribe
+//            "En Proceso" (sin kg = Abierto · kg parciales = En Proceso · kg completos = Terminado).
+//          · Al quitar subestructuras, "En Proceso" cuenta como avance (antes "En pausa" no contaba).
+//          · Menú 🔁 Migrar «En pausa» → «En Proceso»: revisar (solo cuenta) y aplicar. En los
+//            archivos de las áreas y de Producción (Bogotá y Barranquilla) y en Comercial cambia:
+//            celdas cuyo valor es exactamente "En pausa" SOLO en Cronograma col P (ESTADO) y en la lista
+//            de estados ('Assignees and Status' col D), fórmulas que contienen "En pausa", reglas de formato
+//            condicional y validaciones con lista. No toca hojas RESPALDO*/REPORTE*, ni textos
+//            como "en pausa por…", ni el historial de la Maestra (auditoría).
+//          · Lectura compatible: si llega un "En pausa" antiguo se trata como "En Proceso".
+//
+//  (v14.12)
 //  v14.12: ESTADO AUTOMÁTICO POR KG en las áreas (todas menos Diseño y Dibujo):
 //          al escribir KG_AVANCE_ACUMULADO (col S) en el Cronograma de un área, el ESTADO
 //          (col P) de esa tarea se ajusta solo, comparando con PESO_KG_SUBESTRUCTURA (col L
-//          de la subestructura): sin kg = Abierto · kg > 0 y menor al peso = En pausa ·
+//          de la subestructura): sin kg = Abierto · kg > 0 y menor al peso = En Proceso ·
 //          kg ≥ peso = Terminado. SOLO AVANZA: nunca baja un estado que el área ya puso
 //          (las diferencias salen en el reporte). No toca "No aplica" ni "Reproceso", ni
 //          fechas, fórmulas o kg. Sin peso válido: no cambia el estado y queda "pendiente
@@ -448,6 +461,9 @@ function onOpen() {
     .addItem('⚖️ Estados por kg: revisar (no cambia nada)', 'revisarEstadosKg')          // v14.12
     .addItem('⚖️ Estados por kg: activar en las áreas', 'activarEstadosKg')              // v14.12
     .addItem('⚖️ Estados por kg: desactivar', 'desactivarEstadosKg')                    // v14.12
+    .addSeparator()
+    .addItem('🔁 Migrar «En pausa» → «En Proceso»: revisar (no cambia nada)', 'revisarMigracionEnProceso')   // v14.13
+    .addItem('🔁 Migrar «En pausa» → «En Proceso»: aplicar', 'aplicarMigracionEnProceso')                     // v14.13
     .addToUi();
   // v14.2: buscador de hojas de OP
   SpreadsheetApp.getUi()
@@ -1388,7 +1404,7 @@ function _subsConAvance(tSheet, start, nFilas, T, s0) {
     for (var t = 0; t < T && b * T + t < nFilas; t++) {
       var row = v[b * T + t];
       var estado = String(row[15]).trim();                         // P = ESTADO
-      if ((estado && estado !== 'En pausa') ||
+      if (estado ||                                                // v14.13: cualquier estado cuenta (antes se excluía "En pausa")
           (parseFloat(row[18]) > 0) ||                              // S = KG avance
           String(row[28]).trim() !== '') { con = true; break; }     // AC = OBSERVACIONES
     }
@@ -1488,7 +1504,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
       var pt = (tareas[tIdx][2]||0).toString().replace('.',',');
       var pp = (tareas[tIdx][3]||0).toString().replace('.',',');
       var pr = (tareas[tIdx][4]||0).toString().replace('.',',');
-      tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt + ';IF(P' + r + '="En pausa";' + pp + ';IF(P' + r + '="Reproceso";' + pr + ';0)))');
+      tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt + ';IF(P' + r + '="En Proceso";' + pp + ';IF(P' + r + '="Reproceso";' + pr + ';0)))');
     } else {
       var asRow = ctx.asFilas[descTarea] || null;
       if (asRow) {
@@ -1496,7 +1512,7 @@ function _escribirSub(tSheet, ctx, s, subStart) {
       } else {
         var pt2 = (tareas[tIdx][2]||0).toString().replace('.',',');
         var pp2 = (tareas[tIdx][3]||0).toString().replace('.',',');
-        tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt2 + ';IF(P' + r + '="En pausa";' + pp2 + ';0))');
+        tSheet.getRange(r, 17).setValue('=IF(P' + r + '="Terminado";' + pt2 + ';IF(P' + r + '="En Proceso";' + pp2 + ';0))');
       }
     }
     tSheet.getRange(r, 17).setNumberFormat('0.00%');
@@ -1771,7 +1787,7 @@ function actualizarGanttEnComercial() {
     row++;
   }
 
-  var colorMap = {'Terminado':'#00b050','Abierto':'#4f81bd','Reproceso':'#c00000','En pausa':'#ffc000'};
+  var colorMap = {'Terminado':'#00b050','Abierto':'#4f81bd','Reproceso':'#c00000','En Proceso':'#ffc000','En pausa':'#ffc000'};   // v14.13 ('En pausa' = dato antiguo)
   var timelineDates = sheet.getRange(5, 9, 1, 200).getValues()[0];
   for (var i = 9; i < row; i++) {
     var ini  = sheet.getRange(i, 6).getValue();
@@ -2753,10 +2769,10 @@ function _formulaAporteBase(area, t, r) {
   var tareas = TAREAS_AREA[area] || TAREAS_AREA['Diseño'];
   var tipo = TIPO_AREA[area] || 'B', asFilas = AS_FILAS[area] || {};
   var c = function(x) { return (x || 0).toString().replace('.', ','); };
-  if (tipo === 'A') return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En pausa";' + c(tareas[t][3]) + ';IF(P' + r + '="Reproceso";' + c(tareas[t][4]) + ';0)))', w: c(tareas[t][2]), setFormula: false };
+  if (tipo === 'A') return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En Proceso";' + c(tareas[t][3]) + ';IF(P' + r + '="Reproceso";' + c(tareas[t][4]) + ';0)))', w: c(tareas[t][2]), setFormula: false };
   var asRow = asFilas[tareas[t][0]] || null;
   if (asRow) return { fx: "='Assignees and Status'!B" + asRow + '%*T' + r, w: "'Assignees and Status'!B" + asRow + '%', setFormula: true };
-  return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En pausa";' + c(tareas[t][3]) + ';0))', w: c(tareas[t][2]), setFormula: false };
+  return { fx: '=IF(P' + r + '="Terminado";' + c(tareas[t][2]) + ';IF(P' + r + '="En Proceso";' + c(tareas[t][3]) + ';0))', w: c(tareas[t][2]), setFormula: false };
 }
 
 /**
@@ -3554,7 +3570,7 @@ function _prepararPlantasMixto(ws) {
 // ════════════════════════════════════════════════════════════
 var EKG = { COL_SUB: 11, COL_PESO: 12, COL_TAREA: 14, COL_ESTADO: 16, COL_KG: 19, COL_PCT: 20, FILA_INI: 5, HOJA: 'Cronograma',
   HOJA_REPORTE: 'REPORTE_ESTADOS_KG', TOL: 0.005,   // tolerancia de redondeo: medio gramo (no es aproximación de avance)
-  NIVEL: { '': 0, 'Abierto': 0, 'En pausa': 1, 'Terminado': 2 }, ESTADO: ['Abierto', 'En pausa', 'Terminado'],
+  NIVEL: { '': 0, 'Abierto': 0, 'En Proceso': 1, 'En pausa': 1, 'Terminado': 2 }, ESTADO: ['Abierto', 'En Proceso', 'Terminado'],   // v14.13 ('En pausa' = dato antiguo)
   NO_TOCAR: { 'No aplica': 1, 'Reproceso': 1 } };
 
 /** Archivos que miden por kg: todas las áreas menos Diseño y Dibujo, y Producción de las dos plantas. */
@@ -3580,7 +3596,7 @@ function _numKg(v) {
 function _estadoPorKg(kg, peso) {
   if (!(peso > 0)) return { pendiente: true };
   if (kg === null || kg <= 0) return { nivel: 0, estado: 'Abierto' };
-  if (kg + EKG.TOL < peso) return { nivel: 1, estado: 'En pausa' };
+  if (kg + EKG.TOL < peso) return { nivel: 1, estado: 'En Proceso' };   // v14.13
   return { nivel: 2, estado: 'Terminado' };
 }
 
@@ -3688,7 +3704,7 @@ function revisarEstadosKg() {
 
 function activarEstadosKg() {
   var ui = SpreadsheetApp.getUi();
-  var ok = ui.alert('⚖️ Activar estados por kg', 'Desde ahora, cuando alguien escriba KG_AVANCE_ACUMULADO en el Cronograma de Compras, Galvanizado, Logística, Montaje, Pintura, Administración o Producción, el estado de esa tarea se ajustará solo (Abierto / En pausa / Terminado).\n\nSolo avanza: nunca baja un estado que el área ya puso. Diseño y Dibujo no cambian.\n\nAhora se aplicará también a lo que ya está escrito. ¿Continuar?', ui.ButtonSet.YES_NO);
+  var ok = ui.alert('⚖️ Activar estados por kg', 'Desde ahora, cuando alguien escriba KG_AVANCE_ACUMULADO en el Cronograma de Compras, Galvanizado, Logística, Montaje, Pintura, Administración o Producción, el estado de esa tarea se ajustará solo (Abierto / En Proceso / Terminado).\n\nSolo avanza: nunca baja un estado que el área ya puso. Diseño y Dibujo no cambian.\n\nAhora se aplicará también a lo que ya está escrito. ¿Continuar?', ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
   ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_onEditEstadoKg') ScriptApp.deleteTrigger(t); });
   var activos = [], errores = [];
@@ -3704,4 +3720,109 @@ function activarEstadosKg() {
 function desactivarEstadosKg() {
   var n = 0; ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_onEditEstadoKg') { ScriptApp.deleteTrigger(t); n++; } });
   SpreadsheetApp.getUi().alert(n ? '⛔ Estados por kg desactivados (' + n + ' archivos). Los estados ya escritos no cambian.' : 'No estaba activado.');
+}
+
+// ════════════════════════════════════════════════════════════
+//  v14.13 — MIGRACIÓN «En pausa» → «En Proceso» (solo el nombre)
+// ════════════════════════════════════════════════════════════
+var MIG = { VIEJO: 'En pausa', NUEVO: 'En Proceso', HOJA_REPORTE: 'REPORTE_EN_PROCESO' };
+
+/** Archivos a migrar: todas las áreas (incluye Diseño y Dibujo), Producción de las dos plantas y Comercial. */
+function _archivosMigracion() {
+  var vistos = {}, out = [];
+  var add = function(nombre, id) { if (id && !/PON_AQUI/.test(id) && !vistos[id]) { vistos[id] = 1; out.push({ nombre: nombre, id: id }); } };
+  Object.keys(IDS_AREAS).forEach(function(a) { add(a === 'Produccion' ? 'Producción BARRANQUILLA' : a, IDS_AREAS[a]); });
+  Object.keys(IDS_PRODUCCION_PLANTA).forEach(function(p) { add('Producción ' + p, IDS_PRODUCCION_PLANTA[p]); });
+  add('Comercial', SpreadsheetApp.getActiveSpreadsheet().getId());
+  return out;
+}
+function _hojaMigrable(sh) { return !/^(RESPALDO|REPORTE)/i.test(sh.getName()); }
+function _tieneViejoFx(t) { return /"en pausa"/i.test(String(t)); }
+function _cambiarViejoFx(t) { return String(t).replace(/"en pausa"/ig, '"' + MIG.NUEVO + '"'); }
+
+/** Cuenta (y si aplicar=true, cambia) un archivo. Devuelve {valores, formulas, formato, validaciones}. */
+function _migrarArchivo(ss, aplicar) {
+  var c = { valores: 0, formulas: 0, formato: 0, validaciones: 0 };
+  ss.getSheets().filter(_hojaMigrable).forEach(function(sh) {
+    if (sh.getLastRow() < 1) return;
+    // 1) fórmulas que contienen "En pausa" (entre comillas): solo cambia el texto, mismo resultado
+    var tfF = sh.createTextFinder('"En pausa"').matchFormulaText(true).matchCase(false);
+    c.formulas += aplicar ? tfF.replaceAllWith('"' + MIG.NUEVO + '"') : tfF.findAll().length;
+    // 2) valores EXACTAMENTE "En pausa" solo donde está el estado: Cronograma col P (ESTADO) y
+    //    'Assignees and Status' col D (lista de estados). Observaciones y demás columnas no se tocan.
+    var colEstado = sh.getName() === 'Cronograma' ? 16 : sh.getName() === 'Assignees and Status' ? 4 : 0, celdas = [];
+    if (colEstado) {
+      var tfV = sh.getRange(1, colEstado, sh.getLastRow(), 1).createTextFinder(MIG.VIEJO).matchEntireCell(true).matchCase(false).matchFormulaText(false);
+      celdas = tfV.findAll().filter(function(r) { return !r.getFormula(); });
+    }
+    c.valores += celdas.length;
+    if (aplicar) celdas.forEach(function(r) { r.setValue(MIG.NUEVO); });
+    // 3) formato condicional (colores del Gantt del cronograma)
+    var reglas = sh.getConditionalFormatRules(), cambio = false;
+    var nuevas = reglas.map(function(rule) {
+      var bc = rule.getBooleanCondition(); if (!bc) return rule;
+      var tipo = bc.getCriteriaType(), vals = bc.getCriteriaValues();
+      if (tipo === SpreadsheetApp.BooleanCriteria.CUSTOM_FORMULA && _tieneViejoFx(vals[0])) {
+        c.formato++; cambio = true;
+        return rule.copy().whenFormulaSatisfied(_cambiarViejoFx(vals[0])).build();
+      }
+      if ((tipo === SpreadsheetApp.BooleanCriteria.TEXT_EQUAL_TO || tipo === SpreadsheetApp.BooleanCriteria.TEXT_CONTAINS) && String(vals[0]).toLowerCase() === 'en pausa') {
+        c.formato++; cambio = true;
+        var b = rule.copy(); return (tipo === SpreadsheetApp.BooleanCriteria.TEXT_EQUAL_TO ? b.whenTextEqualTo(MIG.NUEVO) : b.whenTextContains(MIG.NUEVO)).build();
+      }
+      return rule;
+    });
+    if (aplicar && cambio) sh.setConditionalFormatRules(nuevas);
+    // 4) validaciones con lista escrita (las que apuntan a 'Assignees and Status' se actualizan solas con el paso 2)
+    var rg = sh.getDataRange(), dv = rg.getDataValidations(), cambiaDv = false;
+    for (var i = 0; i < dv.length; i++) for (var j = 0; j < dv[i].length; j++) {
+      var v = dv[i][j]; if (!v || v.getCriteriaType() !== SpreadsheetApp.DataValidationCriteria.VALUE_IN_LIST) continue;
+      var lista = v.getCriteriaValues()[0] || [];
+      if (!lista.some(function(x) { return String(x).toLowerCase() === 'en pausa'; })) continue;
+      c.validaciones++; cambiaDv = true;
+      dv[i][j] = v.copy().requireValueInList(lista.map(function(x) { return String(x).toLowerCase() === 'en pausa' ? MIG.NUEVO : x; }), v.getCriteriaValues()[1]).build();
+    }
+    if (aplicar && cambiaDv) rg.setDataValidations(dv);
+  });
+  return c;
+}
+
+function _migracionEnProceso(aplicar) {
+  var filas = [], errores = [], tot = { valores: 0, formulas: 0, formato: 0, validaciones: 0 }, quedan = 0;
+  _archivosMigracion().forEach(function(x) {
+    try {
+      var ss = SpreadsheetApp.openById(x.id), c = _migrarArchivo(ss, aplicar), resto = '';
+      if (aplicar) { SpreadsheetApp.flush(); var v = _migrarArchivo(ss, false); var n = v.valores + v.formulas + v.formato + v.validaciones; quedan += n; resto = n ? '⚠ quedan ' + n : '✅ 0'; }
+      Object.keys(tot).forEach(function(k) { tot[k] += c[k]; });
+      filas.push([x.nombre, c.valores, c.formulas, c.formato, c.validaciones, resto]);
+    } catch (err) { errores.push(x.nombre + ': ' + err.message); filas.push([x.nombre, '', '', '', '', '❌ ' + err.message]); }
+  });
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), rep = ss.getSheetByName(MIG.HOJA_REPORTE) || ss.insertSheet(MIG.HOJA_REPORTE);
+  rep.clear();
+  var tz = Session.getScriptTimeZone();
+  var datos = [['Migración «En pausa» → «En Proceso» — ' + (aplicar ? 'APLICADA' : 'REVISIÓN (no se cambió nada)') + ' — ' + Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm'), '', '', '', '', ''],
+    ['', '', '', '', '', ''], ['ARCHIVO', 'CELDAS CON VALOR «En pausa»', 'FÓRMULAS CON "En pausa"', 'REGLAS DE COLOR', 'VALIDACIONES CON LISTA', aplicar ? 'VERIFICACIÓN (lo que queda)' : '']]
+    .concat(filas).concat([['TOTAL', tot.valores, tot.formulas, tot.formato, tot.validaciones, aplicar ? (quedan ? '⚠ quedan ' + quedan : '✅ 0') : '']]);
+  rep.getRange(1, 1, datos.length, 6).setValues(datos);
+  rep.getRange(1, 1).setFontWeight('bold'); rep.getRange(3, 1, 1, 6).setFontWeight('bold'); rep.getRange(datos.length, 1, 1, 6).setFontWeight('bold');
+  return { tot: tot, errores: errores, quedan: quedan, filas: filas };
+}
+
+function revisarMigracionEnProceso() {
+  var r = _migracionEnProceso(false), ui = SpreadsheetApp.getUi();
+  ui.alert('🔁 Revisión «En pausa» → «En Proceso» (no se cambió nada)',
+    'Se cambiarían:\n• ' + r.tot.valores + ' celdas con el valor «En pausa»\n• ' + r.tot.formulas + ' fórmulas\n• ' + r.tot.formato + ' reglas de color\n• ' + r.tot.validaciones + ' validaciones con lista' +
+    (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') + '\n\nDetalle por archivo en la hoja ' + MIG.HOJA_REPORTE + '.', ui.ButtonSet.OK);
+}
+
+function aplicarMigracionEnProceso() {
+  var ui = SpreadsheetApp.getUi();
+  if (ui.alert('🔁 Migrar «En pausa» → «En Proceso»', 'Se cambiará el nombre del estado en los cronogramas de todas las áreas, Producción (Bogotá y Barranquilla) y Comercial: valores, lista desplegable, fórmulas y colores.\n\nLa lógica no cambia. Hay copia de respaldo de los archivos en Drive (carpeta RESPALDO 23-11 · antes de En Proceso).\n\n¿Continuar?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var lock = LockService.getScriptLock(); if (!lock.tryLock(30000)) { ui.alert('Otra persona está ejecutando una macro. Intenta de nuevo.'); return; }
+  try {
+    var r = _migracionEnProceso(true);
+    ui.alert(r.quedan || r.errores.length ? '⚠ Migración con pendientes' : '✅ Migración completa',
+      'Cambiado:\n• ' + r.tot.valores + ' celdas\n• ' + r.tot.formulas + ' fórmulas\n• ' + r.tot.formato + ' reglas de color\n• ' + r.tot.validaciones + ' validaciones\n\nVerificación: ' + (r.quedan ? 'quedan ' + r.quedan + ' referencias (ver hoja ' + MIG.HOJA_REPORTE + ')' : 'ya no queda «En pausa» en ningún archivo.') +
+      (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') + '\n\nÚltimo paso: en la Maestra, 🔄 Actualizar LOOKER_MAESTRA.', ui.ButtonSet.OK);
+  } finally { lock.releaseLock(); }
 }

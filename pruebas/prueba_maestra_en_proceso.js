@@ -1,0 +1,11 @@
+process.env.TZ='America/Bogota';
+const {Spreadsheet,entorno,cargar}=require('./gsim_rep.js');const fs=require('fs');
+const ok=(c,m)=>{console.log((c?'  ✔ ':'  ✘ FALLA ')+m); if(!c) process.exitCode=1;};
+const ID_M='1v55aTL923MTMVXU2iuxYMATP0LePk6tUFyYx1jMsLj4';
+const hacer=(gs,migrar)=>{let t=fs.readFileSync('maestra_base.json','utf8');if(migrar)t=t.replace(/"En pausa"/g,'"En Proceso"');const M=new Spreadsheet(ID_M,JSON.parse(t),'M');
+  const env=entorno({[ID_M]:M},M,{sinUi:true});const F=cargar(gs,env,['actualizarLookerMaestra','getDatosOPs','getDatosAreas']);F.actualizarLookerMaestra();return F;};
+const a=hacer('/home/claude/trabajo/MAESTRA_POLYUPROTEC_v4_11b.gs',false),b=hacer('/home/claude/trabajo/MAESTRA_POLYUPROTEC_v4_12.gs',true),c=hacer('/home/claude/trabajo/MAESTRA_POLYUPROTEC_v4_12.gs',false);
+const cnt=F=>JSON.stringify(F.getDatosOPs().map(o=>[o.op,o.tareas,o.avanceReal,o.estado,o.semaforo]))+JSON.stringify(F.getDatosAreas().map(x=>[x.area,x.tareas]));
+const ta=a.getDatosOPs().reduce((s,o)=>s+o.tareas.enPausa,0);console.log('     tareas En pausa/En Proceso contadas:',ta);
+ok(ta>0&&cnt(a)===cnt(b),'Datos migrados («En Proceso») con v4.12 = datos originales con v4.11: mismos contadores, avance, estado y semáforo');
+ok(cnt(a)===cnt(c),'Con datos aún sin migrar («En pausa») v4.12 cuenta igual');

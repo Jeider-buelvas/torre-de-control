@@ -1,4 +1,8 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.11
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.12
+// v4.12 — «En pausa» pasa a llamarse «En Proceso»: los contadores por estado cuentan «En Proceso»
+//   (un «En pausa» antiguo cuenta igual). El historial NO se reescribe (auditoría). Nada más cambia.
+//
+// (v4.11)
 // v4.11 — O.P. FINALIZADAS (📁 OPs Terminadas / Histórico de la App):
 //   • Estado_OP: una tarea "No aplica" ya no impide que la O.P. quede Terminada (mismo criterio
 //     que el avance desde v4.1). Nada más cambia en LOOKER_MAESTRA.
@@ -627,7 +631,7 @@ function getDatosOPs() {
       if (row[32] < hoySem) opsMap[lastOp]._debian = (opsMap[lastOp]._debian || 0) + 1;
     }
     if (estado==='Terminado')      opsMap[lastOp].tareas.terminadas++;
-    else if (estado==='En pausa')  opsMap[lastOp].tareas.enPausa++;
+    else if (estado==='En Proceso' || estado==='En pausa')  opsMap[lastOp].tareas.enPausa++;   // v4.12 (enPausa = nombre interno del contador)
     else if (estado==='Reproceso') opsMap[lastOp].tareas.reproceso++;
     else opsMap[lastOp].tareas.abierto++;
 
@@ -678,7 +682,7 @@ function getDatosAreas() {
     }
     areasMap[area].tareas.total++;
     if (estado==='Terminado')      areasMap[area].tareas.terminadas++;
-    else if (estado==='En pausa')  areasMap[area].tareas.enPausa++;
+    else if (estado==='En Proceso' || estado==='En pausa')  areasMap[area].tareas.enPausa++;   // v4.12
     else if (estado==='Reproceso') areasMap[area].tareas.reproceso++;
     else areasMap[area].tareas.abierto++;
     if (diasReal>0) areasMap[area].diasReal+=diasReal;

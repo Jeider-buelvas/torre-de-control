@@ -1032,7 +1032,7 @@ tr.rt-cerr td:first-child{box-shadow:inset 4px 0 0 var(--green);}
     <select class="filter-input" id="filtroSub" onchange="filtrarTabla()" style="max-width:170px;flex:0"><option value="">Todas las SubEst.</option></select>
     <select class="filter-input" id="filtroEstado" onchange="filtrarTabla()" style="max-width:155px;flex:0">
       <option value="">Todos los Estados</option>
-      <option>Terminado</option><option value="En pausa">En Proceso</option><option>Reproceso</option><option>Abierto</option><option>No aplica</option>
+      <option>Terminado</option><option>En Proceso</option><option>Reproceso</option><option>Abierto</option><option>No aplica</option>
     </select>
   </div>
   <div class="card">
@@ -1174,7 +1174,7 @@ async function cargarDatos(){
     state.ops=(data.ops||[]).map(function(o){o.op=String(o.op).replace(/\.0$/,'');delete o._entrega;return o;});
     state.areas=data.areas||[];
     state.curva=data.curva||[];
-    state.tareas=(data.tareas||[]).map(function(t){t.op=String(t.op).replace(/\.0$/,'');return t;});
+    state.tareas=(data.tareas||[]).map(function(t){t.op=String(t.op).replace(/\.0$/,'');if(/^en pausa$/i.test(String(t.estado||'').trim()))t.estado='En Proceso';return t;});   // «En pausa» antiguo = «En Proceso»
     state.tareas=normalizarDatosGrupo(state.tareas);
     state.produccion=(data.produccion||[]).map(function(r){r.op=String(r.op).replace(/\.0$/,'');return r;});
     state.historial=(data.historial||[]).map(histNombreTareas);   // Maestra v4 (solo consulta) · «Bitácora» se muestra como «Tareas de la O.P.»
@@ -1233,8 +1233,8 @@ function pC(p){return p>=.9?'pok':p>=.6?'pwarn':'pbad';}
 function fC(p){return p>=.9?'fok':p>=.6?'fwarn':'fbad';}
 function cN(v){var n=parseFloat(v);return isNaN(n)?0:n;}
 function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-// El estado se guarda como «En pausa» en los cronogramas (fórmulas, sincronizaciones e historial no cambian);
-// en la Torre se muestra como «En Proceso». Solo presentación.
+// Desde la migración (Comercial v14.13) el estado se llama «En Proceso» en todo el sistema. El historial
+// conserva los registros anteriores tal como quedaron («En pausa», auditoría): aquí se muestran como «En Proceso».
 function verEstado(s){return String(s==null?'':s).replace(/\ben pausa\b/gi,'En Proceso');}
 
 // ── Fecha de entrega al cliente y comercial de cada OP ──
@@ -2053,7 +2053,7 @@ function renderGantt(){
   var maxT=allT.length?Math.max.apply(null,allT):Date.now()+86400000*30;
   var span=maxT-minT||1;
   function bs(a,b){if(!a||!b)return 'display:none';var l=((a.getTime()-minT)/span*100).toFixed(1);var w=((b.getTime()-a.getTime())/span*100).toFixed(1);return 'left:'+l+'%;width:'+Math.max(2,w)+'%';}
-  var eMap={'Terminado':'eT','En pausa':'eP','Reproceso':'eR'};
+  var eMap={'Terminado':'eT','En Proceso':'eP','Reproceso':'eR'};
   var gItems=ganttPaginar(oF);   // OP de la página actual (paginador del Gantt)
   tbody.innerHTML=gItems.map(function(op){
     var ec=eMap[op.estado]||'eA';
@@ -2352,7 +2352,7 @@ function renderAreas(){
     if(!aMap[t.area])aMap[t.area]={area:t.area,tareas:{total:0,terminadas:0,enPausa:0,reproceso:0,abierto:0},diasReal:0,diasPlan:0};
     aMap[t.area].tareas.total++;
     if(t.estado==='Terminado')aMap[t.area].tareas.terminadas++;
-    else if(t.estado==='En pausa')aMap[t.area].tareas.enPausa++;
+    else if(t.estado==='En Proceso')aMap[t.area].tareas.enPausa++;
     else if(t.estado==='Reproceso')aMap[t.area].tareas.reproceso++;
     else aMap[t.area].tareas.abierto++;
     aMap[t.area].diasReal+=cN(t.durReal);
@@ -2786,7 +2786,7 @@ function renderBodyTabla(){
   var startIdx=(currentPage-1)*pageSize;
   var pageItems=tareasFiltradas.slice(startIdx,startIdx+pageSize);
 
-  var eMap={'Terminado':'eT','En pausa':'eP','Reproceso':'eR','Abierto':'eA','No aplica':'eNA'};
+  var eMap={'Terminado':'eT','En Proceso':'eP','Reproceso':'eR','Abierto':'eA','No aplica':'eNA'};
   tbody.innerHTML=pageItems.map(function(t){
     var ec=eMap[t.estado]||'eA';
     var d=t.desfaseDias;
@@ -2833,7 +2833,7 @@ function obsItemHtml(t,principal){
     '<div class="obs-meta"><span class="area-tag">'+esc(t.area||'')+'</span>'+
       (t.subEstructura?'<span class="obs-sub">'+esc(t.subEstructura)+'</span>':'')+
       '<span class="obs-tarea">'+esc(t.tarea||'')+'</span>'+
-      (t.estado?'<span class="estado-badge '+({'Terminado':'eT','En pausa':'eP','Reproceso':'eR'}[t.estado]||'eA')+'">'+esc(verEstado(t.estado))+'</span>':'')+'</div>'+
+      (t.estado?'<span class="estado-badge '+({'Terminado':'eT','En Proceso':'eP','Reproceso':'eR'}[t.estado]||'eA')+'">'+esc(verEstado(t.estado))+'</span>':'')+'</div>'+
     '<div class="obs-text">'+esc(textoObs(t))+'</div>'+
     (t.asignado?'<div class="obs-who">Asignado: '+esc(t.asignado)+'</div>':'')+
   '</div>';
@@ -3669,8 +3669,8 @@ function cargarDatosDemo(){
   // Tareas demo con los campos exactos del API real
   var base={op:'4100',nombreOP:'Proyecto Final',cliente:'Jeider Arias',comercial:'Luis Murillo'};
   var tareasBase=[
-    Object.assign({},base,{area:'DISEÑO',subEstructura:'Nombre 1',tarea:'Diseño de estructura',asignado:'Andres Abril',estado:'En pausa',pct:20,ejecucionSub:0.0238,kgAvance:0,avanceRealPct:0,fechaIniPlan:'06/04/2026',fechaFinPlan:'28/04/2026',fechaIniReal:'06/04/2026',fechaFinReal:'07/05/2026',durPlan:23,durReal:31,pctAcumReal:0.2,pctAcumPlan:0.2,cumplimiento:74,pesoKgSub:35,kgTotal:75}),
-    Object.assign({},base,{area:'DISEÑO',subEstructura:'Nombre 1',tarea:'Cantidades',asignado:'Edwar Rodriguez',estado:'En pausa',pct:3,ejecucionSub:0.0238,kgAvance:0,avanceRealPct:0,fechaIniPlan:'06/04/2026',fechaFinPlan:'28/04/2026',fechaIniReal:'06/04/2026',fechaFinReal:'07/05/2026',durPlan:23,durReal:31,pctAcumReal:0.225,pctAcumPlan:0.225,cumplimiento:74,pesoKgSub:35,kgTotal:75}),
+    Object.assign({},base,{area:'DISEÑO',subEstructura:'Nombre 1',tarea:'Diseño de estructura',asignado:'Andres Abril',estado:'En Proceso',pct:20,ejecucionSub:0.0238,kgAvance:0,avanceRealPct:0,fechaIniPlan:'06/04/2026',fechaFinPlan:'28/04/2026',fechaIniReal:'06/04/2026',fechaFinReal:'07/05/2026',durPlan:23,durReal:31,pctAcumReal:0.2,pctAcumPlan:0.2,cumplimiento:74,pesoKgSub:35,kgTotal:75}),
+    Object.assign({},base,{area:'DISEÑO',subEstructura:'Nombre 1',tarea:'Cantidades',asignado:'Edwar Rodriguez',estado:'En Proceso',pct:3,ejecucionSub:0.0238,kgAvance:0,avanceRealPct:0,fechaIniPlan:'06/04/2026',fechaFinPlan:'28/04/2026',fechaIniReal:'06/04/2026',fechaFinReal:'07/05/2026',durPlan:23,durReal:31,pctAcumReal:0.225,pctAcumPlan:0.225,cumplimiento:74,pesoKgSub:35,kgTotal:75}),
     Object.assign({},base,{area:'COMPRAS',subEstructura:'Nombre 1',tarea:'Recepción Reqs',asignado:'Monica Torres',estado:'Terminado',pct:14,ejecucionSub:0.1429,kgAvance:5000,avanceRealPct:0.143,fechaIniPlan:'01/04/2026',fechaFinPlan:'10/06/2026',fechaIniReal:'01/04/2026',fechaFinReal:'23/06/2026',durPlan:24,durReal:37,pctAcumReal:0.1429,pctAcumPlan:0.1429,cumplimiento:65,pesoKgSub:35,kgTotal:90}),
     Object.assign({},base,{area:'COMPRAS',subEstructura:'Nombre 2',tarea:'Recepción Reqs',asignado:'Monica Torres',estado:'Terminado',pct:14,ejecucionSub:0.94,kgAvance:37600,avanceRealPct:0.94,fechaIniPlan:'01/04/2026',fechaFinPlan:'15/05/2026',fechaIniReal:'01/04/2026',fechaFinReal:'16/05/2026',durPlan:18,durReal:19,pctAcumReal:0.94,pctAcumPlan:1.0,cumplimiento:94,pesoKgSub:40,kgTotal:90}),
     Object.assign({},base,{area:'PRODUCCION',subEstructura:'Nombre 1',tarea:'Corte',asignado:'Producción 1',estado:'Terminado',pct:25,ejecucionSub:1.0,kgAvance:35000,avanceRealPct:1.0,fechaIniPlan:'01/05/2026',fechaFinPlan:'21/07/2026',fechaIniReal:'01/05/2026',fechaFinReal:'21/07/2026',durPlan:30,durReal:30,pctAcumReal:0.25,pctAcumPlan:0.25,cumplimiento:100,pesoKgSub:35,kgTotal:90}),
