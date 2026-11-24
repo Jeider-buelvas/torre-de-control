@@ -1,5 +1,7 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.13
+//  MACRO_COMERCIAL — v14.14
+//  v14.14: Compras pone sus estados a mano (sale del cálculo por kg). El activador ⚖️ solo
+//          reacciona a KG_AVANCE_ACUMULADO; los cambios manuales de ESTADO los valida la Maestra v4.13.
 //  v14.13: «En pausa» pasa a llamarse «En Proceso» en todo el sistema (solo el nombre):
 //          · Las fórmulas %_APORTE nuevas comparan "En Proceso"; el estado por kg escribe
 //            "En Proceso" (sin kg = Abierto · kg parciales = En Proceso · kg completos = Terminado).
@@ -3573,11 +3575,11 @@ var EKG = { COL_SUB: 11, COL_PESO: 12, COL_TAREA: 14, COL_ESTADO: 16, COL_KG: 19
   NIVEL: { '': 0, 'Abierto': 0, 'En Proceso': 1, 'En pausa': 1, 'Terminado': 2 }, ESTADO: ['Abierto', 'En Proceso', 'Terminado'],   // v14.13 ('En pausa' = dato antiguo)
   NO_TOCAR: { 'No aplica': 1, 'Reproceso': 1 } };
 
-/** Archivos que miden por kg: todas las áreas menos Diseño y Dibujo, y Producción de las dos plantas. */
+/** Archivos que miden por kg: todas las áreas menos Diseño, Dibujo y Compras (v14.14), y Producción de las dos plantas. */
 function _archivosEstadoKg() {
   var out = [];
   Object.keys(IDS_AREAS).forEach(function(a) {
-    if (a === 'Diseño' || a === 'Dibujo' || a === 'Produccion') return;
+    if (a === 'Diseño' || a === 'Dibujo' || a === 'Compras' || a === 'Produccion') return;   // v14.14: Compras pone sus estados a mano
     var id = IDS_AREAS[a]; if (id && !/PON_AQUI/.test(id)) out.push({ area: a, id: id });
   });
   Object.keys(IDS_PRODUCCION_PLANTA).forEach(function(p) { var id = IDS_PRODUCCION_PLANTA[p]; if (id && !/PON_AQUI/.test(id)) out.push({ area: 'Producción ' + p, id: id }); });
@@ -3657,9 +3659,13 @@ function _onEditEstadoKg(e) {
   try {
     if (!e || !e.range) return;
     var sh = e.range.getSheet(); if (sh.getName() !== EKG.HOJA) return;
+    // v14.14: solo archivos que miden por kg (un activador viejo en Compras ya no hace nada)
+    var idArch = e.source && e.source.getId ? e.source.getId() : '';
+    if (idArch && !_archivosEstadoKg().some(function(x) { return x.id === idArch; })) return;
     var c1 = e.range.getColumn(), c2 = c1 + e.range.getNumColumns() - 1;
-    var tocaKg = c1 <= EKG.COL_KG && c2 >= EKG.COL_KG, tocaEstado = c1 <= EKG.COL_ESTADO && c2 >= EKG.COL_ESTADO;
-    if (!tocaKg && !tocaEstado) return;
+    // v14.14: solo reacciona a KG_AVANCE_ACUMULADO. Los cambios manuales de ESTADO los valida la Maestra (v4.13).
+    var tocaKg = c1 <= EKG.COL_KG && c2 >= EKG.COL_KG;
+    if (!tocaKg) return;
     var r1 = e.range.getRow(), r2 = Math.min(r1 + e.range.getNumRows() - 1, r1 + 500);
     if (r2 < EKG.FILA_INI) return;
     _aplicarEstadosKg(sh, _evaluarEstadosKg(sh, r1, r2));
@@ -3704,7 +3710,7 @@ function revisarEstadosKg() {
 
 function activarEstadosKg() {
   var ui = SpreadsheetApp.getUi();
-  var ok = ui.alert('⚖️ Activar estados por kg', 'Desde ahora, cuando alguien escriba KG_AVANCE_ACUMULADO en el Cronograma de Compras, Galvanizado, Logística, Montaje, Pintura, Administración o Producción, el estado de esa tarea se ajustará solo (Abierto / En Proceso / Terminado).\n\nSolo avanza: nunca baja un estado que el área ya puso. Diseño y Dibujo no cambian.\n\nAhora se aplicará también a lo que ya está escrito. ¿Continuar?', ui.ButtonSet.YES_NO);
+  var ok = ui.alert('⚖️ Activar estados por kg', 'Desde ahora, cuando alguien escriba KG_AVANCE_ACUMULADO en el Cronograma de Galvanizado, Logística, Montaje, Pintura, Administración o Producción, el estado de esa tarea se ajustará solo (Abierto / En Proceso / Terminado).\n\nSolo avanza: nunca baja un estado que el área ya puso. Compras pone sus estados a mano; Diseño y Dibujo no cambian.\n\nAhora se aplicará también a lo que ya está escrito. ¿Continuar?', ui.ButtonSet.YES_NO);
   if (ok !== ui.Button.YES) return;
   ScriptApp.getProjectTriggers().forEach(function(t) { if (t.getHandlerFunction() === '_onEditEstadoKg') ScriptApp.deleteTrigger(t); });
   var activos = [], errores = [];

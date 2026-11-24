@@ -1,4 +1,6 @@
-// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.12
+// CODIGO DE TORRE_CONTROL_MAESTRA_POLYUPROTEC — v4.13
+// v4.13 — Estado manual solo en Compras: en las áreas por kg un cambio manual de ESTADO
+//   que no sea «Reproceso» ni coincida con los kg se revierte y queda como «Intento bloqueado».
 // v4.12 — «En pausa» pasa a llamarse «En Proceso»: los contadores por estado cuentan «En Proceso»
 //   (un «En pausa» antiguo cuenta igual). El historial NO se reescribe (auditoría). Nada más cambia.
 //
@@ -1246,6 +1248,8 @@ function _columnasArea(sh) {
   if (vistos['NOMBRE_SUBESTRUCTURA']) cols.SUB = vistos['NOMBRE_SUBESTRUCTURA'];
   if (vistos['DESCRIPCION_TAREAS']) cols.TAREA = vistos['DESCRIPCION_TAREAS'];
   cols.SEDE = vistos['SEDE'] || 13;   // v4.6: planta de la subestructura
+  if (vistos['KG_AVANCE_ACUMULADO']) cols.KG = vistos['KG_AVANCE_ACUMULADO'];          // v4.13
+  if (vistos['PESO_KG_SUBESTRUCTURA']) cols.PESO = vistos['PESO_KG_SUBESTRUCTURA'];    // v4.13
   return cols;
 }
 
@@ -1416,13 +1420,17 @@ function _alEditarArea(e) {
         if (ant === undefined) ant = '';
         if (_txtValor(ant) === _txtValor(nuevo)) return;
 
-        var protegido = false, motivo = '';
+        var protegido = false, motivo = '', sinExcepcion = false;   // v4.13: sinExcepcion = ni los autorizados lo pueden saltar
         if (k === 'ENTREGA') { protegido = true; motivo = 'La fecha de entrega es línea base comercial: solo cambia desde Comercial (Editar OP).'; }
         else if (bloq && (k === 'INI_REAL' || k === 'DUR_REAL' || k === 'FIN_REAL')) { protegido = true; motivo = 'La tarea está Terminado: su fecha fin real es línea base.'; }
         else if (bloq && k === 'ESTADO' && String(nuevo).trim() !== 'Terminado') { protegido = true; motivo = 'La tarea está Terminado: no se puede sacar de Terminado.'; }
         else if (k === 'ESTADO' && (String(nuevo).trim() === 'No aplica' || String(ant).trim() === 'No aplica')) { protegido = true; motivo = 'Solo Comercial marca o quita "No aplica" (menú 🧩 Tareas de la OP).'; }   // v4.1
+        else if (k === 'ESTADO' && _estadoPorKgArea(area)) {   // v4.13: fuera de Compras, Diseño y Dibujo el estado lo ponen los kg
+          var vEst = _validarEstadoKgManual(sh, cols, r, nuevo);
+          if (vEst) { protegido = true; sinExcepcion = true; motivo = vEst; }
+        }
 
-        if (protegido && !autorizado) {
+        if (protegido && (!autorizado || sinExcepcion)) {
           // Revertir: fórmula de la línea base si la había; si no, el valor anterior.
           var fxBase = b ? ({ INI_REAL: b.iniRealFx, DUR_REAL: b.durRealFx, FIN_REAL: b.finRealFx })[k] : '';
           var valBase = b ? ({ ESTADO: b.estado, INI_REAL: b.iniReal, DUR_REAL: b.durReal, FIN_REAL: b.finReal, ENTREGA: b.entrega })[k] : '';
@@ -1449,6 +1457,46 @@ function _alEditarArea(e) {
   } finally {
     try { lock.releaseLock(); } catch (er) {}
   }
+}
+
+// v4.13 — ESTADO MANUAL SOLO EN COMPRAS (Diseño y Dibujo siguen con su lógica de estados).
+// En las demás áreas (y Producción de las dos plantas) el estado lo pone KG_AVANCE_ACUMULADO
+// frente a PESO_KG_SUBESTRUCTURA (Comercial, ⚖️ Estados por kg). Un cambio manual se acepta
+// solo si es «Reproceso» o si coincide con el estado que dan los kg; si no, se revierte y
+// queda en HISTORIAL_CAMBIOS como «Intento bloqueado».
+var AREAS_ESTADO_MANUAL = { 'COMPRAS': 1, 'DISENO': 1, 'DIBUJO': 1 };
+var EST_KG_TOL = 0.005;
+function _estadoPorKgArea(area) { return !AREAS_ESTADO_MANUAL[_normEnc(area)]; }
+function _numKgM(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  if (typeof v === 'number') return isFinite(v) ? v : null;
+  var t = String(v).replace(/kg/ig, '').replace(/\s/g, ''); if (!t) return null;
+  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, '').replace(',', '.'); else t = t.replace(/,/g, '');
+  var n = Number(t); return isFinite(n) ? n : null;
+}
+/** Estado que dan los kg en la fila r: 'Abierto' | 'En Proceso' | 'Terminado' | null (sin peso válido). */
+function _estadoKgDeFila(sh, cols, r) {
+  if (!cols.KG || !cols.PESO) return null;
+  var kg = _numKgM(sh.getRange(r, cols.KG).getValue()), filaSub = null;
+  var m = String(sh.getRange(r, cols.KG + 1).getFormula() || '').match(/\/\s*\$?[A-Z]+\$?(\d+)/i);   // % = KG/PESO$fila
+  if (m) filaSub = +m[1];
+  else for (var f = r; f >= FILA_INI_AREA; f--) {
+    if (String(sh.getRange(f, cols.SUB).getValue()).trim() || _numKgM(sh.getRange(f, cols.PESO).getValue()) !== null) { filaSub = f; break; }
+  }
+  var peso = filaSub ? _numKgM(sh.getRange(filaSub, cols.PESO).getValue()) : null;
+  if (!(peso > 0)) return null;
+  if (kg === null || kg <= 0) return 'Abierto';
+  return (kg + EST_KG_TOL < peso) ? 'En Proceso' : 'Terminado';
+}
+/** '' si el cambio manual de estado se acepta; si no, el motivo del bloqueo. */
+function _validarEstadoKgManual(sh, cols, r, nuevo) {
+  var n = String(nuevo === undefined || nuevo === null ? '' : nuevo).trim();
+  if (n === 'Reproceso' || n === 'No aplica') return '';   // Reproceso es manual; "No aplica" lo controla la regla de Comercial
+  var e = _estadoKgDeFila(sh, cols, r);
+  if (e && n === e) return '';
+  return 'En esta área el estado se calcula con KG_AVANCE_ACUMULADO y PESO_KG_SUBESTRUCTURA' +
+         (e ? ' (según los kg corresponde "' + e + '")' : ' (la subestructura no tiene un peso válido)') +
+         '. Solo se puede marcar a mano "Reproceso".';
 }
 
 function _actualizarBaseFilas(ssM, sh, cols, area, ids, filas, base) {
