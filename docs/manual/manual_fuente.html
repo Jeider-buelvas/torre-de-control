@@ -117,7 +117,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Componentes</td>
-<td>Maestra v4.13 · Macro Comercial v14.14 · Producción V2 v4.8 (archivos Bogotá y Barranquilla) · App web 24/11/2026</td>
+<td>Maestra v4.13 · Macro Comercial v14.15 · Producción V2 v4.8 (archivos Bogotá y Barranquilla) · App web 24/11/2026</td>
 </tr>
 <tr>
 <td>Responsable técnico</td>
@@ -175,6 +175,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>26/11/2026</td>
+<td>v3.3</td>
+<td>Producción trabaja solo con <strong>Kg Fabricados + Entrega en negro</strong>: menú 🧹 para retirar Corte, Armado, Soldadura y Calidad de los Cronogramas (Comercial v14.15)</td>
+</tr>
 <tr>
 <td>26/11/2026</td>
 <td>v3.3</td>
@@ -300,7 +305,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>PLANTILLA_LOOKER_COMERCIAL</td>
 <td>Google Sheets + Apps Script</td>
-<td>v14.14</td>
+<td>v14.15</td>
 <td>Registra y edita OP (incluido el cambio de número), las envía a las áreas (Producción según la planta), marca tareas "No aplica", registra entregas reales y reprogramaciones, busca OP, calcula el estado por kg de las áreas y migra «En pausa» a «En Proceso»</td>
 </tr>
 <tr>
@@ -442,6 +447,10 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>REPORTE_EN_PROCESO</td>
 <td>Resultado de 🔁 Migrar «En pausa» → «En Proceso»: cuántos valores, fórmulas, formatos y listas se encontraron o cambiaron por archivo</td>
+</tr>
+<tr>
+<td>REPORTE_TAREAS_ANTIGUAS</td>
+<td>Resultado de 🧹 Producción: retirar tareas antiguas: cada fila quitada o convertida, con todas sus columnas originales</td>
 </tr>
 </tbody>
 </table>
@@ -599,6 +608,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>🚀 Torre de Control</td>
 <td>🔁 Migrar «En pausa» → «En Proceso»: revisar / aplicar</td>
 <td>Revisar cuenta lo que se cambiaría en todos los cronogramas (REPORTE_EN_PROCESO); aplicar lo cambia y verifica que no quede ningún «En pausa». Se puede repetir sin riesgo</td>
+</tr>
+<tr>
+<td>🚀 Torre de Control</td>
+<td>🧹 Producción: retirar tareas antiguas — revisar / aplicar</td>
+<td>Revisar muestra en REPORTE_TAREAS_ANTIGUAS qué bloques antiguos se quitarían, cuáles se convertirían y cuáles quedan para revisar; aplicar lo hace, con copia oculta del Cronograma. Se puede repetir sin riesgo</td>
 </tr>
 <tr>
 <td>🔎 Buscar O.P</td>
@@ -893,7 +907,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </tbody>
 </table>
-<p>Las OP terminadas antes del cambio conservan sus 5 tareas antiguas (Corte, Armado, Soldadura, Calidad y Entrega en negro). En ellas el aporte de cada tarea depende de los kg registrados frente al peso de la subestructura: si faltan kg, Producción no llega al 100 % aunque todas las tareas digan Terminado.</p>
+<p><strong>Solo existe la estructura nueva.</strong> Desde Comercial v14.15 las tareas antiguas (Corte, Armado, Soldadura y Calidad) se retiran de los Cronogramas de Producción con el menú 🧹 Producción: retirar tareas antiguas (5.1): se quitan los bloques antiguos que estaban duplicados (la O.P. ya tenía su bloque nuevo) y los que eran de la otra planta, y las O.P. antiguas terminadas quedan con Kg Fabricados (fechas reales de la primera a la última tarea de fabricación) y Entrega en negro, en Terminado y con el 100 %. El detalle de las 5 tareas antiguas se conserva en la hoja oculta "RESPALDO_TAREAS_ANTIGUAS · fecha" del archivo de Producción, en el reporte REPORTE_TAREAS_ANTIGUAS de Comercial y en la copia del archivo en Drive. Las O.P. nuevas siempre se crean con las 2 tareas y la sincronización nunca agrega tareas antiguas.</p>
 <p><strong>Hojas del mes.</strong> Producción registra los kg de cada día en las hojas mensuales (por ejemplo "NOVIEMBRE 2026"). Cada subestructura es un bloque de cuatro filas:</p>
 <table>
 <thead>
@@ -1481,7 +1495,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Macro Comercial</td>
 <td>MACRO_COMERCIAL</td>
-<td>v14.14</td>
+<td>v14.15</td>
 </tr>
 <tr>
 <td>Maestra (API, semáforo, protección, historial, Tareas de la O.P., cambio de número)</td>
@@ -1699,9 +1713,9 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <td>Comercial las marca No aplica en 🧩 Ajustar tareas del cronograma</td>
 </tr>
 <tr>
-<td>Una OP antigua de Producción (5 tareas) no cierra aunque todo esté Terminado</td>
-<td>Faltan kg registrados: el aporte depende de los kg frente al peso de la subestructura</td>
-<td>Registrar los kg que faltan; si se fabricaron todos, KG_AVANCE_ACUMULADO debe igualar el peso de la subestructura</td>
+<td>Aparecen Corte, Armado, Soldadura o Calidad en Producción</td>
+<td>Quedan bloques con la estructura antigua en un Cronograma de Producción</td>
+<td>Comercial: 🧹 Producción: retirar tareas antiguas — revisar y luego aplicar; lo que salga como REVISAR se corrige a mano</td>
 </tr>
 <tr>
 <td>Al enviar una OP sale "No se pueden combinar celdas en una fila filtrada"</td>
@@ -1975,7 +1989,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tbody>
 <tr>
 <td>A</td>
-<td>Código fuente: MACRO_COMERCIAL v14.14, MAESTRA_POLYUPROTEC v4.13, PRODUCCION_V2 v4.8</td>
+<td>Código fuente: MACRO_COMERCIAL v14.15, MAESTRA_POLYUPROTEC v4.13, PRODUCCION_V2 v4.8</td>
 </tr>
 <tr>
 <td>B</td>
@@ -2034,7 +2048,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>1.4</td>
 <td>24/11/2026</td>
-<td>Torre de Control v3.3: Resumen de tareas (7.10), Embudo de O.P. (7.11), OPs Terminadas / Histórico (7.12 y PR-11), botón ⟳ Actualizar (7.1), enlace al grupo de WhatsApp (7.1), prioridad y orden en Producción (6.4), estados por kg y estado manual solo en Compras (6.2, 6.3 y 9.1), «En Proceso» en lugar de «En pausa», capturas nuevas y versiones. 26/11: prioridad de Producción por hoja mensual (6.4)</td>
+<td>Torre de Control v3.3: Resumen de tareas (7.10), Embudo de O.P. (7.11), OPs Terminadas / Histórico (7.12 y PR-11), botón ⟳ Actualizar (7.1), enlace al grupo de WhatsApp (7.1), prioridad y orden en Producción (6.4), estados por kg y estado manual solo en Compras (6.2, 6.3 y 9.1), «En Proceso» en lugar de «En pausa», capturas nuevas y versiones. 26/11: prioridad de Producción por hoja mensual y retiro de las tareas antiguas de Producción (6.4)</td>
 <td>Jeider Buelvas — Desarrollo Full Stack</td>
 </tr>
 <tr>

@@ -1,5 +1,9 @@
 // ============================================================
-//  MACRO_COMERCIAL — v14.14
+//  MACRO_COMERCIAL — v14.15
+//  v14.15: 🧹 Producción: retirar tareas antiguas (Corte, Armado, Soldadura, Calidad) de los Cronogramas de
+//          Producción. Quita los bloques antiguos duplicados (la O.P. ya tiene su bloque nuevo) y los de la otra
+//          planta; convierte a Kg Fabricados + Entrega en negro las O.P. antiguas terminadas. Revisar / aplicar,
+//          con copia oculta del Cronograma y reporte fila por fila (REPORTE_TAREAS_ANTIGUAS).
 //  v14.14: Compras pone sus estados a mano (sale del cálculo por kg). El activador ⚖️ solo
 //          reacciona a KG_AVANCE_ACUMULADO; los cambios manuales de ESTADO los valida la Maestra v4.13.
 //  v14.13: «En pausa» pasa a llamarse «En Proceso» en todo el sistema (solo el nombre):
@@ -463,6 +467,8 @@ function onOpen() {
     .addItem('⚖️ Estados por kg: revisar (no cambia nada)', 'revisarEstadosKg')          // v14.12
     .addItem('⚖️ Estados por kg: activar en las áreas', 'activarEstadosKg')              // v14.12
     .addItem('⚖️ Estados por kg: desactivar', 'desactivarEstadosKg')                    // v14.12
+    .addItem('🧹 Producción: retirar tareas antiguas — revisar (no cambia nada)', 'revisarTareasAntiguasProduccion')   // v14.15
+    .addItem('🧹 Producción: retirar tareas antiguas — aplicar', 'aplicarTareasAntiguasProduccion')                    // v14.15
     .addSeparator()
     .addItem('🔁 Migrar «En pausa» → «En Proceso»: revisar (no cambia nada)', 'revisarMigracionEnProceso')   // v14.13
     .addItem('🔁 Migrar «En pausa» → «En Proceso»: aplicar', 'aplicarMigracionEnProceso')                     // v14.13
@@ -3830,5 +3836,166 @@ function aplicarMigracionEnProceso() {
     ui.alert(r.quedan || r.errores.length ? '⚠ Migración con pendientes' : '✅ Migración completa',
       'Cambiado:\n• ' + r.tot.valores + ' celdas\n• ' + r.tot.formulas + ' fórmulas\n• ' + r.tot.formato + ' reglas de color\n• ' + r.tot.validaciones + ' validaciones\n\nVerificación: ' + (r.quedan ? 'quedan ' + r.quedan + ' referencias (ver hoja ' + MIG.HOJA_REPORTE + ')' : 'ya no queda «En pausa» en ningún archivo.') +
       (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') + '\n\nÚltimo paso: en la Maestra, 🔄 Actualizar LOOKER_MAESTRA.', ui.ButtonSet.OK);
+  } finally { lock.releaseLock(); }
+}
+
+
+// ════════════════════════════════════════════════════════════
+//  v14.15 — RETIRAR TAREAS ANTIGUAS DE PRODUCCIÓN (Corte, Armado, Soldadura, Calidad)
+//  Solo toca bloques de O.P. cuyas subestructuras tienen TODAS la estructura antigua
+//  (sin "Kg Fabricados" y terminando en "Entrega en negro"):
+//   • QUITAR  (A) duplicado: la misma O.P. ya tiene en el archivo su bloque nuevo con las mismas subestructuras.
+//   • QUITAR  (B) otra planta: todas sus subestructuras son de la otra planta (no se ven ni se sincronizan aquí).
+//   • CONVERTIR (C) terminada: todas sus tareas Terminado / No aplica y no tiene bloque nuevo. Cada
+//     subestructura queda con Kg Fabricados (fila de Corte, fechas reales de la primera a la última tarea de
+//     fabricación) y Entrega en negro, con los pesos 50/50 de 'Assignees and Status' (filas 88 y 89).
+//   • Lo demás se deja igual y sale en el reporte como REVISAR.
+//  Antes de cambiar: hoja oculta "RESPALDO_TAREAS_ANTIGUAS · fecha" con el Cronograma completo, y el reporte
+//  REPORTE_TAREAS_ANTIGUAS (aquí, en Comercial) con todas las columnas de cada fila retirada o convertida.
+// ════════════════════════════════════════════════════════════
+var RTA = { HOJA: 'Cronograma', FILA: 6, C_OP: 2, C_SUB: 11, C_PESO: 12, C_SEDE: 13, C_TAREA: 14, C_ASIG: 15, C_EST: 16,
+  C_Q: 17, C_U: 21, C_V: 22, C_W: 23, C_AA: 27, C_AE: 31, C_AF: 32, C_AG: 33, C_AK: 37, ANCHO: 37,
+  REPORTE: 'REPORTE_TAREAS_ANTIGUAS', RESPALDO: 'RESPALDO_TAREAS_ANTIGUAS · ' };
+
+function _rtaOtraPlanta(sede, planta) {
+  var s = _norm(sede).replace(/[^A-Z]/g, ''), p = _norm(planta).replace(/[^A-Z]/g, '');
+  return !!s && s !== 'MIXTO' && s !== p;
+}
+
+/** Bloques de O.P. del Cronograma de Producción con su clasificación. */
+function _rtaAnalizar(sh, planta) {
+  var last = sh.getLastRow(); if (last < RTA.FILA) return [];
+  var v = sh.getRange(RTA.FILA, 1, last - RTA.FILA + 1, RTA.ANCHO).getValues();
+  var bloques = [], b = null, s = null;
+  for (var i = 0; i < v.length; i++) {
+    var fila = RTA.FILA + i, r = v[i], op = String(r[RTA.C_OP - 1]).trim().replace(/\.0$/, ''), tarea = String(r[RTA.C_TAREA - 1]).trim();
+    if (op) { b = { op: op, ini: fila, fin: fila, subs: [] }; bloques.push(b); s = null; }
+    if (!b) continue;
+    if (!tarea && !String(r[RTA.C_SUB - 1]).trim()) continue;
+    if (String(r[RTA.C_SUB - 1]).trim() || !s) {
+      s = { nombre: String(r[RTA.C_SUB - 1]).trim(), sede: String(r[RTA.C_SEDE - 1]).trim(), ini: fila, fin: fila, tareas: [], estados: [], filas: [] };
+      b.subs.push(s);
+    }
+    s.fin = fila; b.fin = fila; s.tareas.push(tarea); s.estados.push(String(r[RTA.C_EST - 1]).trim()); s.filas.push(i);
+  }
+  var nuevas = {};   // op → nombres de subestructuras con estructura nueva
+  bloques.forEach(function(x) {
+    x.subs.forEach(function(su) {
+      su.nueva = su.tareas.some(function(t) { return _norm(t) === _norm('Kg Fabricados'); });
+      su.antigua = !su.nueva && su.tareas.length >= 3 && _norm(su.tareas[su.tareas.length - 1]) === _norm('Entrega en negro');
+      if (su.nueva) (nuevas[x.op] = nuevas[x.op] || {})[_norm(su.nombre)] = true;
+    });
+  });
+  bloques.forEach(function(x) {
+    var ant = x.subs.filter(function(su) { return su.antigua; });
+    if (!ant.length) { x.accion = ''; return; }
+    if (ant.length !== x.subs.length) { x.accion = 'REVISAR'; x.motivo = 'mezcla subestructuras antiguas y nuevas'; return; }
+    if (x.subs.every(function(su) { return _rtaOtraPlanta(su.sede, planta); })) { x.accion = 'QUITAR'; x.grupo = 'B'; x.motivo = 'de la otra planta (no se ve ni se sincroniza en este archivo)'; return; }
+    var nv = nuevas[x.op];
+    if (nv && x.subs.every(function(su) { return nv[_norm(su.nombre)]; })) { x.accion = 'QUITAR'; x.grupo = 'A'; x.motivo = 'duplicado: la O.P. ya tiene su bloque con Kg Fabricados + Entrega en negro'; return; }
+    var term = x.subs.every(function(su) { return su.estados.every(function(e) { return e === 'Terminado' || e === 'No aplica'; }); });
+    var cinco = x.subs.every(function(su) { return su.tareas.length === 5; });
+    if (term && cinco) { x.accion = 'CONVERTIR'; x.grupo = 'C'; x.motivo = 'terminada y sin bloque nuevo: queda con Kg Fabricados + Entrega en negro'; return; }
+    x.accion = 'REVISAR'; x.motivo = term ? 'no tiene 5 tareas por subestructura' : 'no está terminada y no tiene bloque nuevo';
+  });
+  return bloques;
+}
+
+/** Días hábiles (lunes a viernes, sin festivos) entre dos fechas, ambas incluidas. */
+function _rtaDiasHabiles(a, b, fest) {
+  if (!(a instanceof Date) || !(b instanceof Date) || b < a) return null;
+  var n = 0, d = new Date(a.getFullYear(), a.getMonth(), a.getDate()), fin = new Date(b.getFullYear(), b.getMonth(), b.getDate());
+  for (; d <= fin; d.setDate(d.getDate() + 1)) { var w = d.getDay(); if (w !== 0 && w !== 6 && !fest[d.toDateString()]) n++; }
+  return n || null;
+}
+function _rtaMaxFecha(arr) { var m = null; arr.forEach(function(x) { if (x instanceof Date && x.getFullYear() >= 2000 && (!m || x > m)) m = x; }); return m; }
+
+/** Convierte una subestructura antigua terminada (5 filas desde f) en Kg Fabricados + Entrega en negro. */
+function _rtaConvertirSub(sh, f, fest) {
+  var v = sh.getRange(f, 1, 5, RTA.ANCHO).getValues();
+  var finReal = _rtaMaxFecha(v.slice(0, 4).map(function(r) { return r[RTA.C_W - 1]; }));
+  var finPlan = _rtaMaxFecha(v.slice(0, 4).map(function(r) { return r[RTA.C_AG - 1]; }));
+  var durReal = _rtaDiasHabiles(v[0][RTA.C_U - 1], finReal, fest), durPlan = _rtaDiasHabiles(v[0][RTA.C_AE - 1], finPlan, fest);
+  sh.deleteRows(f + 1, 3);                                   // Armado, Soldadura y Calidad
+  var a = AS_FILAS['Produccion'];
+  sh.getRange(f, RTA.C_TAREA, 1, 2).setValues([['Kg Fabricados', 'Producción 1']]);
+  sh.getRange(f, RTA.C_Q).setFormula("='Assignees and Status'!B" + a['Kg Fabricados'] + '%*T' + f);
+  if (durReal) sh.getRange(f, RTA.C_V).setValue(durReal);
+  if (durPlan) sh.getRange(f, RTA.C_AF).setValue(durPlan);
+  sh.getRange(f + 1, RTA.C_ASIG).setValue('Producción 2');
+  sh.getRange(f + 1, RTA.C_Q).setFormula("='Assignees and Status'!B" + a['Entrega en negro'] + '%*T' + (f + 1));
+  sh.getRange(f + 1, RTA.C_AA).setFormula('=AA' + f + '+Z' + (f + 1));
+  sh.getRange(f + 1, RTA.C_AK).setFormula('=AK' + f + '+AJ' + (f + 1));
+}
+
+function _rtaRecorrer(aplicar) {
+  var filasRep = [], resumen = [], errores = [], tz = Session.getScriptTimeZone();
+  Object.keys(IDS_PRODUCCION_PLANTA).forEach(function(planta) {
+    var id = IDS_PRODUCCION_PLANTA[planta]; if (!id || /PON_AQUI/.test(id)) return;
+    try {
+      var ss = SpreadsheetApp.openById(id), sh = ss.getSheetByName(RTA.HOJA);
+      if (!sh) { errores.push(planta + ': no tiene hoja "' + RTA.HOJA + '"'); return; }
+      var bloques = _rtaAnalizar(sh, planta), acc = bloques.filter(function(x) { return x.accion; });
+      var disp = acc.length ? sh.getRange(RTA.FILA, 1, sh.getLastRow() - RTA.FILA + 1, RTA.ANCHO).getDisplayValues() : [];
+      var R = { planta: planta, quitar: 0, convertir: 0, revisar: 0, filas: 0 };
+      acc.forEach(function(x) {
+        R[x.accion === 'QUITAR' ? 'quitar' : x.accion === 'CONVERTIR' ? 'convertir' : 'revisar']++;
+        if (x.accion !== 'REVISAR') R.filas += x.fin - x.ini + 1;
+        for (var f = x.ini; f <= x.fin; f++)
+          filasRep.push([planta, x.op, x.accion + (x.grupo ? ' (' + x.grupo + ')' : ''), x.motivo, f].concat(disp[f - RTA.FILA]));
+      });
+      if (aplicar && acc.some(function(x) { return x.accion !== 'REVISAR'; })) {
+        var a = AS_FILAS['Produccion'], as = ss.getSheetByName('Assignees and Status');
+        var okPesos = as && _norm(as.getRange(a['Kg Fabricados'], 1).getValue()) === _norm('Kg Fabricados') && _norm(as.getRange(a['Entrega en negro'], 1).getValue()) === _norm('Entrega en negro');
+        var nom = RTA.RESPALDO + Utilities.formatDate(new Date(), tz, 'dd-MM-yyyy HH.mm');
+        sh.copyTo(ss).setName(nom).hideSheet();
+        var fest = {}, hf = ss.getSheetByName('DIAS_FESTIVOS');
+        if (hf) hf.getRange(3, 1, 18, 1).getValues().forEach(function(r) { if (r[0] instanceof Date) fest[r[0].toDateString()] = true; });
+        acc.slice().sort(function(p, q) { return q.ini - p.ini; }).forEach(function(x) {   // de abajo hacia arriba
+          if (x.accion === 'QUITAR') sh.deleteRows(x.ini, x.fin - x.ini + 1);
+          else if (x.accion === 'CONVERTIR') {
+            if (!okPesos) { errores.push(planta + ' O.P. ' + x.op + ': no se convirtió, faltan Kg Fabricados / Entrega en negro en Assignees and Status (filas ' + a['Kg Fabricados'] + '-' + a['Entrega en negro'] + ')'); return; }
+            x.subs.slice().reverse().forEach(function(su) { _rtaConvertirSub(sh, su.ini, fest); });
+          }
+        });
+        SpreadsheetApp.flush();
+        var quedan = _rtaAnalizar(sh, planta).filter(function(x) { return x.accion && x.accion !== 'REVISAR'; });
+        R.verificacion = quedan.length ? '⚠ quedan ' + quedan.length + ' bloques' : 'OK, sin tareas antiguas fuera de REVISAR';
+        R.respaldo = nom;
+      }
+      resumen.push(R);
+    } catch (e) { errores.push(planta + ': ' + e.message); }
+  });
+  var ssC = SpreadsheetApp.getActiveSpreadsheet(), rep = ssC.getSheetByName(RTA.REPORTE) || ssC.insertSheet(RTA.REPORTE);
+  rep.clear();
+  var enc = ['PLANTA', 'O.P.', 'ACCIÓN', 'MOTIVO', 'FILA ORIGINAL'];
+  for (var c = 1; c <= RTA.ANCHO; c++) enc.push('COL ' + _colLetraRTA(c));
+  var cab = [['Retirar tareas antiguas de Producción — ' + (aplicar ? 'APLICADO' : 'REVISIÓN, no se cambió nada') + ' — ' + Utilities.formatDate(new Date(), tz, 'dd/MM/yyyy HH:mm')]];
+  var res = resumen.map(function(R) { return R.planta + ': ' + R.quitar + ' bloques a quitar, ' + R.convertir + ' a convertir, ' + R.revisar + ' a revisar (' + R.filas + ' filas)' + (R.verificacion ? ' · verificación: ' + R.verificacion + ' · respaldo: hoja oculta "' + R.respaldo + '"' : ''); });
+  var todo = [pad_(cab[0], enc.length)].concat(res.map(function(t) { return pad_([t], enc.length); }), errores.map(function(t) { return pad_(['⚠ ' + t], enc.length); }), [pad_([''], enc.length), enc], filasRep);
+  rep.getRange(1, 1, todo.length, enc.length).setValues(todo);
+  rep.getRange(1, 1).setFontWeight('bold'); rep.getRange(todo.length - filasRep.length, 1, 1, enc.length).setFontWeight('bold');
+  return { resumen: resumen, errores: errores, texto: res.join('\n') };
+  function pad_(arr, n) { var o = arr.slice(); while (o.length < n) o.push(''); return o; }
+}
+function _colLetraRTA(c) { var s = ''; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+
+function revisarTareasAntiguasProduccion() {
+  var r = _rtaRecorrer(false);
+  SpreadsheetApp.getUi().alert('🧹 Tareas antiguas de Producción — revisión (no se cambió nada)',
+    r.texto + (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') + '\n\nDetalle fila por fila en la hoja ' + RTA.REPORTE + '.', SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function aplicarTareasAntiguasProduccion() {
+  var ui = SpreadsheetApp.getUi();
+  if (ui.alert('🧹 Retirar tareas antiguas de Producción',
+    'Se quitarán los bloques antiguos duplicados y los de la otra planta, y las O.P. antiguas terminadas quedarán con Kg Fabricados + Entrega en negro.\n\n' +
+    'Antes se guarda una copia oculta del Cronograma en cada archivo y el detalle de cada fila en ' + RTA.REPORTE + '.\n\n¿Continuar?', ui.ButtonSet.YES_NO) !== ui.Button.YES) return;
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) { ui.alert('Hay otra operación en curso. Intenta en un momento.'); return; }
+  try {
+    var r = _rtaRecorrer(true);
+    ui.alert('✅ Tareas antiguas de Producción', r.texto + (r.errores.length ? '\n\n⚠ ' + r.errores.join('\n⚠ ') : '') +
+      '\n\nAhora, en la Maestra: 🔄 Actualizar LOOKER_MAESTRA.', ui.ButtonSet.OK);
   } finally { lock.releaseLock(); }
 }
