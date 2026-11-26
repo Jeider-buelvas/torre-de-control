@@ -2,7 +2,9 @@
 """Arma el manual publicado (privado/manual.html) desde docs/manual/manual_fuente.html.
 Mete todas las capturas dentro del HTML (WebP en base64), así el manual no depende de ver.php
 ni de subir la carpeta img/ completa. El PDF sigue saliendo por ver.php.
-Uso: python3 docs/manual/construir_manual.py   (desde la raíz del repositorio)"""
+Uso: python3 docs/manual/construir_manual.py   (desde la raíz del repositorio)
+IMPORTANTE: los cambios de texto se hacen en manual_fuente.html, no en privado/manual.html
+(este se reescribe completo al construir)."""
 import base64, io, re, os
 from PIL import Image
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
