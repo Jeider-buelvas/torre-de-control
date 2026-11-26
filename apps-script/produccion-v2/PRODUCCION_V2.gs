@@ -1,4 +1,8 @@
-// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.7 (fusionada)
+// CODIGO DE PLANTILLA_LOOKER_PRODUCCION_V2 — v4.8 (fusionada)
+//
+// v4.8 — PRIORIDAD INDEPENDIENTE POR HOJA MENSUAL: ⭐ Marcar / quitar prioridad cambia, pinta y ordena
+//  solo la hoja del mes abierta (clave "HOJA|O.P"). Las prioridades anteriores se copian una vez a cada
+//  mes donde está la O.P (respaldo en PRIORIDAD_OP_RESPALDO_v47). Se quita el campo Prioridad del formulario.
 //
 // v4.7 — «En pausa» pasa a llamarse «En Proceso» y la sincronización diaria usa la misma regla de kg
 //  que las demás áreas: sin kg = Abierto · kg parciales = En Proceso · kg completos = Terminado.
@@ -219,8 +223,7 @@ function enviarOP() {
     const subs = subsElegidas_(opC, form.sub).filter(function (s) { return !s.otraPlanta; });   // v4.5
     if (!subs.length) { ui.alert('⚠ No encontré la subestructura "' + form.sub + '" en la OP ' + form.op + '.'); return; }
 
-    // v4.6: prioridad del formulario (para todas las subestructuras que se envían)
-    if (form.prioridad) { const pri = leerPrioridades_(); subs.forEach(function (sub) { pri[form.op + '_' + sub.n] = form.prioridad; }); guardarPrioridades_(pri); }
+    // v4.8: la prioridad ya no se pone desde el formulario; se marca en cada hoja del mes (⭐ Marcar / quitar prioridad)
     const creadas = [], agregadas = [], duplicadas = [];
     form.meses.forEach(function (mes) {
       const nombre = nombreHoja_(form.anio, mes);
@@ -271,8 +274,7 @@ const CAMPOS = {
   'cliente': 'cliente',
   'descripcion': 'descripcion',
   'peso kilos planeados': 'peso', 'peso kilos planeados kg': 'peso',
-  'subestructura': 'sub', 'subestructuras': 'sub',         // v3
-  'prioridad': 'prioridad', 'prioridad 1 2 3': 'prioridad'   // v4.6
+  'subestructura': 'sub', 'subestructuras': 'sub'          // v3   (v4.8: sin campo Prioridad)
 };
 const MESES_NORM = MESES.map(function (m) { return norm_(m); });
 
@@ -323,8 +325,6 @@ function leerFormulario_(ss) {
   form.descripcion = String(form.descripcion || '').trim();
   form.peso = Number(form.peso) || 0;
   form.sub = String(form.sub || '').trim();                  // v3
-  const pr = parseInt(form.prioridad, 10);                     // v4.6
-  form.prioridad = pr > 0 && pr < 1000 ? pr : null;
   const a = parseInt(form.anio, 10);
   form.anio = a > 2000 && a < 2100 ? a : null;
   form.tieneCampoAnio = 'anio' in form.celdas;
@@ -345,7 +345,7 @@ function validar_(f) {
 
 function limpiarFormulario_(ss, f) {
   const sh = hojaFormulario_(ss);
-  ['op', 'nombre', 'cliente', 'descripcion', 'peso', 'prioridad'].forEach(function (k) {   // v4.6: + prioridad
+  ['op', 'nombre', 'cliente', 'descripcion', 'peso'].forEach(function (k) {   // v4.8: sin prioridad
     const c = f.celdas[k];
     if (c) sh.getRange(c.fila, c.col).clearContent();
   });
@@ -367,8 +367,7 @@ function configurarFormulario() {
     { k: 'sub', etq: 'Subestructura' },
     { k: 'cliente', etq: 'Cliente' },
     { k: 'descripcion', etq: 'Descripción' },
-    { k: 'peso', etq: 'Peso Kilos Planeados' },
-    { k: 'prioridad', etq: 'Prioridad' }                      // v4.6
+    { k: 'peso', etq: 'Peso Kilos Planeados' }                // v4.8: sin campo Prioridad
   ].filter(function (n) { return !(n.k in form.celdas); });
 
   if (!nuevos.length) {
@@ -392,9 +391,6 @@ function configurarFormulario() {
       celda.setDataValidation(SpreadsheetApp.newDataValidation()
         .requireValueInList(anios, true).setAllowInvalid(false).build());
       celda.setValue(String(anioActual));
-    } else if (n.k === 'prioridad') {                         // v4.6: número 1, 2, 3… (vacío = sin prioridad)
-      celda.setDataValidation(SpreadsheetApp.newDataValidation()
-        .requireNumberBetween(1, 999).setAllowInvalid(false).setHelpText('1 = la más urgente. Vacío = sin prioridad').build());
     } else if (n.k === 'peso') {
       celda.setDataValidation(SpreadsheetApp.newDataValidation()
         .requireNumberGreaterThanOrEqualTo(0).setAllowInvalid(false).build());
@@ -1437,8 +1433,36 @@ const COLOR_LOTE = '#9fc5e8';   // azul: distinto del naranja de LINEA
 function colorLinea_(txt) { return grupoLinea_(txt) === 1 ? COLOR_LOTE : CONFIG.COLOR.linea; }
 const RE_HOJA_MES = new RegExp('^(' + MESES.join('|') + ') \\d{4}$');
 
-function leerPrioridades_() { try { return JSON.parse(PropertiesService.getDocumentProperties().getProperty(PROP_PRIORIDAD) || '{}'); } catch (e) { return {}; } }
+// v4.8 — PRIORIDAD POR HOJA MENSUAL: la clave es "<HOJA DEL MES>|<O.P>" (p. ej. "ENERO 2026|4113_1").
+//  Antes la clave era solo la O.P, y al cambiarla en un mes cambiaba en todos. Las prioridades
+//  antiguas (sin "|") se copian una sola vez a cada hoja del mes donde está la O.P, para que nada
+//  cambie a la vista; antes se guarda una copia en la propiedad PRIORIDAD_OP_RESPALDO_v47.
+const SEP_PRI = '|';
+function leerPrioridades_() {
+  const props = PropertiesService.getDocumentProperties();
+  let pri = {};
+  try { pri = JSON.parse(props.getProperty(PROP_PRIORIDAD) || '{}'); } catch (e) { return {}; }
+  const viejas = Object.keys(pri).filter(function (k) { return k.indexOf(SEP_PRI) < 0; });
+  if (!viejas.length) return pri;
+  if (!props.getProperty(PROP_PRIORIDAD + '_RESPALDO_v47')) props.setProperty(PROP_PRIORIDAD + '_RESPALDO_v47', JSON.stringify(pri));
+  SpreadsheetApp.getActive().getSheets().forEach(function (h) {
+    if (!RE_HOJA_MES.test(h.getName())) return;
+    bloquesMes_(h).forEach(function (b) {
+      const k = h.getName() + SEP_PRI + b.token;
+      if (viejas.indexOf(b.token) >= 0 && !(k in pri)) pri[k] = pri[b.token];
+    });
+  });
+  viejas.forEach(function (k) { delete pri[k]; });
+  guardarPrioridades_(pri);
+  return pri;
+}
 function guardarPrioridades_(p) { PropertiesService.getDocumentProperties().setProperty(PROP_PRIORIDAD, JSON.stringify(p)); }
+/** Prioridades de UNA hoja del mes: { "4113_1": 1, … } */
+function priHoja_(sh) {
+  const pri = leerPrioridades_(), pre = sh.getName() + SEP_PRI, out = {};
+  Object.keys(pri).forEach(function (k) { if (k.indexOf(pre) === 0) out[k.slice(pre.length)] = pri[k]; });
+  return out;
+}
 
 /** Token "4113_1" a partir de la etiqueta "OP 4113_1 · …" */
 function tokenDeEtiqueta_(txt) { const m = String(txt || '').trim().match(/^OP\.?\s*([^\s·]+)/i); return m ? m[1] : ''; }
@@ -1470,14 +1494,14 @@ function bloquesMes_(sh) {
 
 /** Fila donde va un bloque nuevo: antes del primer bloque que debe ir después de él. */
 function filaDestino_(sh, f, sep) {
-  const pri = leerPrioridades_(), clave = claveOrden_(f.op, f.linea, pri);
+  const pri = priHoja_(sh), clave = claveOrden_(f.op, f.linea, pri);   // v4.8: solo esta hoja
   const b = bloquesMes_(sh).find(function (x) { return compararClaves_(claveOrden_(x.token, x.linea, pri), clave) > 0; });
   return b ? b.fila : sep;
 }
 
 /** Pinta (o despinta) la celda Línea/Lote de los bloques de la O.P según su prioridad. */
 function marcarVisualPrioridad_(sh, token) {
-  const pri = leerPrioridades_();
+  const pri = priHoja_(sh);   // v4.8: solo esta hoja
   bloquesMes_(sh).filter(function (b) { return b.token === token; }).forEach(function (b) {
     const c = sh.getRange(b.fila, COL.LINEA, b.n, 1);   // la celda combinada de todo el bloque
     if (pri[token]) { c.setBackground(COLOR_PRIORIDAD); sh.getRange(b.fila, COL.LINEA).setNote('⭐ Prioridad ' + pri[token]); }
@@ -1487,7 +1511,7 @@ function marcarVisualPrioridad_(sh, token) {
 
 /** Reordena los bloques de una hoja del mes. Devuelve cuántos bloques se movieron. */
 function ordenarHojaMes_(sh, conRespaldo) {
-  const pri = leerPrioridades_(), bloques = bloquesMes_(sh);
+  const pri = priHoja_(sh), bloques = bloquesMes_(sh);   // v4.8: solo esta hoja
   if (bloques.length < 2) return 0;
   const deseado = bloques.slice().sort(function (a, b) { return compararClaves_(claveOrden_(a.token, a.linea, pri), claveOrden_(b.token, b.linea, pri)) || (a.fila - b.fila); });
   if (deseado.every(function (b, i) { return b === bloques[i]; })) return 0;
@@ -1520,25 +1544,25 @@ function ordenarMesActivo() {
   } finally { lock.releaseLock(); }
 }
 
-/** Menú: marca o quita la prioridad de la O.P del bloque seleccionado y ordena las hojas donde está. */
+/** Menú: marca o quita la prioridad de la O.P del bloque seleccionado SOLO en esta hoja del mes (v4.8) y la ordena. */
 function marcarPrioridad() {
   const ui = SpreadsheetApp.getUi(), ss = SpreadsheetApp.getActive(), sh = ss.getActiveSheet();
   if (!RE_HOJA_MES.test(sh.getName())) { ui.alert('Selecciona una celda de la O.P en la hoja del mes (por ejemplo "NOVIEMBRE 2026").'); return; }
   const fila = sh.getActiveRange().getRow();
   const b = bloquesMes_(sh).find(function (x) { return fila >= x.fila && fila < x.fila + x.n; });
   if (!b) { ui.alert('Selecciona una celda dentro del bloque de la O.P (cualquiera de sus filas).'); return; }
-  const pri = leerPrioridades_();
-  const r = ui.prompt('⭐ Prioridad de la O.P ' + b.token, 'Escribe el número de prioridad (1 = la más urgente).\nDéjalo vacío para quitar la prioridad.' + (pri[b.token] ? '\n\nPrioridad actual: ' + pri[b.token] : ''), ui.ButtonSet.OK_CANCEL);
+  const actual = priHoja_(sh)[b.token];   // v4.8: prioridad de esta hoja
+  const r = ui.prompt('⭐ Prioridad de la O.P ' + b.token + ' en ' + sh.getName(), 'Escribe el número de prioridad (1 = la más urgente).\nDéjalo vacío para quitar la prioridad.\nSolo cambia en esta hoja; los otros meses no se tocan.' + (actual ? '\n\nPrioridad actual en ' + sh.getName() + ': ' + actual : ''), ui.ButtonSet.OK_CANCEL);
   if (r.getSelectedButton() !== ui.Button.OK) return;
   const txt = String(r.getResponseText() || '').trim(), n = parseInt(txt, 10);
   if (txt && !(n > 0 && n < 1000)) { ui.alert('Escribe un número entero (1, 2, 3…) o déjalo vacío.'); return; }
   const lock = LockService.getDocumentLock();
   if (!lock.tryLock(20000)) { ui.alert('Otra persona está modificando el archivo. Intenta de nuevo.'); return; }
   try {
-    if (txt) pri[b.token] = n; else delete pri[b.token];
+    const pri = leerPrioridades_(), k = sh.getName() + SEP_PRI + b.token;   // v4.8: clave hoja|O.P
+    if (txt) pri[k] = n; else delete pri[k];
     guardarPrioridades_(pri);
-    const hojas = ss.getSheets().filter(function (h) { return RE_HOJA_MES.test(h.getName()) && bloquesMes_(h).some(function (x) { return x.token === b.token; }); });
-    hojas.forEach(function (h) { marcarVisualPrioridad_(h, b.token); ordenarHojaMes_(h, true); });
-    ui.alert((txt ? '⭐ O.P ' + b.token + ' con prioridad ' + n : 'Se quitó la prioridad de la O.P ' + b.token) + '.\nSe ordenó en: ' + hojas.map(function (h) { return h.getName(); }).join(', ') + '.');
+    marcarVisualPrioridad_(sh, b.token); ordenarHojaMes_(sh, true);       // v4.8: solo esta hoja
+    ui.alert((txt ? '⭐ O.P ' + b.token + ' con prioridad ' + n : 'Se quitó la prioridad de la O.P ' + b.token) + ' en ' + sh.getName() + '.\nLos otros meses no cambiaron.');
   } finally { lock.releaseLock(); }
 }

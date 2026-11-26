@@ -117,7 +117,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>Componentes</td>
-<td>Maestra v4.13 · Macro Comercial v14.14 · Producción V2 v4.7 (archivos Bogotá y Barranquilla) · App web 24/11/2026</td>
+<td>Maestra v4.13 · Macro Comercial v14.14 · Producción V2 v4.8 (archivos Bogotá y Barranquilla) · App web 24/11/2026</td>
 </tr>
 <tr>
 <td>Responsable técnico</td>
@@ -175,6 +175,11 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>26/11/2026</td>
+<td>v3.3</td>
+<td>Producción: la <strong>⭐ prioridad es independiente en cada hoja mensual</strong>; cambiarla en un mes no afecta los otros. Se quita el campo Prioridad del formulario (Producción V2 v4.8)</td>
+</tr>
 <tr>
 <td>24/11/2026</td>
 <td>v3.3</td>
@@ -302,7 +307,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>PLANTILLA_LOOKER_PRODUCCION_V2 (Barranquilla) y PLANTILLA_LOOKER_PRODUCCION_V2_BOGOTA</td>
 <td>Google Sheets + Apps Script</td>
-<td>v4.7</td>
+<td>v4.8</td>
 <td>Un archivo por planta: cronograma de Producción y hojas mensuales con kg fabricados y kg entregados en negro por día; sincroniza las dos tareas al cronograma</td>
 </tr>
 <tr>
@@ -954,7 +959,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 <tr>
 <td>⭐ Marcar / quitar prioridad de la O.P seleccionada</td>
-<td>Da a la O.P. una prioridad por número (1 = la más urgente). Se selecciona una celda del bloque. La celda Línea/Lote queda dorada con la nota "⭐ Prioridad N"</td>
+<td>Da a la O.P. una prioridad por número (1 = la más urgente) <strong>solo en la hoja del mes abierta</strong>. Se selecciona una celda del bloque. La celda Línea/Lote queda dorada con la nota "⭐ Prioridad N"</td>
 </tr>
 <tr>
 <td>↕️ Ordenar las O.P de este mes</td>
@@ -962,7 +967,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 </tr>
 </tbody>
 </table>
-<p><strong>Prioridad y orden.</strong> La prioridad también se puede poner al crear la O.P., en el campo "Prioridad" del formulario (lo agrega el menú ⚙️ Configurar formulario). 📤 Enviar / Crear O.P pone el bloque nuevo en su lugar. Colores de la celda Línea/Lote: LINEA naranja, LOTE azul y prioridad dorado. Ordenar mueve los bloques completos con sus kg y fórmulas; la sincronización no cambia porque lee las O.P. por su etiqueta.</p>
+<p><strong>Prioridad y orden.</strong> La prioridad es <strong>independiente en cada hoja mensual</strong>: la misma O.P. puede tener prioridad 1 en enero, 9 en febrero y ninguna en marzo, y cambiarla en un mes no toca los demás (Producción V2 v4.8). Solo se pone con el menú ⭐ Marcar / quitar prioridad; el formulario ya no tiene campo Prioridad. 📤 Enviar / Crear O.P pone el bloque nuevo en su lugar. Colores de la celda Línea/Lote: LINEA naranja, LOTE azul y prioridad dorado. Ordenar mueve los bloques completos con sus kg y fórmulas; la sincronización no cambia porque lee las O.P. por su etiqueta.</p>
 <p>Reglas de la sincronización:</p>
 <ul>
 <li>Solo <strong>sube</strong> valores: nunca baja los kg, nunca saca una tarea de Terminado y no borra datos digitados.</li>
@@ -1480,7 +1485,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>Producción V2 (mismo código en Bogotá y Barranquilla)</td>
 <td>PRODUCCION_V2</td>
-<td>v4.7</td>
+<td>v4.8</td>
 </tr>
 <tr>
 <td>App web</td>
@@ -1964,7 +1969,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tbody>
 <tr>
 <td>A</td>
-<td>Código fuente: MACRO_COMERCIAL v14.14, MAESTRA_POLYUPROTEC v4.13, PRODUCCION_V2 v4.7</td>
+<td>Código fuente: MACRO_COMERCIAL v14.14, MAESTRA_POLYUPROTEC v4.13, PRODUCCION_V2 v4.8</td>
 </tr>
 <tr>
 <td>B</td>
@@ -2023,7 +2028,7 @@ figcaption{font-size:13.5px;color:var(--muted);margin-top:10px;text-align:center
 <tr>
 <td>1.4</td>
 <td>24/11/2026</td>
-<td>Torre de Control v3.3: Resumen de tareas (7.10), Embudo de O.P. (7.11), OPs Terminadas / Histórico (7.12 y PR-11), botón ⟳ Actualizar (7.1), prioridad y orden en Producción (6.4), estados por kg y estado manual solo en Compras (6.2, 6.3 y 9.1), «En Proceso» en lugar de «En pausa», capturas nuevas y versiones</td>
+<td>Torre de Control v3.3: Resumen de tareas (7.10), Embudo de O.P. (7.11), OPs Terminadas / Histórico (7.12 y PR-11), botón ⟳ Actualizar (7.1), prioridad y orden en Producción (6.4), estados por kg y estado manual solo en Compras (6.2, 6.3 y 9.1), «En Proceso» en lugar de «En pausa», capturas nuevas y versiones. 26/11: prioridad de Producción por hoja mensual (6.4)</td>
 <td>Jeider Buelvas — Desarrollo Full Stack</td>
 </tr>
 <tr>
